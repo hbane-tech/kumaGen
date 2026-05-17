@@ -1,0 +1,38 @@
+surface,lang,bm,role
+et,fr,ni,conjunction
+avec,fr,ni,comitative
+ou,fr,wala,disjunction
+mais,fr,nka,contrast
+car,fr,sabu,causal
+donc,fr,o de,consequence
+si,fr,ní,conditional
+sauf,fr,háli,exception
+sinon,fr,háli,exception
+parce que,fr,sabu,causal
+à cause de,fr,sabu,causal
+pour que,fr,janko,purpose
+afin que,fr,janko,purpose
+depuis que,fr,kabini,temporal
+depuis,fr,k'an bɔ,temporal
+quand,fr,tuma min,temporal
+lorsque,fr,tuma min,temporal
+dès que,fr,tuma min,temporal
+bien que,fr,hali,concessive
+quoique,fr,hali,concessive
+and,en,ni,conjunction
+with,en,ni,comitative
+or,en,wala,disjunction
+but,en,nka,contrast
+because,en,sabu,causal
+so,en,o de,consequence
+if,en,ní,conditional
+unless,en,háli,conditional
+except,en,háli,exception
+because of,en,sabu,causal
+so that,en,janko,purpose
+in order to,en,janko,purpose
+since,en,kabini,temporal
+when,en,tuma min,temporal
+although,en,hali,concessive
+even though,en,hali,concessive
+alors que,fr,hali ni,concessive

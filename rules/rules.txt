@@ -1,0 +1,472 @@
+"""
+rules/r1_r60_engine.py
+
+Bambara rule engine.
+Sources: Vydrin (2013), Aplonova & Tyers (2017), Creissels, Dumestre.
+"""
+import json
+
+# ── TAM table ─────────────────────────────────────────────────────
+# Covers all predicative markers (auxiliaries) in Bambara.
+# tùn (past shift) combines with these at parse time.
+
+_TAM = {
+    # Imperfective
+    ('pres',  False): 'bɛ',      # S bɛ V
+    ('pres',  True):  'tɛ',      # S tɛ V
+    # Perfective transitive (yé / má)
+    ('past',  False): 'yé',      # S yé O V
+    ('past',  True):  'ma',      # S ma V
+    # Future (bɛna / tɛna)
+    ('fut',   False): 'bɛ na',   # S bɛ na V
+    ('fut',   True):  'tɛ na',   # S tɛ na V
+    # Conditional / hypothetical
+    ('cond',  False): 'bɛ na',
+    ('cond',  True):  'tɛ na',
+    # Imperative (bare verb)
+    ('imp',   False): '',
+    ('imp',   True):  'Kàna',
+    # Progressive (bɛ kà / tɛ kà) — treated as fixed AUX unit
+    ('prog',  False): 'bɛ kà',
+    ('prog',  True):  'tɛ kà',
+    # Habitual past (tùn bɛ / tùn tɛ)
+    ('hab',   False): 'tùn bɛ',
+    ('hab',   True):  'tùn tɛ',
+    # Pluperfect (tùn yé / tùn ma)
+    ('plup',  False): 'tùn yé',
+    ('plup',  True):  'tùn ma',
+}
+
+def get_tam(tense: str, is_neg: bool) -> str:
+    return _TAM.get((tense, is_neg), 'bɛ')
+
+# ── Clause types ──────────────────────────────────────────────────
+# All structural patterns in Bambara, organized by parent category.
+# TAM variants (progressive, habitual, pluperfect) are NOT clause
+# types — they are values in _TAM above.
+
+VALID_CLAUSE_TYPES = {
+
+    # ── Sentence Structure (S-AUX-O-V-X) ─────────────────────────
+    'simple',               # S TAM O V                    n bɛ iri dún
+    'complex',              # S TAM V kà V  (infinitive)   n bɛ sé kà dún
+
+    # ── Non-Verbal Predication ────────────────────────────────────
+    'presentative',         # S dòn                        Mùsa dòn
+    'locative',             # S bɛ LOC pp                  Mùsa bɛ dùgu kɔnɔ
+    'equative',             # S yé NOUN yé                 Mùsa yé dònso yé
+    'existential',          # X bɛ / X tɛ                  hɛrɛ bɛ
+
+    # ── Verbal Predicates ─────────────────────────────────────────
+    'qualitative',          # S ka ADJ / S man ADJ         sò ka téli
+    'comparison',           # S ka ADJ X yé                sò ka téli fàli yé
+    'superlative',          # S ka ADJ bɛɛ yé              sò ka téli bɛɛ yé
+    'passive',              # S bɛ ka V AGENT fɛ
+
+    # ── Imperative / Prohibitive ──────────────────────────────────
+    'imperative',           # V  (bare)                    Taa!
+    'prohibitive',          # kàna V                       Kàna taa!
+
+    # ── Adnominal → Relativisation ────────────────────────────────
+    'relative_min',         # correlative mìn strategy     mùso mìn ye dén sɔrɔ, ò...
+    'relative_post',        # postnominal (European-like)   dúmuni mìn bɛ...
+
+    # ── Adnominal → Participles (acl relation) ───────────────────
+    'participial_len',      # resultative  -len             jíri tìgɛlen
+    'participial_ta',       # potential    -ta              dúnta
+    'participial_bali',     # privative    -bali            kàlanbali
+    'participial_to',       # simultaneous -tɔ              tɛmɛtɔ
+
+    # ── Quotative kó ──────────────────────────────────────────────
+    'reported_verb',        # kó as VERB (has own subject)  dénin kó né bɛ taa
+    'reported_comp',        # kó as SCONJ (complementiser)  à fɔ kó à kàna síran
+
+    # ── Verb Serialization / Clause Chaining ─────────────────────
+    'verb_serial',          # S TAM V kà V kà V            dúnan ye jí mìn kà kúma
+    'purposive',            # S táa V (no kà after motion) cídɛn táara dùgutigi wéele
+
+    # ── Noun Phrase ───────────────────────────────────────────────
+    'noun_phrase',          # alienable: POSS ka NOUN       n ka mòbili
+    'noun_phrase_inh',      # inalienable: POSS NOUN        n fà / n bólo
+    'noun_phrase_have',     # possessive have: Y bɛ X fɛ   wari bɛ Amadu fɛ
+
+    # ── Pragmatics ────────────────────────────────────────────────
+    'topicalised',          # NP_TOPIC, PRON TAM V         Bàmakɔ sìgibagaw, òlu...
+    'focus',                # dè particle                   ne de ka taa
+    'exclamative',          # dɛ particle                   à ka di dɛ!
+
+    # ── Interrogatives ────────────────────────────────────────────
+    'interrogative',        # polar: S TAM O V wa ?         à tàara wa ?
+    'content_question',     # wh-in-situ                    i bɛ mùn kɛ ?
+
+    # ── Connectors / Subordination ───────────────────────────────
+    'conditional',          # ní S V, S TAM V               ní à nàna, n na à wéle
+    'concessive',           # hali ni S V, S TAM V          hali ni à nàna, n tɛ taa
+    'causal',               # sabu S V                      sabu à ye à kɛ
+    'temporal',             # tùma min S V                  tùma min à nàna
+
+    # ── Other ─────────────────────────────────────────────────────
+    'refl_past',            # S tun ye V O (reflexive past)
+    'comitative',           # S1 ni S2 dòn / S1 ni S2 TAM V
+    'reciprocal',           # S TAM ɲɔgɔn V                u bɛ ɲɔgɔn kanu
+}
+
+# Parent → children mapping
+# Used for: fallback rules, future KG indexing, multi-language scaling
+CLAUSE_HIERARCHY = {
+    'sentence_structure': ['simple', 'complex', 'verb_serial', 'purposive'],
+    'non_verbal':         ['presentative', 'locative', 'equative', 'existential'],
+    'verbal':             ['qualitative', 'comparison', 'superlative', 'passive'],
+    'imperative':         ['imperative', 'prohibitive'],
+    'adnominal': {
+        'relativisation': ['relative_min', 'relative_post'],
+        'participles':    ['participial_len', 'participial_ta',
+                           'participial_bali', 'participial_to'],
+    },
+    'quotative':          ['reported_verb', 'reported_comp'],
+    'noun_phrase':        ['noun_phrase', 'noun_phrase_inh', 'noun_phrase_have'],
+    'pragmatics':         ['topicalised', 'focus', 'exclamative'],
+    'interrogatives':     ['interrogative', 'content_question'],
+    'subordination':      ['conditional', 'concessive', 'causal', 'temporal'],
+    'other':              ['refl_past', 'comitative', 'reciprocal'],
+}
+
+# ── Tree builder ──────────────────────────────────────────────────
+
+def build_tree(T) -> dict:
+    r  = next((t for t in T if t.get('dep') == 'ROOT'), None)
+    ri = (r or {}).get('orig_index', -1)
+    rp = (r or {}).get('pos', '')
+    tn = (r or {}).get('tense', 'pres')
+    ng = (r or {}).get('is_neg', False)
+
+    return {
+        'clause_type': (
+            # spaCy structural signals take priority over LLM
+            'qualitative'   if rp == 'ADJ' and (r or {}).get('dep') == 'ROOT' else
+            'locative'      if rp == 'ADV' and (r or {}).get('dep') == 'ROOT' else
+            'passive'       if (r or {}).get('is_passive') else
+            'refl_past'     if (r or {}).get('is_refl_past') else
+            'interrogative' if any(t.get('surface','') == '?' for t in T) else
+            'reported_comp' if any(t.get('dep') == 'ccomp' for t in T) else
+            'complex'       if any(t.get('dep') == 'xcomp' for t in T) else
+            # ROOT=VERB always wins over LLM non-verbal types
+            'simple'        if rp == 'VERB' and
+                               next((t.get('llm_clause_type') for t in T if t.get('llm_clause_type')), '')
+                               in ('presentative','locative','equative','existential') else
+            # Comitative: ROOT=NOUN + avec + pronoun subject
+            'comitative'
+            if any(t.get('role')=='preposition' and t.get('surface','').lower() in ('avec','with') for t in T)
+            and rp in ('NOUN','PROPN') and any(t.get('role')=='pronoun' for t in T) else
+            # LLM wins for semantic types
+            (next((t.get('llm_clause_type') for t in T if t.get('llm_clause_type')), 'simple'))
+            if T and next((t.get('llm_clause_type') for t in T if t.get('llm_clause_type')), None) in {
+                'equative','presentative','existential','noun_phrase',
+                'noun_phrase_inh','noun_phrase_have','relative_min',
+                'relative_post','topicalised','focus','exclamative',
+                'comitative','reciprocal','causal','concessive',
+                'comparison','superlative','reported_verb','reported_comp',
+                'verb_serial','purposive','imperative','prohibitive',
+                'content_question','temporal',
+            } else
+            # spaCy structural fallback
+            'noun_phrase'   if rp in ('NOUN','PROPN') and (r or {}).get('dep') == 'ROOT' else
+            next((t.get('llm_clause_type') for t in T if t.get('llm_clause_type')), 'simple')
+        ),
+        'tense':       tn,
+        'neg':         ng,
+        'tam':         _TAM.get((tn, ng), 'bɛ'),
+        'marker':      next((t.get('bm') for t in T if t.get('role') in ('conditional','causal','concessive','temporal')), None),
+        'main': {
+            # S: NOUN-w ADJ acl-len  (noun + adj + participial modifier)
+            'S':    (lambda t: (
+                        (t.get('bm') or '') + ('w' if t.get('is_plural') and t.get('pos') not in ('PRON','DET') else '')
+                        + (' ' + (next((x.get('bm','') for x in T if x.get('dep')=='amod' and x.get('head_index',-1)==t.get('orig_index',-1) and x.get('bm')), '') or '')).rstrip()
+                        + (' ' + (next((x.get('bm','')+'len' for x in T
+                                        if x.get('dep')=='acl'
+                                        and x.get('head_index',-1)==t.get('orig_index',-1)
+                                        and x.get('bm')
+                                        and x.get('bm') not in {'bɛ','tɛ','yé','ma','bɛ na','tɛ na','tùn','kà','kàna','bɛ́','tɛ́'}), '') or '')).rstrip()
+                    ) if t else None)(
+                        next((t for t in T if t.get('dep') == 'nsubj' and t.get('head_index') == ri), None) or
+                        next((t for t in T if t.get('role') == 'pronoun'), None)
+                    ),
+            'O':    (lambda t: ((t.get('bm') or '') + ('w' if t and t.get('is_plural') and t.get('pos') not in ('PRON','DET') else '')) if t else None)(
+                        next((t for t in T if t.get('dep') == 'obj' and t.get('head_index') == ri), None)
+                    ),
+            'V':    (r or {}).get('bm') if rp != 'ADJ' else None,
+            'QUAL': (r or {}).get('bm') if rp == 'ADJ' else None,
+            'IOBJ': {'head':   next((t.get('bm') for t in T if t.get('dep') == 'iobj'), ''),
+                     'marker': next(('ma' if t.get('is_dative') else 'ye' for t in T if t.get('dep') == 'iobj'), 'ye'),
+                    } if any(t.get('dep') == 'iobj' for t in T) else None,
+            'LOC':  {'head':   next((t.get('bm') for t in T if t.get('is_loc') and not t.get('is_agent')
+                                     and t.get('pos') not in ('PROPN',)), ''),
+                     'marker': next((t.get('bm_marker') for t in T if t.get('role') == 'preposition' and t.get('bm_marker')), 'la'),
+                    } if any(t.get('is_loc') and t.get('pos') not in ('PROPN',) for t in T) else
+                   # obl:arg PROPN (au Mali → mali fɛ / mali la)
+                   {'head':   next((t.get('bm') for t in T
+                                   if t.get('dep') in ('obl:arg','obl')
+                                   and t.get('pos') == 'PROPN'
+                                   and t.get('bm')), ''),
+                    'marker': next((t.get('bm_marker') for t in T
+                                   if t.get('role') == 'preposition'
+                                   and t.get('bm_marker')), 'fɛ'),
+                   } if any(t.get('dep') in ('obl:arg','obl') and t.get('pos')=='PROPN' and t.get('bm') for t in T) else None,
+            # ADV: regular adverb OR participial_to (en passant → S V-tɔ)
+            # Subject is repeated before the -tɔ verb (Aplonova & Tyers)
+            'ADV':   (
+                        # Find subject bm for repetition
+                        (lambda s_bm, v_bm: s_bm + ' ' + v_bm + 'tɔ' if s_bm and v_bm else v_bm + 'tɔ' if v_bm else None)(
+                            next((t.get('bm') for t in T if t.get('dep')=='nsubj'), None) or
+                            next((t.get('bm') for t in T if t.get('role')=='pronoun'), None),
+                            next((t.get('bm') for t in T if t.get('role')=='participial_to' and t.get('bm')), None)
+                        )
+                     ) if any(t.get('role')=='participial_to' for t in T) else
+                  next((t.get('bm') for t in T
+                           if t.get('pos') == 'ADV' and t.get('dep') == 'advmod'
+                           and t.get('bm')), None),
+            'AGENT': next((t.get('bm') for t in T if t.get('is_agent')), None),
+            'CCOMP': (lambda cv: {
+                      # Subject of embedded clause: nsubj pointing to ccomp verb
+                      'S':   next((t.get('bm') for t in T
+                                  if t.get('dep') == 'nsubj'
+                                  and t.get('head_index', -1) == cv.get('orig_index', -2)
+                                  and t.get('bm')), None),
+                      # TAM: use AUX (être) tense if ccomp is NOUN (equative)
+                      # else use ccomp verb tense directly
+                      'tam': (lambda aux_t, neg:
+                                  {('pres',False):'yé',('pres',True):'tɛ',
+                                   ('past',False):'yé',('past',True):'ma',
+                                   ('fut',False):'bɛ na'}.get((aux_t,neg),'yé')
+                             )(
+                                 next((t.get('tense','pres') for t in T
+                                       if t.get('role')=='auxiliary'
+                                       and t.get('head_index',-1)==cv.get('orig_index',-2)), None)
+                                 or cv.get('tense','pres'),
+                                 cv.get('is_neg',False)
+                             ) if cv.get('pos') in ('NOUN','PROPN','ADJ') else
+                             {('pres',False):'bɛ',('pres',True):'tɛ',
+                              ('past',False):'yé',('past',True):'ma',
+                              ('fut',False):'bɛ na'}.get(
+                                  (cv.get('tense','pres'), cv.get('is_neg',False)), 'bɛ'),
+                      # For equative: ccomp NOUN goes in O slot (S yé O yé)
+                      'V':   cv.get('bm') if cv.get('pos') == 'VERB' else None,
+                      # O_eq: equative noun + its nmod genitive + plural
+                      # e.g. 'maîtres du jeu' → 'sàgòn mɛtiriw'
+                      'O_eq': (
+                          lambda cv_bm, cv_orig: (
+                              # Find nmod child (du jeu → sàgòn)
+                              (next((t.get('bm','') for t in T
+                                    if t.get('dep')=='nmod'
+                                    and t.get('head_index',-1)==cv_orig
+                                    and t.get('bm')), '') + ' ').lstrip()
+                              # Add head noun + plural if needed
+                              + cv_bm
+                              + ('w' if cv.get('is_plural') else '')
+                          ) if cv_bm else None
+                      )(cv.get('bm'), cv.get('orig_index',-1))
+                      if cv and cv.get('pos') in ('NOUN','PROPN','ADJ') else None,
+                      # Object of embedded clause
+                      'O':   next((t.get('bm') for t in T
+                                  if t.get('dep') in ('obj','nsubj:pass')
+                                  and t.get('head_index', -1) == cv.get('orig_index', -2)
+                                  and t.get('bm')), None),
+                     } if cv else None)(
+                         next((t for t in T if t.get('dep') == 'ccomp'), None)
+                     ) if any(t.get('dep') == 'ccomp' for t in T) else None,
+            # NMOD: chain all nmod tokens with their amod adjectives
+            # Also recover amod tokens whose nmod head has no bm (e.g. l'Institut → français)
+            'NMOD':  ' '.join(
+                         ' '.join(p for p in [
+                             next((x.get('bm') for x in T
+                                   if x.get('dep')=='amod'
+                                   and x.get('head_index',-1)==t.get('orig_index',-1)
+                                   and x.get('bm')), None),
+                             t.get('bm') or None
+                         ] if p)
+                         for t in T
+                         if t.get('dep') == 'nmod'
+                         and (
+                             t.get('bm') or
+                             any(x.get('dep')=='amod' and x.get('head_index',-1)==t.get('orig_index',-1) and x.get('bm') for x in T)
+                         )
+                     ) or None,
+        },
+        '_tokens': T,
+    }
+
+# ── Word order rules ──────────────────────────────────────────────
+
+def tree_to_bambara(tree: dict) -> str:
+    if not tree: return ''
+    m   = tree['main']
+    ct  = tree['clause_type']
+    TAM = tree['tam']
+    neg = tree['neg']
+    S   = m['S'] or ''
+    V   = m['V'] or ''
+    O   = m['O'] or ''
+    def j(*p): return ' '.join(x for x in p if x and str(x).strip())
+    iobj  = j((m['IOBJ'] or {}).get('head',''), (m['IOBJ'] or {}).get('marker','')) if m['IOBJ'] else ''
+    loc   = j((m['LOC']  or {}).get('head',''), (m['LOC']  or {}).get('marker','')) if m['LOC']  else ''
+    # CCOMP: detect equative (S yé NOUN yé) vs simple (S TAM O V)
+    if m['CCOMP']:
+        _cs = (m['CCOMP'] or {}).get('S','')
+        _ct = (m['CCOMP'] or {}).get('tam','')
+        _cv = (m['CCOMP'] or {}).get('V','')
+        _co = (m['CCOMP'] or {}).get('O','')
+        # Equative: TAM=yé/ma and no action verb (être+NOUN)
+        if _ct in ('yé','ma') and not _cv:
+            ccomp = j('ko', _cs, 'yé' if _ct=='yé' else 'tɛ', _co or (m['CCOMP'] or {}).get('O_eq',''), 'yé')
+        else:
+            ccomp = j('ko', _cs, _ct, _co, _cv)
+    else:
+        ccomp = ''
+    QUAL  = m['QUAL'] or ''
+    ADV   = m['ADV']  or ''
+    AGENT = m['AGENT'] or ''
+
+    # Simple / Complex / Serial / Purposive → S TAM O V
+    # verb_serial neg: negation on matrix TAM scopes over whole chain
+    # (Vydrin 2020: S ma V kà V = neither V nor V)
+    if   ct in ('simple', 'complex', 'verb_serial', 'purposive',
+                'conditional', 'temporal'):
+        # Progressive (bɛ kà) keeps kà before V
+        if TAM == 'bɛ kà' or TAM == 'tɛ kà':
+            result = j(S, TAM, O, V, ADV)
+        else:
+            result = j(S, TAM, O, V, iobj, loc, ccomp, ADV)
+    # Qualitative → S ka QUAL / S man QUAL
+    # Attributive adj form: QUAL-man suffix (téli→téliman)
+    # handled by lexicon — rule engine receives the correct bm
+    elif ct == 'qualitative':                result = j(S, 'man' if neg else 'ka', QUAL)
+    # Comparison → S ka QUAL X yé
+    elif ct == 'comparison':                 result = j(S, 'ka', QUAL, loc, 'yé')
+    # Superlative → S ka QUAL bɛɛ yé
+    elif ct == 'superlative':                result = j(S, 'ka', QUAL, 'bɛɛ yé')
+    # Equative → S yé NOUN yé
+    # Past/fut: kɛra replaces yé  (Mùsa kɛra dònso yé)
+    # Neg:      S tɛ NOUN yé
+    elif ct == 'equative':
+        tn = tree.get('tense','pres')
+        if neg:                              result = j(S, 'tɛ', O or V, 'yé')
+        elif tn in ('past','fut','plup'):    result = j(S, 'kɛra', O or V, 'yé')
+        else:                               result = j(S, 'yé', O or V, 'yé')
+    # Locative → S bɛ LOC / S tɛ LOC
+    elif ct == 'locative':                   result = j(S, 'tɛ' if neg else 'bɛ', loc or V or ADV)
+    # Presentative → S dòn / S tɛ
+    elif ct == 'presentative':               result = j(S, 'tɛ') if neg else j(S, 'dòn')
+    # Existential → X bɛ / X tɛ
+    elif ct == 'existential':                result = j(S, 'tɛ' if neg else 'bɛ')
+    # Passive → S bɛ ka V AGENT fɛ
+    elif ct == 'passive':                    result = j(S, 'bɛ ka', V, j(AGENT, 'fɛ') if AGENT else '', ADV)
+    # Reflexive past → S tun ye V O
+    elif ct == 'refl_past':                  result = j(S, 'tun ye', V, O, loc, ADV)
+    # Reported → S TAM V ko [S] TAM V
+    # kó has NO negative form → use fɔ for negation
+    # (Aplonova & Tyers: À ma à fɔ kó à kàna síran)
+    elif ct in ('reported_verb', 'reported_comp', 'reported'):
+        # ADV (clairement) modifies matrix verb, placed after V before ko
+        if neg:  result = j(S, 'ma', O, 'fɔ', ADV, ccomp)
+        else:    result = j(S, TAM, O, V, ADV, ccomp)
+    # Imperative → V
+    elif ct == 'imperative':                 result = j(V, O)
+    # Prohibitive → kàna V
+    elif ct == 'prohibitive':                result = j('kàna', V, O)
+    # Interrogative (polar) → S TAM O V wa ?
+    elif ct == 'interrogative':              result = j(S, TAM, O, V, 'wa ?')
+    # Content question (wh-in-situ) → S TAM O V
+    elif ct == 'content_question':           result = j(S, TAM, O, V)
+    # Noun phrase → build full NP with acl (-len), amod, nmod chain
+    elif ct in ('noun_phrase', 'noun_phrase_inh'):
+        # Find acl modifier (associé → sìrilen with -len suffix)
+        # Skip auxiliaries and TAM markers — they should never get -len
+        _AUX_BM = {'bɛ','tɛ','yé','ma','bɛ na','tɛ na','tùn','kà','kàna','bɛ́','tɛ́','yé'}
+        _acl = next((t.get('bm','')+'len' for t in tree.get('_tokens',[])
+                    if t.get('dep')=='acl'
+                    and t.get('bm')
+                    and t.get('bm') not in _AUX_BM
+                    and t.get('role') not in ('auxiliary',)
+                    and t.get('pos') not in ('AUX',)), None)
+        # Find amod on root
+        _rorig = next((t.get('orig_index',-1) for t in tree.get('_tokens',[])
+                       if t.get('dep')=='ROOT'), -1)
+        _amod = next((t.get('bm','') for t in tree.get('_tokens',[])
+                      if t.get('dep')=='amod' and t.get('head_index',-1)==_rorig
+                      and t.get('bm')), None)
+        # Build: ROOT amod acl NMOD
+        result = j(V, _amod, _acl, m['NMOD']) if m['NMOD'] else j(V, _amod, _acl)
+    # Possessive have → Y bɛ X fɛ
+    elif ct == 'noun_phrase_have':           result = j(O, 'bɛ', S, 'fɛ')
+    # Topicalised → TOPIC , PRON TAM V
+    elif ct == 'topicalised':                result = j(O, ',', S, TAM, V)
+    # Comitative → S1 ni S2 dòn (state) / S1 ni S2 TAM V (action)
+    elif ct == 'comitative':
+        # Build companion NP from tokens: find noun governed by avec
+        # and attach its possessive: 'mon mari' → 'n fúrucɛ'
+        _avec = next((t for t in tree.get('_tokens',[]) if t.get('role')=='preposition' and t.get('surface','').lower() in ('avec','with')), None)
+        _comp = None
+        if _avec:
+            av_i = _avec.get('orig_index',-1)
+            _cn  = next((t for t in tree.get('_tokens',[]) if t.get('pos') in ('NOUN','PROPN','PRON') and (t.get('head_index',-1)==av_i or _avec.get('head_index',-1)==t.get('orig_index',-1))), None)
+            if _cn:
+                _cp = next((t for t in tree.get('_tokens',[]) if t.get('role')=='possessive' and t.get('head_index',-1)==_cn.get('orig_index',-1)), None)
+                _bm = (_cn.get('bm') or '')
+                if _cp:
+                    _p = (_cp.get('bm') or '')
+                    _comp = j('n', _bm) if _p=='n' else j(_p, 'ka', _bm)
+                else:
+                    _comp = _bm
+        companion = _comp or V
+        # State (être avec) → S ni companion dòn
+        # Action (faire avec) → S ni companion TAM V
+        # No action verb = state (V is None or V == S which means root is pronoun)
+        _has_action = V and V != S and V != m.get('S','')
+        if companion and _has_action: result = j(S, 'ni', companion, TAM, V)
+        elif companion:               result = j(S, 'ni', companion, 'dòn')
+        else:                         result = j(S, 'dòn')
+    # Reciprocal → S TAM ɲɔgɔn V
+    elif ct == 'reciprocal':                 result = j(S, TAM, 'ɲɔgɔn', V)
+    # Concessive → hali ni ... result
+    elif ct == 'concessive':                 result = j(S, TAM, O, V, ADV)
+    # Causal → sabu clause
+    elif ct == 'causal':                     result = j(S, TAM, O, V, ADV)
+    # Relative mìn (correlative) → NOUN mìn TAM O V, ò TAM V
+    # Head noun stays in relative clause; ò resumes it in matrix
+    elif ct == 'relative_min':               result = j(S, 'mìn', TAM, O, V, ',', 'ò', TAM, V)
+    # Postnominal relative → S mìn TAM O V
+    elif ct == 'relative_post':              result = j(S, 'mìn', TAM, O, V)
+    # Participles — suffix carried in the verb bm from lexicon
+    # -len  (resultative):  jíri tìgɛlen   → S V-len  (modifier on noun)
+    # -ta   (potential):    dúnta          → S V-ta
+    # -bali (privative):    kàlanbali      → S V-bali
+    # -tɔ   (simultaneous): u ye à tɛmɛtɔ ye → S TAM O V-tɔ V2
+    #        simultaneous uses full clause order with main verb after
+    elif ct == 'participial_to': result = j(S, TAM, O, V, ADV)
+    elif ct in ('participial_len', 'participial_ta', 'participial_bali'):
+                result = j(S, V)
+    # Focus / Exclamative → S ... dè / dɛ
+    elif ct == 'focus':                      result = j(S, 'de', TAM, O, V)
+    elif ct == 'exclamative':                result = j(S, TAM, O, V, 'dɛ !')
+    # Fallback
+    else:                                    result = j(S, TAM, O, V)
+
+    return j(tree['marker'], result) if tree['marker'] else result
+
+# ── Rule Engine ───────────────────────────────────────────────────
+
+class RuleEngine:
+
+    def __init__(self, db=None):
+        self.db = db
+        if db:
+            try:
+                from pipeline.proposition_parser import load_connector_bm
+                load_connector_bm(db)
+            except Exception:
+                pass
+
+    def apply(self, tokens, frame):
+        if not tokens: return ''
+        tree = build_tree(tokens)
+        return tree_to_bambara(tree)

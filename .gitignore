@@ -1,0 +1,5 @@
+.kuma_mt/
+venv/
+__pycache__/
+*.pyc
+.env
