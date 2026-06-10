@@ -314,12 +314,12 @@ class KGRetriever:
         Enhanced embedding matching that uses surrounding context
         to build a richer query representation.
 
+        Important: Embedding scores are capped at 0.85 so that exact matches
+        (which score 1.0) are ALWAYS preferred. This prevents good embedding
+        results from overshadowing perfect exact matches.
+
         If context_tokens available: encode(token + context) for better signal
         Fallback to simple token encoding if no context.
-
-        This improves embedding retrieval by giving the encoder more semantic
-        information to work with, reducing false positives from mono-token
-        ambiguity.
         """
         allowed_pos = _allowed_kg_pos(spacy_pos)
         pos_filter = "AND s.pos IN $allowed_pos" if allowed_pos else ""
@@ -355,10 +355,16 @@ class KGRetriever:
                 continue
             score = cosine(query_vec, stored_vec)
             score = self._apply_frame(score, r['frame'], frame)
+
+            # ⚠️  CRITICAL: Cap embedding scores at 0.85 so exact matches (1.0)
+            # are ALWAYS preferred over embedding results, even very good ones.
+            # This prevents "fìlaninteri" from beating "ami." via synonym fallback.
+            score = min(score, 0.85)
+
             candidates.append({
                 'bm': r['bm'], 'fr': r['fr'], 'en': r['en'],
                 'frame': r['frame'], 'pos': r['pos'],
-                'score': round(min(score, 1.0), 4), 'match': 'embed',
+                'score': round(score, 4), 'match': 'embed',
             })
 
         candidates.sort(key=lambda x: x['score'], reverse=True)
