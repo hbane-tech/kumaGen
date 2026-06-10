@@ -847,8 +847,14 @@ class TranslationEngine:
             return verb
 
         prompt = (
-            f'Quel est l\'infinitif du verbe français "{verb}" ?\n'
-            f'Réponds UNIQUEMENT par l\'infinitif en minuscules, sans ponctuation.'
+            f'Trouve la forme infinitive du verbe français "{verb}".\n\n'
+            f'Exemples:\n'
+            f'- lave, laves, lavent → laver\n'
+            f'- mange, manges, mangent → manger\n'
+            f'- viens, venons, vient → venir\n'
+            f'- suis, sommes, êtes, sont → être\n'
+            f'- ai, avons, avez, ont → avoir\n\n'
+            f'Réponds UNIQUEMENT par l\'infinitif (un seul mot), minuscules, sans ponctuation.'
         )
 
         try:
