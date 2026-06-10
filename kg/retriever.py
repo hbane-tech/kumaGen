@@ -142,18 +142,26 @@ def _gloss_match_score(fr_raw: str, token: str) -> float:
     50  — substring match with word boundary
     0   — no match
     """
+    if not fr_raw or not token:
+        return 0.0
+
+    fr_raw_lower = fr_raw.lower().strip()
+    t_lower = token.lower().strip()
+
+    # Check exact match with period BEFORE cleaning (so "ami." != "ami")
+    if fr_raw_lower == t_lower + '.':
+        return 98.0
+
+    # Now clean for other comparisons
     fr = clean_gloss(fr_raw or '').lower().strip()
-    t  = token.lower().strip()
+    t  = t_lower
+
     if not fr or not t:
         return 0.0
 
     # Perfect exact match
     if fr == t:
         return 100.0
-
-    # Exact + period
-    if fr == t + '.':
-        return 98.0
 
     # Simple extension (token + space, no comma after)
     if fr.startswith(t + ' ') or fr.startswith(t + '.'):
