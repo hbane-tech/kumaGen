@@ -389,9 +389,13 @@ class TranslationEngine:
         correspond sémantiquement au token français (0-100 point scale).
 
         Approche par scoring (pas rejet binaire):
-        - Match textuel parfait → +25 pts boost
-        - Match sémantique valide → +15 pts boost
-        - Invalide → -15 pts penalité (garde quand même le candidat)
+        - Match textuel parfait → NO BOOST (already captured in score)
+        - Match sémantique valide → +2 pts (light confirmation)
+        - Invalide → -10 pts penalité (filters false positives)
+
+        IMPORTANT: Validation sémantique est pour FILTRER les mauvais candidats,
+        pas pour renforcer les bons. Les boosts sont minimal pour maintenir
+        la hiérarchie (exact > composite > embedding).
 
         Cela casse la circularité embedding en utilisant LLM.
         """
@@ -409,7 +413,7 @@ class TranslationEngine:
             # Vérif textuelle: si la glose contient le token
             if token_lower in gloss_fr or gloss_fr.startswith(token_lower):
                 c['_semantic_valid'] = True
-                c['_semantic_score'] = 25  # 0-100 scale
+                c['_semantic_score'] = 0  # No boost — already in score
                 print(f"     ✅ Match textuel: '{gloss_fr}' ≈ '{token_lower}' → {c['bm']}")
                 continue
 
@@ -426,11 +430,11 @@ class TranslationEngine:
 
                 if is_valid:
                     c['_semantic_valid'] = True
-                    c['_semantic_score'] = 15  # 0-100 scale
+                    c['_semantic_score'] = 2  # Light boost only
                     print(f"     ✅ LLM valide: '{gloss_fr}' ≈ '{token_lower}' → {c['bm']}")
                 else:
                     c['_semantic_valid'] = False
-                    c['_semantic_score'] = -15  # 0-100 scale
+                    c['_semantic_score'] = -10  # Strong penalty for false positives
                     print(f"     ⚠️  LLM: '{gloss_fr}' ≠ '{token_lower}' → {c['bm']} (pénalisé)")
 
             except Exception as e:
@@ -443,14 +447,8 @@ class TranslationEngine:
             semantic_boost = c.get('_semantic_score', 0)
             final = c.get('final_score', 0) + semantic_boost
 
-            # ⚠️  CAP scores after semantic validation to maintain hierarchy
-            # Perfect exact match (score ≥ 99) → cap at 100 pts
-            # Composite/partial match → cap at 99 pts
-            # Embedding matches → capped at 85 pts
-            if c.get('score', 0) >= 99:
-                c['final_score'] = round(min(final, 100.0), 1)
-            else:
-                c['final_score'] = round(min(final, 99.0), 1)
+            # Cap final score at 100 pts
+            c['final_score'] = round(min(final, 100.0), 1)
 
         # Re-trier par final_score
         candidates.sort(key=lambda x: x.get('final_score', 0), reverse=True)
@@ -1076,7 +1074,7 @@ class TranslationEngine:
                 fr_sens = cand.get('fr', '[vide]')
                 via_syn = f" (via synonyme: '{cand['via_synonym']}')" if 'via_synonym' in cand else ""
                 
-                print(f"        Rang #{idx+1} [{match_type}] Score: {score:.3f} | Bambara: '{bm_glose}' → Sens FR: \"{fr_sens}\"{via_syn}")
+                print(f"        Rang #{idx+1} Score: {score:.1f} pts | Bambara: '{bm_glose}' → Sens FR: \"{fr_sens}\"{via_syn}")
         print("     " + "="*65)
 
         candidates = self._rerank_with_llm(
