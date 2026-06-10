@@ -225,14 +225,13 @@ class KGRetriever:
         self.db               = db
         self._semantic_groups = self._load_semantic_groups()
 
-    def _get_frame_multiplier(self, candidate_frame: str, query_frame: str) -> float:
-        """Frame multiplier (0.8x / 1.0x / 1.1x) to scale scores."""
-        if query_frame == 'GENERIC':
-            return 1.0
-        if candidate_frame == query_frame:
-            return 1.1
-        if candidate_frame != 'GENERIC':
-            return 0.8
+    def _get_frame_multiplier(self, _candidate_frame: str, _query_frame: str) -> float:
+        """
+        Frame multiplier (0.8x / 1.0x / 1.1x) to scale scores.
+
+        Currently disabled — KG doesn't fully manage frames yet.
+        Structure kept for future use when frames are properly populated.
+        """
         return 1.0
 
     def _load_semantic_groups(self) -> list:
