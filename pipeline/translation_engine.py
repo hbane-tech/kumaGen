@@ -442,7 +442,16 @@ class TranslationEngine:
         # Appliquer les scores sémantiques
         for c in candidates[:top_k]:
             semantic_boost = c.get('_semantic_score', 0.0)
-            c['final_score'] = c.get('final_score', 0) + semantic_boost
+            final = c.get('final_score', 0) + semantic_boost
+
+            # ⚠️  CAP scores after semantic validation to maintain hierarchy
+            # Perfect exact match (score ≥ 0.99) → cap at 1.0
+            # Composite/partial match → cap at 0.99
+            # Embedding matches → capped at 0.85
+            if c.get('score', 0) >= 0.99:
+                c['final_score'] = round(min(final, 1.0), 4)
+            else:
+                c['final_score'] = round(min(final, 0.99), 4)
 
         # Re-trier par final_score
         candidates.sort(key=lambda x: x.get('final_score', 0), reverse=True)
@@ -1072,80 +1081,53 @@ class TranslationEngine:
         all_embed = bool(candidates) and all(
             c.get('match') == 'embed' for c in candidates)
 
-        if self._needs_synonym(tok['lemma'], candidates, all_embed):
-            syn_candidate = self._try_synonym_fallback(
-                tok, frame, context_lemmas)
-            if syn_candidate:
-                candidates.append(syn_candidate)
-                candidates.sort(key=lambda c: c['final_score'],
-                                reverse=True)
+        # SYNONYM FALLBACK DISABLED: Use KG/Embedding results as-is
+        # Synonyms were creating bad matches like 'belle' for 'gentil'
+        # Prefer placeholder over wrong synonym
+
+        # Fallback NOUN pour les ADJ prédicatifs (professions/rôles)
+        # ex: "je suis étudiant" → spaCy=ADJ, mais KG a kàlandenba (NOUN)
+        if tok.get('pos') == 'ADJ' and tok.get('dep') == 'ROOT':
+            _cop_context = any(
+                t.get('dep') == 'cop'
+                for t in getattr(self, '_current_clause_tokens', []))
+            if _cop_context:
+                # Classifier d'abord : STATIF/PARTICIPE/QUALITE
+                # Le NOUN fallback est réservé aux prédicats nominaux (professions)
+                self._classify_adj_state(tok)
+                if not tok.get('is_participe_passe') and not tok.get('is_statif'):
+                    _noun_cands = self.retriever.retrieve(
+                        lemma, frame, spacy_pos='NOUN',
+                        top_k=TOP_K, lang=lang)
+                    _noun_cands = self._rerank_by_sens_fr(lemma, _noun_cands)
+                    if _noun_cands and _noun_cands[0]['final_score'] >= 0.50:
+                        _best_n = _noun_cands[0]
+                        tok['bm'] = _best_n['bm']
+                        tok['_adj_is_nominal_pred'] = True
+                        print(f"     🔄 [NOUN fallback] '{lemma}' → '{_best_n['bm']}' ({_best_n['fr']})")
+                        print(f"DEBUG après détection: tok flags = is_statif={tok.get('is_statif')}, is_participe_passe={tok.get('is_participe_passe')}")
+                        return tok, _noun_cands
+        # Détecter statif/participe AVANT le return
+        if tok['pos'] == 'ADJ':
+            _clause_toks2 = getattr(self, '_current_clause_tokens', [])
+            _passive_subj = any(t.get('dep') == 'nsubj:pass' for t in _clause_toks2)
+            _has_obl_arg2 = (tok.get('dep') == 'ROOT' and any(
+                t.get('dep') == 'obl:arg' and t.get('head_index') == tok.get('orig_index')
+                for t in _clause_toks2))
+            if _has_obl_arg2:
+                _r = 'STATIF'
             else:
-                # Synonym validation failed — but if the top embed candidate
-                # is strong enough, use it directly instead of a placeholder.
-                # Typical case: 'end' in 'week-end' → lában (score=0.948).
-                # The synonym check failed because synonyms were verbal forms
-                # ('conclure') while the word is a noun.
-                top_fallback = candidates[0] if candidates else None
-                if top_fallback and top_fallback['final_score'] >= 0.90:
-                    # Assign bm directly and return — don't fall through to
-                    # the all_embed guards below which would re-reject it.
-                    print(f" ↩️  No synonym matched — using top embed '{top_fallback['bm']}' (score={top_fallback['final_score']:.3f})")
-                    tok['bm'] = top_fallback['bm']
-                    # return tok, candidates
-                # APRÈS
-                else:
-                    print(f"     📭 [{tok['lemma']}] — no valid translation found")
-                    tok['bm'] = f"[{tok['lemma']}]"
-                    # Fallback NOUN pour les ADJ prédicatifs (professions/rôles)
-                    # ex: "je suis étudiant" → spaCy=ADJ, mais KG a kàlandenba (NOUN)
-                    if tok.get('pos') == 'ADJ' and tok.get('dep') == 'ROOT':
-                        _cop_context = any(
-                            t.get('dep') == 'cop'
-                            for t in getattr(self, '_current_clause_tokens', []))
-                        if _cop_context:
-                            # Classifier d'abord : STATIF/PARTICIPE/QUALITE
-                            # Le NOUN fallback est réservé aux prédicats nominaux (professions)
-                            self._classify_adj_state(tok)
-                            if not tok.get('is_participe_passe') and not tok.get('is_statif'):
-                                _noun_cands = self.retriever.retrieve(
-                                    lemma, frame, spacy_pos='NOUN',
-                                    top_k=TOP_K, lang=lang)
-                                _noun_cands = self._rerank_by_sens_fr(lemma, _noun_cands)
-                                if _noun_cands and _noun_cands[0]['final_score'] >= 0.50:
-                                    _best_n = _noun_cands[0]
-                                    tok['bm'] = _best_n['bm']
-                                    tok['_adj_is_nominal_pred'] = True
-                                    print(f"     🔄 [NOUN fallback] '{lemma}' → '{_best_n['bm']}' ({_best_n['fr']})")
-                                    print(f"DEBUG après détection: tok flags = is_statif={tok.get('is_statif')}, is_participe_passe={tok.get('is_participe_passe')}")
-                                    return tok, _noun_cands
-                    # Détecter statif/participe AVANT le return
-                    if tok['pos'] == 'ADJ':
-                        _clause_toks2 = getattr(self, '_current_clause_tokens', [])
-                        _passive_subj = any(t.get('dep') == 'nsubj:pass' for t in _clause_toks2)
-                        _has_obl_arg2 = (tok.get('dep') == 'ROOT' and any(
-                            t.get('dep') == 'obl:arg' and t.get('head_index') == tok.get('orig_index')
-                            for t in _clause_toks2))
-                        if _has_obl_arg2:
-                            _r = 'STATIF'
-                        else:
-                            _r = self._detect_statif_adj(tok['lemma'])
-                            if str(_r).upper() == 'QUALITE' and _passive_subj and tok.get('dep') == 'ROOT':
-                                _r = 'PARTICIPE'
-                        _rn = str(_r).upper() if _r else ''
-                        if _rn == 'STATIF' or _r is True:
-                            tok['is_statif'] = True
-                        elif _rn == 'PARTICIPE':
-                            tok['is_participe_passe'] = True
-                        elif _rn == 'VALEUR':
-                            tok['is_valeur'] = True
-                    print(f"DEBUG après détection: tok flags = is_statif={tok.get('is_statif')}, is_participe_passe={tok.get('is_participe_passe')}")
-                    return tok, candidates
-
-                    # Détecter statif/participe avant de retourner
-
-                    print(f"DEBUG après détection: tok flags = is_statif={tok.get('is_statif')}, is_participe_passe={tok.get('is_participe_passe')}")
-                    return tok, candidates
-                    # Ne pas retourner ici — continuer pour détecter is_statif
+                _r = self._detect_statif_adj(tok['lemma'])
+                if str(_r).upper() == 'QUALITE' and _passive_subj and tok.get('dep') == 'ROOT':
+                    _r = 'PARTICIPE'
+            _rn = str(_r).upper() if _r else ''
+            if _rn == 'STATIF' or _r is True:
+                tok['is_statif'] = True
+            elif _rn == 'PARTICIPE':
+                tok['is_participe_passe'] = True
+            elif _rn == 'VALEUR':
+                tok['is_valeur'] = True
+        print(f"DEBUG après détection: tok flags = is_statif={tok.get('is_statif')}, is_participe_passe={tok.get('is_participe_passe')}")
 
         top_score = candidates[0]['final_score'] if candidates else 0
 
