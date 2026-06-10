@@ -64,46 +64,49 @@ def _pos_matches(spacy_pos: str, kg_pos: str) -> bool:
 # Reranking signals
 # ------------------------------------------------------------------
 
-def _fr_exactness_bonus(fr_raw: str, token: str) -> float:
+def _fr_exactness_bonus(fr_raw: str, token: str) -> int:
+    """Exactness bonus on 0-100 point scale."""
     fr = clean_gloss(fr_raw or '').lower().strip()
     t  = token.lower().strip()
     if not fr or not t:
-        return 0.0
+        return 0
     if fr == t:
-        return 0.08
+        return 8
     if re.match(r'^' + re.escape(t) + r'\s*,', fr):
-        return 0.05
+        return 5
     if fr.startswith(t + ' '):
-        return 0.04
+        return 4
     if fr.startswith(t):
-        return 0.03
-    return 0.0
+        return 3
+    return 0
 
 
-def _pos_bonus(spacy_pos: str, kg_pos: str) -> float:
+def _pos_bonus(spacy_pos: str, kg_pos: str) -> int:
+    """POS match bonus on 0-100 point scale."""
     if not spacy_pos:
-        return 0.0
-    return 0.05 if _pos_matches(spacy_pos, kg_pos) else 0.0
+        return 0
+    return 5 if _pos_matches(spacy_pos, kg_pos) else 0
 
 
-def _conciseness_bonus(fr_raw: str) -> float:
+def _conciseness_bonus(fr_raw: str) -> int:
+    """Conciseness bonus on 0-100 point scale."""
     fr    = clean_gloss(fr_raw or '').strip()
     words = len(fr.split())
-    if words == 1: return 0.04
-    if words == 2: return 0.02
-    if words <= 4: return 0.01
-    return 0.0
+    if words == 1: return 4
+    if words == 2: return 2
+    if words <= 4: return 1
+    return 0
 
 
 def _context_bonus(fr_raw: str, context_tokens: list,
-                   semantic_groups: list = None) -> float:
+                   semantic_groups: list = None) -> int:
     """
+    Context bonus on 0-100 point scale.
     Bonus when candidate gloss matches context tokens.
     Includes semantic group expansion loaded from KG SemanticGroup nodes.
-    No hardcoded lexicons.
     """
     if not context_tokens or not fr_raw:
-        return 0.0
+        return 0
     fr = clean_gloss(fr_raw).lower()
 
     # Direct token match — use simple CONTAINS for accented words
@@ -121,9 +124,9 @@ def _context_bonus(fr_raw: str, context_tokens: list,
             semantic += 1
 
     total = direct + semantic
-    if total >= 2: return 0.10
-    if total == 1: return 0.04
-    return 0.0
+    if total >= 2: return 10
+    if total == 1: return 4
+    return 0
 
 
 def _gloss_match_score(fr_raw: str, token: str) -> float:
@@ -186,35 +189,24 @@ def _gloss_match_score(fr_raw: str, token: str) -> float:
 def _rerank(candidates: list, token: str, spacy_pos: str,
             context_tokens: list = None,
             semantic_groups: list = None) -> list:
+    """Rerank candidates on 0-100 point scale."""
     for c in candidates:
+        # Boosts on 0-100 scale
         b1 = _fr_exactness_bonus(c['fr'], token)
         b2 = _pos_bonus(spacy_pos, c.get('pos', ''))
         b3 = _conciseness_bonus(c['fr'])
         # Context bonus removed — scoring based on semantic meaning only
         # Context was causing wrong words to score higher due to
         # coincidental neighboring word matches
-        b5 = 0.15 if c.get('match') == 'exact' else 0.0
+        b5 = 15 if c.get('match') == 'exact' else 0
         final = c['score'] + b1 + b2 + b3 + b5
 
-        # ⚠️  CRITICAL: Distinguish perfect exact matches from composites
-        # Perfect match "ami" == "ami" (score 1.0) should ALWAYS rank higher
-        # than composite "ami, bien-aimé" or "ami intime" which get boosted to 1.0
-        #
-        # Solution: Cap composites at 0.99, keep perfect matches at 1.0
-        # Check gloss directly: if gloss == token exactly, it's perfect → 1.0
-        gloss_exact = c.get('fr', '').lower().strip().rstrip('.')
-        token_lower = token.lower().strip()
-        is_perfect_match = (gloss_exact == token_lower)
+        # Cap at 100 pts (exact matches will be 100 or very close)
+        final = min(final, 100.0)
 
-        if is_perfect_match:
-            # Perfect exact match (ami == ami) → keep at 1.0
-            c['final_score'] = round(min(final, 1.0), 4)
-        else:
-            # Composite or partial match → cap at 0.99 (below perfect)
-            c['final_score'] = round(min(final, 0.99), 4)
-
+        c['final_score'] = round(final, 1)
         c['bonuses'] = {'exact': b1, 'pos': b2, 'concise': b3,
-                        'context': 0.0, 'match': b5}
+                        'context': 0, 'match': b5}
     candidates.sort(key=lambda x: x['final_score'], reverse=True)
     return candidates
 
@@ -224,6 +216,16 @@ class KGRetriever:
     def __init__(self, db):
         self.db               = db
         self._semantic_groups = self._load_semantic_groups()
+
+    def _get_frame_multiplier(self, candidate_frame: str, query_frame: str) -> float:
+        """Frame multiplier (0.8x / 1.0x / 1.1x) to scale scores."""
+        if query_frame == 'GENERIC':
+            return 1.0
+        if candidate_frame == query_frame:
+            return 1.1
+        if candidate_frame != 'GENERIC':
+            return 0.8
+        return 1.0
 
     def _load_semantic_groups(self) -> list:
         """Load semantic groups from KG — no hardcoded lexicons."""
@@ -255,9 +257,10 @@ class KGRetriever:
         exact = self._exact_match(norm, frame, lang=lang, spacy_pos=eff_pos)
 
         # Improved embedding with context (if available)
+        # Exclude exact matches with high score (90+ pts) from embedding results
         embed = self._embedding_match_with_context(
             norm, frame,
-            exclude_bm={c['bm'] for c in exact if c['score'] >= 0.90},
+            exclude_bm={c['bm'] for c in exact if c['score'] >= 90.0},
             context_tokens=context_tokens,
             lang=lang, spacy_pos=eff_pos
         )
@@ -270,6 +273,7 @@ class KGRetriever:
                      lang: str = 'fr', spacy_pos: str = None):
         """
         Exact French text match using toLower CONTAINS.
+        Returns candidates with scores on 0-100 point scale.
 
         The old regex (?i).*\\b{token}\\b.* breaks on accented French
         characters — \\b treats é, è, à as non-word characters so
@@ -277,7 +281,6 @@ class KGRetriever:
 
         Fix: use toLower(s.fr) CONTAINS toLower($token) as primary check.
         This correctly matches 'école.', 'école primaire.', etc.
-        Secondary: also try without accents via regex for robustness.
         """
         allowed_pos = _allowed_kg_pos(spacy_pos)
         pos_filter  = "AND s.pos IN $allowed_pos" if allowed_pos else ""
@@ -300,17 +303,21 @@ class KGRetriever:
         seen_bm    = set()
 
         for r in results:
-            base = _gloss_match_score(r['fr'], norm)
+            base = _gloss_match_score(r['fr'], norm)  # 0-100 pts
             if base == 0.0:
                 continue
             if r['bm'] in seen_bm:
                 continue
             seen_bm.add(r['bm'])
-            score = self._apply_frame(base, r['frame'], frame)
+            # Apply frame multiplier
+            frame_mult = self._get_frame_multiplier(r['frame'], frame)
+            score = base * frame_mult
+            # Cap at 100 pts
+            score = min(score, 100.0)
             candidates.append({
                 'bm': r['bm'], 'fr': r['fr'], 'en': r['en'],
                 'frame': r['frame'], 'pos': r['pos'],
-                'score': round(min(score, 1.0), 4), 'match': 'exact',
+                'score': round(score, 1), 'match': 'exact',
             })
 
         return candidates
@@ -321,11 +328,11 @@ class KGRetriever:
                                      lang: str = 'fr',
                                      spacy_pos: str = None):
         """
-        Enhanced embedding matching that uses surrounding context
-        to build a richer query representation.
+        Enhanced embedding matching on 0-100 point scale.
+        Uses surrounding context to build a richer query representation.
 
-        Important: Embedding scores are capped at 0.85 so that exact matches
-        (which score 1.0) are ALWAYS preferred. This prevents good embedding
+        Important: Embedding scores are capped at 85 pts so that exact matches
+        (which score 100 pts) are ALWAYS preferred. This prevents good embedding
         results from overshadowing perfect exact matches.
 
         If context_tokens available: encode(token + context) for better signal
@@ -363,29 +370,22 @@ class KGRetriever:
             stored_vec = np.array(r['emb'], dtype=np.float32)
             if not same_embedding_space(query_vec, stored_vec):
                 continue
-            score = cosine(query_vec, stored_vec)
-            score = self._apply_frame(score, r['frame'], frame)
-
-            # ⚠️  CRITICAL: Cap embedding scores at 0.85 so exact matches (1.0)
+            # Cosine similarity is 0-1, convert to 0-100 pts
+            cosine_sim = cosine(query_vec, stored_vec)
+            score = cosine_sim * 100.0
+            # Apply frame multiplier
+            frame_mult = self._get_frame_multiplier(r['frame'], frame)
+            score = score * frame_mult
+            # ⚠️  CRITICAL: Cap embedding scores at 85 pts so exact matches (100 pts)
             # are ALWAYS preferred over embedding results, even very good ones.
-            # This prevents "fìlaninteri" from beating "ami." via synonym fallback.
-            score = min(score, 0.85)
+            score = min(score, 85.0)
 
             candidates.append({
                 'bm': r['bm'], 'fr': r['fr'], 'en': r['en'],
                 'frame': r['frame'], 'pos': r['pos'],
-                'score': round(score, 4), 'match': 'embed',
+                'score': round(score, 1), 'match': 'embed',
             })
 
         candidates.sort(key=lambda x: x['score'], reverse=True)
         return candidates
 
-    def _apply_frame(self, score: float, candidate_frame: str,
-                     query_frame: str) -> float:
-        if query_frame == 'GENERIC':
-            return score
-        if candidate_frame == query_frame:
-            return score * 1.10
-        if candidate_frame != 'GENERIC':
-            return score * 0.80
-        return score

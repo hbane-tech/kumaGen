@@ -45,14 +45,14 @@ from config.settings import LLM_BACKEND, LLM_MODEL, GEMINI_API_KEY, GEMINI_MODEL
 import os
 from embeddings.word2vec_encoder import _get_model
 
-MIN_SCORE      = 0.12
+MIN_SCORE      = 12    # 0-100 point scale
 TOP_K          = 10
-ADJ_CONFIDENCE = 0.70
-VERB_MIN_SCORE = 0.75
+ADJ_CONFIDENCE = 70    # 0-100 point scale
+VERB_MIN_SCORE = 75    # 0-100 point scale
 
 # Minimum embed top-score below which the embedding space is considered
 # dead — synonyms from the same space won't rescue the search.
-_EMBED_DEAD_ZONE = 0.50
+_EMBED_DEAD_ZONE = 50  # 0-100 point scale
 
 
 class TranslationEngine:
@@ -143,7 +143,7 @@ class TranslationEngine:
     def _needs_synonym(self, tok_lemma: str, candidates: list,
                        all_embed: bool) -> bool:
         """
-        Decide whether synonym fallback should be attempted.
+        Decide whether synonym fallback should be attempted (0-100 point scale).
 
         Do NOT attempt synonym when:
         - A candidate's French gloss already contains the search word
@@ -156,7 +156,7 @@ class TranslationEngine:
 
         DO attempt synonym when:
         - No candidates
-        - Top score < 0.70
+        - Top score < 70 pts
         - All embedding results AND no gloss contains the search word
         """
         if not candidates:
@@ -178,18 +178,18 @@ class TranslationEngine:
         # any synonym it retrieves will be equally random. Emit placeholder.
         if all_embed and top_score < _EMBED_DEAD_ZONE:
             print(f"     [{tok_lemma}] — embed dead zone "
-                  f"(score={top_score:.2f} < {_EMBED_DEAD_ZONE}), "
+                  f"(score={top_score:.1f} < {_EMBED_DEAD_ZONE}), "
                   f"skipping synonym fallback")
             return False
 
         # Low confidence → try synonym ONLY if top_score very low
-        # Raised threshold from 0.70 to 0.50 to reduce bad synonyms
+        # Raised threshold from 70 to 50 pts to reduce bad synonyms
         # (e.g., "belle" for "gentil" - different semantic field)
-        if top_score < 0.50:
+        if top_score < 50:
             return True
 
         # All embedding with very low score → try synonym as last resort
-        if all_embed and top_score < 0.60:
+        if all_embed and top_score < 60:
             return True
 
         return False
@@ -202,15 +202,15 @@ class TranslationEngine:
     def _rerank_by_sens_fr(self, source_lemma: str, candidates: list) -> list:
         """
         Re-classe les candidats en vérifiant si le lemme source apparaît
-        dans le sens_fr du candidat (KG). Deux passes :
+        dans le sens_fr du candidat (KG). Deux passes sur 0-100 point scale.
 
         1. String check (gratuit) :
-           - Lemme comme MOT dans sens_fr → boost fort (+0.35)
-           - Lemme comme sous-chaîne     → boost modéré (+0.15)
+           - Lemme comme MOT dans sens_fr → boost fort (+35 pts)
+           - Lemme comme sous-chaîne     → boost modéré (+15 pts)
            - Pas de match                → pas de boost
 
         2. Embedding check (seulement si top-1 sans match string, embed-only) :
-           - cosine_sim(encode(lemme), encode(sens_fr)) * 0.20 → boost fin
+           - cosine_sim(encode(lemme), encode(sens_fr)) * 20 → boost fin
 
         Correspond directement à la métrique Embedding P@1 du paper.
         """
@@ -226,11 +226,11 @@ class TranslationEngine:
             sens = raw.lower().replace(',', ' ').replace('.', ' ').replace(';', ' ')
             words = set(sens.split())
             if lemma_lower in words:
-                c['_sens_boost'] = 0.35      # mot entier → fort signal
+                c['_sens_boost'] = 35      # mot entier → fort signal (0-100)
             elif lemma_lower in raw.lower():
-                c['_sens_boost'] = 0.15      # sous-chaîne
+                c['_sens_boost'] = 15      # sous-chaîne (0-100)
             else:
-                c['_sens_boost'] = 0.0
+                c['_sens_boost'] = 0
 
         # ── Passe 2 : embedding sens_fr (seulement si top sans match) ─
         # cosine(lemme, glose) est CIRCULAIRE dans cet espace : il sert
@@ -247,7 +247,7 @@ class TranslationEngine:
                         sv = self.model.encode(c['fr'])
                         sim = float(np.dot(src_vec, sv) /
                                     (src_norm * np.linalg.norm(sv) + 1e-8))
-                        c['_embed_rank_boost'] = sim * 0.20
+                        c['_embed_rank_boost'] = sim * 20  # 0-100 scale
             except Exception:
                 pass
 
@@ -269,12 +269,12 @@ class TranslationEngine:
                          tok_pos: str = 'NOUN',
                          context_tokens: list = None) -> list:
         """
-        Use LLM to pick the best candidate sense.
+        Use LLM to pick the best candidate sense (0-100 point scale).
 
         Triggers:
         1. Multiple exact matches with close scores AND simpler exists
-        2. All embedding results with low confidence (< 0.75)
-        3. VERB with multiple exact matches very close (<=0.05 gap)
+        2. All embedding results with low confidence (< 75 pts)
+        3. VERB with multiple exact matches very close (<=5 pts gap)
            AND top candidate has compound gloss
         """
         if len(candidates) < 2:
@@ -286,18 +286,17 @@ class TranslationEngine:
         # Un score élevé ne court-circuite le rerank que pour un match EXACT.
         # Un top 'embed' à score élevé est souvent un faux ami (espace
         # dégénéré : "monté" → fɔ/dire à 0.97) → toujours passer par le LLM.
-        if top_score >= 0.80 and not all_embed:
+        if top_score >= 80 and not all_embed:
             return candidates
         # Exception : embed très haute confiance (score bien au-dessus du max
-        # cosinus 1.0 grâce aux bonus frame+gloss) → le LLM ne peut pas faire mieux.
-        # Le seuil 1.05 ne se déclenche pas pour les faux amis à 0.97.
-        if all_embed and top_score >= 1.05:
+        # cosinus 85 pts grâce aux bonus frame+gloss) → le LLM ne peut pas faire mieux.
+        # Le seuil 105 ne se déclenche pas pour les faux amis à 85 pts.
+        if all_embed and top_score >= 105:
             return candidates
-
 
         exact_matches = [c for c in candidates if c.get('match') == 'exact']
         close         = [c for c in candidates
-                         if top_score - c['final_score'] <= 0.10]
+                         if top_score - c['final_score'] <= 10]
         top_fr_words  = len(top['fr'].strip().rstrip('.').split())
         has_simpler   = any(
             len(c['fr'].strip().rstrip('.').split()) < top_fr_words
@@ -316,7 +315,7 @@ class TranslationEngine:
             tok_pos == 'VERB'
             and not all_embed
             and len(exact_matches) >= 2
-            and (top_score - second_exact_score) <= 0.05
+            and (top_score - second_exact_score) <= 5
             and (top_fr_words >= 2 or context_match_in_lower)
         )
 
@@ -333,10 +332,10 @@ class TranslationEngine:
             rerank_pool = candidates
         elif is_context_sensitive:
             rerank_pool = [c for c in candidates
-                           if top_score - c['final_score'] <= 0.15]
+                           if top_score - c['final_score'] <= 15]
         else:
             rerank_pool = [c for c in candidates
-                           if top_score - c['final_score'] <= 0.10]
+                           if top_score - c['final_score'] <= 10]
 
         if len(rerank_pool) < 2:
             return candidates
@@ -387,12 +386,12 @@ class TranslationEngine:
                                       top_k: int = 5) -> list:
         """
         Pour chaque candidat, LLM valide si son sens français
-        correspond sémantiquement au token français.
+        correspond sémantiquement au token français (0-100 point scale).
 
         Approche par scoring (pas rejet binaire):
-        - Match textuel parfait → +0.25 boost
-        - Match sémantique valide → +0.15 boost
-        - Invalide → -0.15 penalité (garde quand même le candidat)
+        - Match textuel parfait → +25 pts boost
+        - Match sémantique valide → +15 pts boost
+        - Invalide → -15 pts penalité (garde quand même le candidat)
 
         Cela casse la circularité embedding en utilisant LLM.
         """
@@ -404,13 +403,13 @@ class TranslationEngine:
         for c in candidates[:top_k]:
             gloss_fr = c.get('fr', '').lower().rstrip('.').strip()
             if not gloss_fr:
-                c['_semantic_score'] = 0.0
+                c['_semantic_score'] = 0
                 continue
 
             # Vérif textuelle: si la glose contient le token
             if token_lower in gloss_fr or gloss_fr.startswith(token_lower):
                 c['_semantic_valid'] = True
-                c['_semantic_score'] = 0.25
+                c['_semantic_score'] = 25  # 0-100 scale
                 print(f"     ✅ Match textuel: '{gloss_fr}' ≈ '{token_lower}' → {c['bm']}")
                 continue
 
@@ -427,31 +426,31 @@ class TranslationEngine:
 
                 if is_valid:
                     c['_semantic_valid'] = True
-                    c['_semantic_score'] = 0.15
+                    c['_semantic_score'] = 15  # 0-100 scale
                     print(f"     ✅ LLM valide: '{gloss_fr}' ≈ '{token_lower}' → {c['bm']}")
                 else:
                     c['_semantic_valid'] = False
-                    c['_semantic_score'] = -0.15
+                    c['_semantic_score'] = -15  # 0-100 scale
                     print(f"     ⚠️  LLM: '{gloss_fr}' ≠ '{token_lower}' → {c['bm']} (pénalisé)")
 
             except Exception as e:
                 print(f"     ⚠️  Validation sémantique échouée: {e}")
                 c['_semantic_valid'] = None
-                c['_semantic_score'] = -0.05
+                c['_semantic_score'] = -5
 
         # Appliquer les scores sémantiques
         for c in candidates[:top_k]:
-            semantic_boost = c.get('_semantic_score', 0.0)
+            semantic_boost = c.get('_semantic_score', 0)
             final = c.get('final_score', 0) + semantic_boost
 
             # ⚠️  CAP scores after semantic validation to maintain hierarchy
-            # Perfect exact match (score ≥ 0.99) → cap at 1.0
-            # Composite/partial match → cap at 0.99
-            # Embedding matches → capped at 0.85
-            if c.get('score', 0) >= 0.99:
-                c['final_score'] = round(min(final, 1.0), 4)
+            # Perfect exact match (score ≥ 99) → cap at 100 pts
+            # Composite/partial match → cap at 99 pts
+            # Embedding matches → capped at 85 pts
+            if c.get('score', 0) >= 99:
+                c['final_score'] = round(min(final, 100.0), 1)
             else:
-                c['final_score'] = round(min(final, 0.99), 4)
+                c['final_score'] = round(min(final, 99.0), 1)
 
         # Re-trier par final_score
         candidates.sort(key=lambda x: x.get('final_score', 0), reverse=True)
