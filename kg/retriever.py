@@ -209,11 +209,16 @@ def _rerank(candidates: list, token: str, spacy_pos: str,
         # than composite "ami, bien-aimé" or "ami intime" which get boosted to 1.0
         #
         # Solution: Cap composites at 0.99, keep perfect matches at 1.0
-        if c['score'] >= 0.99:
-            # Perfect or near-perfect exact match → allow 1.0
+        # Check gloss directly: if gloss == token exactly, it's perfect → 1.0
+        gloss_exact = c.get('fr', '').lower().strip().rstrip('.')
+        token_lower = token.lower().strip()
+        is_perfect_match = (gloss_exact == token_lower)
+
+        if is_perfect_match:
+            # Perfect exact match (ami == ami) → keep at 1.0
             c['final_score'] = round(min(final, 1.0), 4)
         else:
-            # Composite or partial match → cap at 0.99 (always below perfect)
+            # Composite or partial match → cap at 0.99 (below perfect)
             c['final_score'] = round(min(final, 0.99), 4)
 
         c['bonuses'] = {'exact': b1, 'pos': b2, 'concise': b3,
