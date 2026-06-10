@@ -131,10 +131,12 @@ def _gloss_match_score(fr_raw: str, token: str) -> float:
     Score how well the French gloss matches the token.
     Uses CONTAINS logic — no \b boundary (breaks on accented chars).
 
-    Scoring tiers:
-    0.95 — gloss starts with token (most specific)
-    0.93 — first comma-segment starts with token
-    0.82 — gloss contains token as substring
+    Scoring tiers (privilege exact matches):
+    1.00 — gloss equals token exactly (e.g., "ami" == "ami")
+    0.98 — gloss equals token + period (e.g., "ami." == "ami")
+    0.96 — gloss starts with token + space/comma (e.g., "ami prêt" but NOT "ami, autre")
+    0.90 — first comma-segment equals token (e.g., "ami" in "ami, bien-aimé" but PENALIZED)
+    0.82 — gloss contains token as substring with word boundary
     0.00 — no match
     """
     fr = clean_gloss(fr_raw or '').lower().strip()
@@ -142,26 +144,44 @@ def _gloss_match_score(fr_raw: str, token: str) -> float:
     if not fr or not t:
         return 0.0
 
-    # Tier 1: gloss starts with token exactly
-    if fr == t or fr.startswith(t + '.') or fr.startswith(t + ',') \
-            or fr.startswith(t + ' '):
-        return 0.95
+    # Tier 1a: Perfect exact match
+    if fr == t:
+        return 1.00
 
-    # Tier 2: first segment of gloss starts with token
+    # Tier 1b: Exact + period (e.g., "ami.")
+    if fr == t + '.':
+        return 0.98
+
+    # Tier 1c: Token followed by space/punctuation (NOT comma list)
+    # e.g., "ami prêt" is good, but "ami, autre" is NOT
+    if fr.startswith(t + ' ') or fr.startswith(t + '.'):
+        # Check if it's a simple extension (one more word) vs compound definition
+        after_token = fr[len(t):].lstrip('.').strip()
+        if after_token and not after_token.startswith(','):
+            # Single extension like "ami proche" → good
+            return 0.96
+
+    # Tier 2: First segment before comma matches token
+    # But PENALIZE if there's significant content after comma
     first_segment = fr.split(',')[0].strip()
-    if first_segment == t or first_segment.startswith(t + '.') \
-            or first_segment.startswith(t + ' ') \
-            or first_segment == t + '.':
-        return 0.93
+    if first_segment == t or first_segment == t + '.':
+        # Check if there's additional definitions after comma
+        after_comma = fr.split(',', 1)[1].strip() if ',' in fr else ''
+        if after_comma and len(after_comma.split()) > 2:
+            # Significant definition after comma → "ami, bien-aimé" gets penalized
+            return 0.80
+        else:
+            # Minimal or no additional content → good
+            return 0.93
+    elif first_segment.startswith(t + ' '):
+        # "ami proche, autre" → less good than exact first segment
+        after_comma = fr.split(',', 1)[1].strip() if ',' in fr else ''
+        return 0.92 if after_comma else 0.94
 
     # Tier 3: gloss contains token as a meaningful word boundary
     import re as _re
     pattern = r'(^|[ ,;(])' + _re.escape(t) + r'($|[ .,;)])'
     if _re.search(pattern, fr):
-        # Reject if token is buried after 3+ other words
-        # (coincidental appearance, different concept).
-        # La levée des qualificateurs inverseurs ('lent à', 'manque de'…)
-        # est déléguée au reranking LLM + embeddings — zéro liste en dur.
         idx = fr.find(t)
         words_before = len(fr[:idx].split()) if idx > 0 else 0
         if words_before >= 4:
