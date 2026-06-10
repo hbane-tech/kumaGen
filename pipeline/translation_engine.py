@@ -830,77 +830,30 @@ class TranslationEngine:
         return verdict
     
     
-    def _detect_semantic_class(self, lemma: str, bm: str) -> str:
-        """Détecte la classe sémantique d'un verbe.
+    def _detect_semantic_class(self, lemma: str) -> str:
+        """Détecte la classe sémantique d'un verbe via LLM.
 
-        Utilise d'abord une liste hardcoded de verbes intransitifs/autonomes connus,
-        puis le KG, puis le LLM comme fallback.
+        Le LLM classe le verbe en autonome ou transitif basé sur sa sémantique.
         """
-        # ── Verbes intransitifs/autonomes connus → motion ou copula ──────────────
-        _autonome_verbs = {
-            'venir': 'motion',
-            'aller': 'motion',
-            'partir': 'motion',
-            'arriver': 'motion',
-            'entrer': 'motion',
-            'sortir': 'motion',
-            'monter': 'motion',
-            'descendre': 'motion',
-            'rester': 'posture',
-            'demeurer': 'posture',
-            'être': 'copula',
-            'sembler': 'copula',
-            'paraître': 'perception',
-            'disparaître': 'motion',
-            'courir': 'motion',
-            'marcher': 'motion',
-            'sauter': 'motion',
-            'tomber': 'motion',
-            'se lever': 'posture',
-            'dormir': 'posture',
-            'vivre': 'biological',
-            'mourir': 'biological',
-            'naître': 'biological',
-        }
-
-        lemma_lower = lemma.lower().strip()
-        if lemma_lower in _autonome_verbs:
-            cls = _autonome_verbs[lemma_lower]
-            print(f"     🏷️  semantic_class('{lemma}') = {cls}  [hardcoded]")
-            return cls
-
-        # ── Chercher dans le KG ──────────────────────────────────────────────────
-        try:
-            res = self.db.query("""
-                MATCH (s:Sense {bm: $bm})
-                WHERE s.semantic_class IS NOT NULL
-                RETURN s.semantic_class AS cls LIMIT 1
-            """, {'bm': bm})
-            if res and res[0].get('cls'):
-                cls = res[0]['cls'].strip().lower()
-                if cls and ' ' not in cls:
-                    print(f"     🏷️  semantic_class('{lemma}') = {cls}  [from KG]")
-                    return cls
-        except Exception:
-            pass
-
-        # ── LLM comme fallback ───────────────────────────────────────────────────
         prompt = (
-            f'Quelle est la nature sémantique du verbe français "{lemma}" ?\n'
-            f'motion=déplacement dans l\'espace, biological=processus vital du corps, '
-            f'posture=changement ou maintien de position corporelle, '
-            f'spontaneous=réaction émotionnelle ou réflexe involontaire, '
-            f'perception=activité sensorielle ou cognitive, '
-            f'meteorological=phénomène atmosphérique, '
-            f'consumption=ingestion de nourriture ou boisson, '
-            f'preparation=transformation culinaire ou matérielle, '
-            f'action=action physique intentionnelle sur un objet ou autrui, '
-            f'technique=travail spécialisé de fabrication ou réparation, '
-            f'craft=création artistique ou artisanale manuelle, '
-            f'communication=expression verbale ou transmission d\'information, '
-            f'copula=lien attributif entre sujet et état ou identité, '
-            f'having=possession ou appartenance, '
-            f'other=aucune catégorie ne convient.\n'
+            f'Quelle est la nature sémantique du verbe français "{lemma}" ?\n\n'
+            f'Catégories AUTONOMES (intransitifs, n\'acceptent pas de COD direct):\n'
+            f'  motion=déplacement dans l\'espace (aller, venir, courir, marcher...)\n'
+            f'  biological=processus vital du corps (vivre, mourir, naître, respirer...)\n'
+            f'  posture=position/changement de position (rester, dormir, se lever...)\n'
+            f'  spontaneous=réaction involontaire (rire, crier, pleurer...)\n'
+            f'  perception=voir, entendre, sentir (perception directe)\n'
+            f'  meteorological=phénomène atmosphérique (pleuvoir, neiger...)\n'
+            f'  copula=lien attributif (être, sembler, paraître...)\n\n'
+            f'Catégories TRANSITIVES (acceptent souvent un COD):\n'
+            f'  action=action intentionnelle (faire, donner, prendre, manger...)\n'
+            f'  consumption=ingestion (manger, boire...)\n'
+            f'  preparation=transformation (cuisiner, préparer...)\n'
+            f'  technique=travail spécialisé (construire, réparer...)\n'
+            f'  craft=création artistique (peindre, écrire...)\n'
+            f'  communication=parole (dire, raconter, demander...)\n'
+            f'  having=possession (avoir, posséder...)\n\n'
+            f'  other=aucune catégorie ne convient.\n\n'
             f'Réponds UNIQUEMENT par le nom de la catégorie.'
         )
 
@@ -909,7 +862,7 @@ class TranslationEngine:
             cls_raw = self._call_llm(prompt, max_tokens=15).strip().lower()
             words   = _re.findall(r'[a-z]+', cls_raw)
             cls     = words[0] if words else 'other'
-            print(f"     🏷️  semantic_class('{lemma}') = {cls}  [LLM: {cls_raw!r}]")
+            print(f"     🏷️  semantic_class('{lemma}') = {cls}  [LLM]")
             return cls
         except Exception as e:
             print(f"     ⚠️  semantic class detection failed: {e}")
@@ -1188,8 +1141,7 @@ class TranslationEngine:
             tok['sens_fr'] = best.get('fr', '')
 
         if tok['pos'] == 'VERB' and tok.get('bm'):
-            tok['semantic_class'] = self._detect_semantic_class(
-                tok['lemma'], tok['bm'])
+            tok['semantic_class'] = self._detect_semantic_class(tok['lemma'])
             _sc = tok.get('semantic_class', '')
 
             _morph_str = str(tok.get('morph', ''))
