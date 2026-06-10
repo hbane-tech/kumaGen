@@ -830,6 +830,30 @@ class TranslationEngine:
         return verdict
     
     
+    def _normalize_verb_to_infinitive(self, verb: str) -> str:
+        """Normalise un verbe conjugué à sa forme infinitive.
+
+        Utilise le LLM pour une conversion fiable (sans hardcode).
+        Exemples: 'lave' → 'laver', 'mangé' → 'manger', 'vais' → 'aller'
+        """
+        verb_lower = verb.lower().strip()
+        if not verb_lower:
+            return verb
+
+        prompt = (
+            f'Quel est l\'infinitif du verbe français "{verb}" ?\n'
+            f'Réponds UNIQUEMENT par l\'infinitif en minuscules, sans ponctuation.'
+        )
+
+        try:
+            infinitive = self._call_llm(prompt, max_tokens=8).strip().lower()
+            if infinitive and len(infinitive) > 1:
+                return infinitive
+        except Exception as e:
+            print(f"     ⚠️  Infinitive normalization failed: {e}")
+
+        return verb
+
     def _detect_semantic_class(self, lemma: str) -> str:
         """Détecte la classe sémantique d'un verbe via LLM.
 
@@ -1000,8 +1024,19 @@ class TranslationEngine:
                 print(f"     ⚠️  LLM function word failed: {e}")
             return tok, []
 
+        # ── NORMALISER LES VERBES À L'INFINITIF AVANT KG RETRIEVAL ─────────────
+        # Les verbes dans le KG sont à l'infinitif ('laver', pas 'lave')
+        kg_search_lemma = lemma
+        if tok['pos'] == 'VERB' and lemma:
+            # Convertir en infinitif pour une meilleure recherche KG
+            # "lave" → "laver", "mangé" → "manger", etc.
+            infinitive = self._normalize_verb_to_infinitive(lemma)
+            if infinitive and infinitive != lemma:
+                kg_search_lemma = infinitive
+                print(f"     🔄 Verbe normalisé: '{lemma}' → '{kg_search_lemma}'")
+
         candidates = self.retriever.retrieve(
-            lemma, frame,
+            kg_search_lemma, frame,
             spacy_pos=tok['pos'],
             top_k=TOP_K,
             lang=lang,
