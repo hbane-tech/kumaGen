@@ -1098,20 +1098,19 @@ class TranslationEngine:
                 for t in getattr(self, '_current_clause_tokens', []))
             if _cop_context:
                 # Classifier d'abord : STATIF/PARTICIPE/QUALITE
-                # Le NOUN fallback est réservé aux prédicats nominaux (professions)
+                # NOUN fallback disabled — interferes with correct adjective ranking
                 self._classify_adj_state(tok)
-                if not tok.get('is_participe_passe') and not tok.get('is_statif'):
-                    _noun_cands = self.retriever.retrieve(
-                        lemma, frame, spacy_pos='NOUN',
-                        top_k=TOP_K, lang=lang)
-                    _noun_cands = self._rerank_by_sens_fr(lemma, _noun_cands)
-                    if _noun_cands and _noun_cands[0]['final_score'] >= 0.50:
-                        _best_n = _noun_cands[0]
-                        tok['bm'] = _best_n['bm']
-                        tok['_adj_is_nominal_pred'] = True
-                        print(f"     🔄 [NOUN fallback] '{lemma}' → '{_best_n['bm']}' ({_best_n['fr']})")
-                        print(f"DEBUG après détection: tok flags = is_statif={tok.get('is_statif')}, is_participe_passe={tok.get('is_participe_passe')}")
-                        return tok, _noun_cands
+                # if not tok.get('is_participe_passe') and not tok.get('is_statif'):
+                #     _noun_cands = self.retriever.retrieve(
+                #         lemma, frame, spacy_pos='NOUN',
+                #         top_k=TOP_K, lang=lang)
+                #     _noun_cands = self._rerank_by_sens_fr(lemma, _noun_cands)
+                #     if _noun_cands and _noun_cands[0]['final_score'] >= 50:
+                #         _best_n = _noun_cands[0]
+                #         tok['bm'] = _best_n['bm']
+                #         tok['_adj_is_nominal_pred'] = True
+                #         print(f"     🔄 [NOUN fallback] '{lemma}' → '{_best_n['bm']}' ({_best_n['fr']})")
+                #         return tok, _noun_cands
         # Détecter statif/participe AVANT le return
         if tok['pos'] == 'ADJ':
             _clause_toks2 = getattr(self, '_current_clause_tokens', [])
