@@ -182,12 +182,14 @@ class TranslationEngine:
                   f"skipping synonym fallback")
             return False
 
-        # Low confidence — always try synonym
-        if top_score < 0.70:
+        # Low confidence → try synonym ONLY if top_score very low
+        # Raised threshold from 0.70 to 0.50 to reduce bad synonyms
+        # (e.g., "belle" for "gentil" - different semantic field)
+        if top_score < 0.50:
             return True
 
-        # All embedding with no gloss match — synonym may find exact match
-        if all_embed:
+        # All embedding with very low score → try synonym as last resort
+        if all_embed and top_score < 0.60:
             return True
 
         return False
@@ -524,15 +526,10 @@ class TranslationEngine:
         }.get(pos, 'words')
 
         prompt = (
-            f'List 3 French {pos_label} that mean the same as "{lemma}".\n'
-            f'Do NOT include "{lemma}" itself in the list.\n'
-            f'Reply with ONLY 3 different French words separated by commas.\n'
-            f'Examples:\n'
-            f'- construire -> bâtir, édifier, ériger\n'
-            f'- étudier -> apprendre, réviser, lire\n'
-            f'- reculé -> lointain, éloigné, isolé\n'
-            f'- marcher -> avancer, se déplacer, aller\n'
-            f'{lemma} ->'
+            f'Donne 3 {pos_label} français qui signifient EXACTEMENT la même chose que "{lemma}".\n'
+            f'Synonymes VRAIS seulement, pas de sens différent.\n'
+            f'Ne PAS inclure "{lemma}" lui-même.\n'
+            f'Réponds UNIQUEMENT par 3 mots séparés par des virgules.'
         )
 
         try:
