@@ -256,8 +256,13 @@ class TranslationEngine:
         # ── Application des boosts et re-tri ──────────────────────────
         # Seul le boost string (passe 1) entre dans final_score (confiance).
         # Le boost cosinus (passe 2) n'agit que sur la clé de tri.
-        for c in candidates:
+        for c in candidates[:10]:
+            old_score = c.get('final_score', 0)
             c['final_score'] = c['final_score'] + c.get('_sens_boost', 0)
+            embed_boost = c.get('_embed_rank_boost', 0)
+            # DEBUG
+            if c.get('_sens_boost', 0) != 0 or embed_boost != 0:
+                print(f"     [RERANK_SENS] {c.get('bm', '?')}: {old_score:.1f} + {c.get('_sens_boost', 0)} (sens) + {embed_boost:.1f} (embed) = {c['final_score']:.1f}")
 
         return sorted(
             candidates,
