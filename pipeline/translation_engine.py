@@ -221,14 +221,16 @@ class TranslationEngine:
             return candidates
 
         # ── Passe 1 : string match sens_fr ────────────────────────────
+        # IMPORTANT: These boosts are MINIMAL to avoid collapsing the hierarchy.
+        # Boosts should only slightly reorder ties, not change categorical ranking.
         for c in candidates:
             raw = c.get('fr', '')
             sens = raw.lower().replace(',', ' ').replace('.', ' ').replace(';', ' ')
             words = set(sens.split())
             if lemma_lower in words:
-                c['_sens_boost'] = 35      # mot entier → fort signal (0-100)
+                c['_sens_boost'] = 3       # mot entier → minimal signal
             elif lemma_lower in raw.lower():
-                c['_sens_boost'] = 15      # sous-chaîne (0-100)
+                c['_sens_boost'] = 1       # sous-chaîne → minimal signal
             else:
                 c['_sens_boost'] = 0
 
@@ -247,7 +249,7 @@ class TranslationEngine:
                         sv = self.model.encode(c['fr'])
                         sim = float(np.dot(src_vec, sv) /
                                     (src_norm * np.linalg.norm(sv) + 1e-8))
-                        c['_embed_rank_boost'] = sim * 20  # 0-100 scale
+                        c['_embed_rank_boost'] = sim * 2  # 0-100 scale (minimal)
             except Exception:
                 pass
 
