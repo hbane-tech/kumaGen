@@ -202,7 +202,12 @@ def _rerank(candidates: list, token: str, spacy_pos: str,
         # Context was causing wrong words to score higher due to
         # coincidental neighboring word matches
         b5 = 0.15 if c.get('match') == 'exact' else 0.0
-        c['final_score'] = round(c['score'] + b1 + b2 + b3 + b5, 4)
+        final = c['score'] + b1 + b2 + b3 + b5
+        # ⚠️  CRITICAL: Cap final_score at 1.0 so the hierarchy is maintained:
+        #    exact matches (1.0) > embedding (0.85) > synonyms
+        # Without capping, bonuses stack and "ami intime" gets 1.82 > 0.85,
+        # defeating the purpose of the 0.85 embedding cap.
+        c['final_score'] = round(min(final, 1.0), 4)
         c['bonuses'] = {'exact': b1, 'pos': b2, 'concise': b3,
                         'context': 0.0, 'match': b5}
     candidates.sort(key=lambda x: x['final_score'], reverse=True)
