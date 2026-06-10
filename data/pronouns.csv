@@ -17,7 +17,9 @@ ceci,fr,o,subject
 celui,fr,o,subject
 celle,fr,o,subject
 me,fr,n,object
+m,fr,n,object
 te,fr,i,object
+t,fr,i,object
 lui,fr,a,object
 leur,fr,u,object
 mon,fr,n,possessive

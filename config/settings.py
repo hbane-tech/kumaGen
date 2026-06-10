@@ -15,10 +15,9 @@ Central configuration for the hybrid translation system.
 Set LLM_BACKEND and optionally LLM_MODEL here or via environment variables.
 """
 
-
-GEMINI_API_KEY    = os.getenv('GEMINI_API_KEY',    'AIzaSyDWh8nAn23eFdE3KC8EwCCORpjAKuPpEmA')
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+OPENAI_API_KEY  = os.getenv("OPENAI_API_KEY")
+GEMINI_API_KEY  = ""
+GEMINI_MODEL    = ""
 
 LLM_BACKEND = os.getenv('LLM_BACKEND', 'ollama')
 LLM_MODEL   = os.getenv('LLM_MODEL',   'qwen2.5:3b')
-

@@ -1,0 +1,2309 @@
+UD French GSD : 416 phrases
+
+  [   1/416] Je sens qu'entre ça et les films de médecins et DEBUG avec in funcs: True
+DEBUG nmod: médecins idx=9 head=7
+DEBUG skip amod: fous dep=amod head=9 pos=ADJ orig=12
+DEBUG skip amod: autre dep=amod head=24 pos=ADJ orig=23
+DEBUG nmod: origine idx=28 head=24
+DEBUG skip amod: fous dep=amod head=9 pos=ADJ orig=12
+DEBUG skip prenominal: autre idx=23 ≤ nmod idx=28
+⚠️  Ollama morphologique indisponible (réessai dans 60s)
+  [   2/416] On pourra toujours parler à propos d'Averroès deDEBUG avec in funcs: True
+DEBUG nmod: Sujet idx=13 head=11
+  [   3/416] « Il a été largement démontré que la population DEBUG avec in funcs: True
+DEBUG nmod: territoire idx=11 head=8
+DEBUG skip prenominal: civile idx=9 ≤ nmod idx=11
+DEBUG skip amod: autonome dep=amod head=11 pos=ADJ orig=13
+DEBUG skip amod: occidental dep=amod head=15 pos=ADJ orig=16
+DEBUG skip amod: humains dep=amod head=25 pos=ADJ orig=26
+DEBUG skip amod: arbitraire dep=amod head=30 pos=ADJ orig=31
+DEBUG skip amod: internationale dep=amod head=43 pos=ADJ orig=44
+DEBUG skip amod: sahraouie dep=amod head=55 pos=ADJ orig=58
+DEBUG nmod: atteintes idx=23 head=20
+DEBUG skip amod: civile dep=amod head=8 pos=ADJ orig=9
+DEBUG skip amod: autonome dep=amod head=11 pos=ADJ orig=13
+DEBUG skip amod: occidental dep=amod head=15 pos=ADJ orig=16
+DEBUG skip amod: humains dep=amod head=25 pos=ADJ orig=26
+DEBUG skip amod: arbitraire dep=amod head=30 pos=ADJ orig=31
+DEBUG skip amod: internationale dep=amod head=43 pos=ADJ orig=44
+DEBUG skip amod: sahraouie dep=amod head=55 pos=ADJ orig=58
+DEBUG nmod: droits idx=25 head=23
+DEBUG skip amod: civile dep=amod head=8 pos=ADJ orig=9
+DEBUG skip amod: autonome dep=amod head=11 pos=ADJ orig=13
+DEBUG skip amod: occidental dep=amod head=15 pos=ADJ orig=16
+DEBUG skip amod: humains dep=amod head=25 pos=ADJ orig=26
+DEBUG skip amod: arbitraire dep=amod head=30 pos=ADJ orig=31
+DEBUG skip amod: internationale dep=amod head=43 pos=ADJ orig=44
+DEBUG skip amod: sahraouie dep=amod head=55 pos=ADJ orig=58
+DEBUG nmod: détention idx=30 head=23
+DEBUG skip amod: civile dep=amod head=8 pos=ADJ orig=9
+DEBUG skip amod: autonome dep=amod head=11 pos=ADJ orig=13
+DEBUG skip amod: occidental dep=amod head=15 pos=ADJ orig=16
+DEBUG skip amod: humains dep=amod head=25 pos=ADJ orig=26
+DEBUG skip amod: arbitraire dep=amod head=30 pos=ADJ orig=31
+DEBUG skip amod: internationale dep=amod head=43 pos=ADJ orig=44
+DEBUG skip amod: sahraouie dep=amod head=55 pos=ADJ orig=58
+DEBUG nmod: presse idx=57 head=55
+DEBUG skip amod: civile dep=amod head=8 pos=ADJ orig=9
+DEBUG skip amod: autonome dep=amod head=11 pos=ADJ orig=13
+DEBUG skip amod: occidental dep=amod head=15 pos=ADJ orig=16
+DEBUG skip amod: humains dep=amod head=25 pos=ADJ orig=26
+DEBUG skip amod: arbitraire dep=amod head=30 pos=ADJ orig=31
+DEBUG skip amod: internationale dep=amod head=43 pos=ADJ orig=44
+DEBUG reattach: sahraouie head 55→57
+  [   4/416] 1er : début de la présidence lituanienne de l'OrDEBUG avec in funcs: True
+DEBUG nmod: présidence idx=5 head=2
+DEBUG skip amod: lituanienne dep=amod head=5 pos=ADJ orig=6
+DEBUG nmod: Organisation idx=10 head=5
+DEBUG skip prenominal: lituanienne idx=6 ≤ nmod idx=10
+DEBUG nmod: Sécurité idx=13 head=10
+DEBUG skip amod: lituanienne dep=amod head=5 pos=ADJ orig=6
+DEBUG nmod: décembre idx=26 head=25
+DEBUG skip amod: lituanienne dep=amod head=5 pos=ADJ orig=6
+  [   5/416] Et pourtant, lors de sa première visite en AfriqDEBUG avec in funcs: True
+  [   6/416] Les spéculations autour du match sont à leur parDEBUG avec in funcs: True
+  [   7/416] Ils ne citent pas son nom, parce que depuis les DEBUG avec in funcs: True
+DEBUG nmod: famille idx=20 head=17
+DEBUG skip amod: royale dep=amod head=20 pos=ADJ orig=21
+  [   8/416] Il y en a qui croient toujours qu'ils peuvent joDEBUG avec in funcs: True
+DEBUG nmod: conscience idx=18 head=16
+DEBUG nmod: Waterproof idx=46 head=42
+  [   9/416] Son discours, inspiré d'une pensée du Moyen-âge,DEBUG avec in funcs: True
+DEBUG nmod: Moyen-âge idx=9 head=7
+  [  10/416] Pour lui, je crois vraiment que l'essentiel est DEBUG avec in funcs: True
+DEBUG nmod: déstabilisation idx=18 head=15
+DEBUG skip amod: spirituelle dep=amod head=22 pos=ADJ orig=23
+DEBUG nmod: autorité idx=22 head=18
+DEBUG skip amod: spirituelle dep=amod head=22 pos=ADJ orig=23
+DEBUG nmod: pape idx=25 head=22
+DEBUG skip prenominal: spirituelle idx=23 ≤ nmod idx=25
+  [  11/416] Est-ce le fait du hasard ou d'une malédiction quDEBUG avec in funcs: True
+DEBUG nmod: hasard idx=5 head=3
+DEBUG skip amod: toute dep=amod head=14 pos=ADJ orig=12
+  [  12/416] Maintenant, avec un peu de bonne volonté vous obDEBUG avec in funcs: True
+DEBUG nmod: volonté idx=7 head=4
+DEBUG skip amod: bonne dep=amod head=7 pos=ADJ orig=6
+DEBUG nmod: traditionalisme idx=30 head=28
+DEBUG skip amod: bonne dep=amod head=7 pos=ADJ orig=6
+DEBUG avec final: role=comitative bm=ni dep=case
+  [  13/416] Royale donc, cette voie de communication est ausDEBUG avec in funcs: True
+DEBUG nmod: communication idx=6 head=4
+  [  14/416] Pour pouvoir mener à bien sa politique dictatoriDEBUG avec in funcs: True
+  [  15/416] Belle, grande, claire, séduisante à souhait, ellDEBUG avec in funcs: True
+  [  16/416] Et si officiellement le Maroc n'a pas de relatioDEBUG avec in funcs: True
+DEBUG avec final: role=comitative bm=ni dep=case
+  [  17/416] Trois ans plus tard, il tient un discours sur laDEBUG avec in funcs: True
+DEBUG nmod: crise idx=11 head=8
+  [  18/416] Je suis déchirée.                               DEBUG avec in funcs: True
+  [  19/416] Selon lui, cette période sera mise à profit pourDEBUG avec in funcs: True
+DEBUG nmod: accord idx=16 head=12
+DEBUG skip amod: régional dep=amod head=28 pos=ADJ orig=29
+DEBUG skip amod: européenne dep=amod head=37 pos=ADJ orig=38
+DEBUG skip amod: marocaines dep=amod head=49 pos=ADJ orig=50
+DEBUG nmod: ressources idx=19 head=16
+DEBUG skip amod: régional dep=amod head=28 pos=ADJ orig=29
+DEBUG skip amod: européenne dep=amod head=37 pos=ADJ orig=38
+DEBUG skip amod: marocaines dep=amod head=49 pos=ADJ orig=50
+DEBUG nmod: poisson idx=21 head=19
+DEBUG skip amod: régional dep=amod head=28 pos=ADJ orig=29
+DEBUG skip amod: européenne dep=amod head=37 pos=ADJ orig=38
+DEBUG skip amod: marocaines dep=amod head=49 pos=ADJ orig=50
+DEBUG nmod: fonds idx=32 head=28
+DEBUG skip prenominal: régional idx=29 ≤ nmod idx=32
+DEBUG skip amod: européenne dep=amod head=37 pos=ADJ orig=38
+DEBUG skip amod: marocaines dep=amod head=49 pos=ADJ orig=50
+DEBUG nmod: informations idx=45 head=42
+DEBUG skip amod: régional dep=amod head=28 pos=ADJ orig=29
+DEBUG skip amod: européenne dep=amod head=37 pos=ADJ orig=38
+DEBUG skip amod: marocaines dep=amod head=49 pos=ADJ orig=50
+  [  20/416] Le 20 juin, le Secrétaire général de l'Elysée ClDEBUG avec in funcs: True
+DEBUG nmod: juin idx=2 head=1
+DEBUG skip amod: général dep=amod head=5 pos=ADJ orig=6
+DEBUG skip amod: Premier dep=amod head=25 pos=ADJ orig=24
+  [  21/416] Ce qui transparaît dans tous ces textes est l'esDEBUG avec in funcs: True
+DEBUG nmod: peuple idx=17 head=10
+DEBUG skip amod: tous dep=amod head=6 pos=ADJ orig=4
+  [  22/416] En ce sens, la mort de Mouammar el-Kadhafi ouvreDEBUG avec in funcs: True
+DEBUG nmod: irakisation idx=16 head=13
+  [  23/416] promulgation de loi « anti-hérétiques ».        DEBUG avec in funcs: True
+DEBUG nmod: loi idx=2 head=0
+DEBUG skip amod: anti-hérétiques dep=amod head=2 pos=ADJ orig=4
+  [  24/416] Ne pas rester seul ou en couple dans une zone isDEBUG avec in funcs: True
+  [  25/416] Autant dire dans un désert médiatique pour la moDEBUG avec in funcs: True
+DEBUG nmod: poète idx=12 head=8
+DEBUG skip amod: médiatique dep=amod head=4 pos=ADJ orig=5
+  [  26/416] Les lendemains de lynchage sont pleins d'incertiDEBUG avec in funcs: True
+DEBUG nmod: lynchage idx=3 head=1
+  [  27/416] Pour cela, ils affirment que le premier mandat dDEBUG avec in funcs: True
+DEBUG nmod: loi idx=34 head=30
+DEBUG skip amod: premier dep=amod head=8 pos=ADJ orig=7
+DEBUG skip amod: nouveau dep=amod head=17 pos=ADJ orig=16
+DEBUG skip amod: constitutionnel dep=amod head=17 pos=ADJ orig=18
+DEBUG skip amod: nouvelle dep=amod head=34 pos=ADJ orig=33
+  [  28/416] N'hésitez-pas à la faire circuler largement autoDEBUG avec in funcs: True
+  [  29/416] Il y a un an naissait Gdem Izik.                DEBUG avec in funcs: True
+  [  30/416] iii) La taxe foncière ;                         DEBUG avec in funcs: True
+  [  31/416] Il est 20h45 en territoire algérien.            DEBUG avec in funcs: True
+  [  32/416] Car le gouvernement marocain regrette le temps bDEBUG avec in funcs: True
+DEBUG nmod: milliers idx=22 head=20
+DEBUG skip amod: marocain dep=amod head=2 pos=ADJ orig=3
+DEBUG skip amod: financière dep=amod head=10 pos=ADJ orig=11
+DEBUG skip amod: algériens dep=amod head=15 pos=ADJ orig=16
+DEBUG skip amod: toute dep=amod head=27 pos=ADJ orig=25
+  [  33/416] Le royaume s'est amélioré, mais pas dans le sensDEBUG avec in funcs: True
+  [  34/416] Même si la DGSE (Direction générale de la sécuriDEBUG avec in funcs: True
+DEBUG nmod: sécurité idx=9 head=5
+DEBUG skip prenominal: générale idx=6 ≤ nmod idx=9
+DEBUG skip amod: extérieure dep=amod head=9 pos=ADJ orig=10
+DEBUG skip amod: bons dep=amod head=19 pos=ADJ orig=18
+DEBUG nmod: intermédiaires idx=19 head=15
+DEBUG skip amod: générale dep=amod head=5 pos=ADJ orig=6
+DEBUG skip amod: extérieure dep=amod head=9 pos=ADJ orig=10
+DEBUG skip amod: bons dep=amod head=19 pos=ADJ orig=18
+  [  35/416] Son destin est-il la Poussière ?                DEBUG avec in funcs: True
+  [  36/416] C'est un sourire de Dieu.                       DEBUG avec in funcs: True
+  [  37/416] Comme dans toutes les campagnes présidentielles,DEBUG avec in funcs: True
+  [  38/416] Combien de fois ne célébrons-nous que nous-mêmesDEBUG avec in funcs: True
+  [  39/416] Tout cela est présent dans sa passion.          DEBUG avec in funcs: True
+  [  40/416] Plus, l'AQMI tente de nouer des rapports avec leDEBUG avec in funcs: True
+DEBUG nmod: mouvements idx=12 head=9
+DEBUG skip amod: subversifs dep=amod head=12 pos=ADJ orig=13
+DEBUG skip amod: religieuse dep=amod head=27 pos=ADJ orig=28
+DEBUG nmod: sectes idx=24 head=20
+DEBUG skip amod: subversifs dep=amod head=12 pos=ADJ orig=13
+DEBUG skip amod: religieuse dep=amod head=27 pos=ADJ orig=28
+DEBUG nmod: inspiration idx=27 head=24
+DEBUG skip amod: subversifs dep=amod head=12 pos=ADJ orig=13
+DEBUG skip amod: religieuse dep=amod head=27 pos=ADJ orig=28
+DEBUG nmod: nord idx=30 head=24
+DEBUG skip amod: subversifs dep=amod head=12 pos=ADJ orig=13
+DEBUG skip amod: religieuse dep=amod head=27 pos=ADJ orig=28
+DEBUG nmod: pays idx=32 head=30
+DEBUG skip amod: subversifs dep=amod head=12 pos=ADJ orig=13
+DEBUG skip amod: religieuse dep=amod head=27 pos=ADJ orig=28
+DEBUG avec final: role=comitative bm=ni dep=case
+DEBUG avec final: role=comitative bm=ni dep=case
+  [  41/416] Au regard du droit international, la question duDEBUG avec in funcs: True
+DEBUG nmod: droit idx=3 head=1
+DEBUG skip amod: international dep=amod head=3 pos=ADJ orig=4
+  [  42/416] La justice française n'a fait qu'obéir et se déjDEBUG avec in funcs: True
+  [  43/416] En effet, la contre attaque a été massive et a tDEBUG avec in funcs: True
+DEBUG nmod: royaume idx=28 head=26
+DEBUG skip amod: contre dep=amod head=5 pos=ADJ orig=4
+DEBUG skip amod: marocain dep=amod head=28 pos=ADJ orig=29
+  [  44/416] Personne ne place aucune forme d'espérance dans DEBUG avec in funcs: True
+DEBUG nmod: espérance idx=7 head=4
+DEBUG skip amod: politique dep=amod head=10 pos=ADJ orig=11
+  [  45/416] Mais la réalité est que la Mauritanie n'est pas DEBUG avec in funcs: True
+  [  46/416] En Arabie, on a l'impression que le fondamentaliDEBUG avec in funcs: True
+  [  47/416] Y a-t-il un risque de voir les choses tourner maDEBUG avec in funcs: True
+  [  48/416] C'est simple, il y a de tout.                   DEBUG avec in funcs: True
+  [  49/416] Renommée par Warner France sous le nom de "La LiDEBUG avec in funcs: True
+DEBUG nmod: Justiciers idx=12 head=10
+DEBUG skip amod: Nouvelle dep=amod head=16 pos=ADJ orig=15
+DEBUG skip amod: premiers dep=amod head=22 pos=ADJ orig=21
+DEBUG skip amod: prochain dep=amod head=31 pos=ADJ orig=33
+DEBUG nmod: Génération idx=16 head=10
+DEBUG skip amod: Nouvelle dep=amod head=16 pos=ADJ orig=15
+DEBUG skip amod: premiers dep=amod head=22 pos=ADJ orig=21
+DEBUG skip amod: prochain dep=amod head=31 pos=ADJ orig=33
+DEBUG nmod: série idx=25 head=22
+DEBUG skip amod: Nouvelle dep=amod head=16 pos=ADJ orig=15
+DEBUG skip prenominal: premiers idx=21 ≤ nmod idx=25
+DEBUG skip amod: prochain dep=amod head=31 pos=ADJ orig=33
+DEBUG nmod: novembre idx=32 head=31
+DEBUG skip amod: Nouvelle dep=amod head=16 pos=ADJ orig=15
+DEBUG skip amod: premiers dep=amod head=22 pos=ADJ orig=21
+DEBUG reattach: prochain head 31→32
+  [  50/416] Lors du dernier rapport publié par le ministère DEBUG avec in funcs: True
+DEBUG nmod: écologie idx=11 head=7
+DEBUG skip amod: dernier dep=amod head=3 pos=ADJ orig=2
+DEBUG nmod: cours idx=23 head=20
+DEBUG skip amod: dernier dep=amod head=3 pos=ADJ orig=2
+DEBUG nmod: eau idx=26 head=23
+DEBUG skip amod: dernier dep=amod head=3 pos=ADJ orig=2
+  [  51/416] Retenu au « Forum » de la Berlinale, Territoire DEBUG avec in funcs: True
+DEBUG nmod: section idx=21 head=18
+DEBUG skip amod: expérimentale dep=amod head=21 pos=ADJ orig=23
+  [  52/416] Arrêtez la lecture, si cela vous suffit pour aujDEBUG avec in funcs: True
+  [  53/416] Elle était dans la petite cour du garage, capot DEBUG avec in funcs: True
+DEBUG nmod: garage idx=7 head=5
+DEBUG skip prenominal: petite idx=4 ≤ nmod idx=7
+DEBUG skip amod: ouvert dep=amod head=9 pos=ADJ orig=10
+DEBUG nmod: capot idx=9 head=5
+DEBUG skip prenominal: petite idx=4 ≤ nmod idx=9
+DEBUG skip amod: ouvert dep=amod head=9 pos=ADJ orig=10
+  [  54/416] 19h15.                                          DEBUG avec in funcs: True
+  [  55/416] Les jeunes sahraouis participant à cette universDEBUG avec in funcs: True
+DEBUG nmod: acteurs idx=14 head=10
+DEBUG skip amod: sahraouis dep=amod head=1 pos=ADJ orig=2
+DEBUG skip amod: tous dep=amod head=14 pos=ADJ orig=12
+DEBUG skip amod: politiques dep=amod head=14 pos=ADJ orig=15
+DEBUG skip amod: régionale dep=amod head=19 pos=ADJ orig=20
+DEBUG skip amod: sahraouis dep=amod head=30 pos=ADJ orig=31
+DEBUG skip amod: toutes dep=amod head=45 pos=ADJ orig=43
+DEBUG skip amod: sahraouie dep=amod head=51 pos=ADJ orig=52
+DEBUG skip amod: unies dep=amod head=60 pos=ADJ orig=61
+DEBUG skip amod: libre dep=amod head=68 pos=ADJ orig=69
+DEBUG skip amod: naturelles dep=amod head=84 pos=ADJ orig=85
+DEBUG skip amod: Occidental dep=amod head=87 pos=ADJ orig=88
+DEBUG nmod: peuple idx=51 head=49
+DEBUG skip amod: sahraouis dep=amod head=1 pos=ADJ orig=2
+DEBUG skip amod: tous dep=amod head=14 pos=ADJ orig=12
+DEBUG skip amod: politiques dep=amod head=14 pos=ADJ orig=15
+DEBUG skip amod: régionale dep=amod head=19 pos=ADJ orig=20
+DEBUG skip amod: sahraouis dep=amod head=30 pos=ADJ orig=31
+DEBUG skip amod: toutes dep=amod head=45 pos=ADJ orig=43
+DEBUG skip amod: sahraouie dep=amod head=51 pos=ADJ orig=52
+DEBUG skip amod: unies dep=amod head=60 pos=ADJ orig=61
+DEBUG skip amod: libre dep=amod head=68 pos=ADJ orig=69
+DEBUG skip amod: naturelles dep=amod head=84 pos=ADJ orig=85
+DEBUG skip amod: Occidental dep=amod head=87 pos=ADJ orig=88
+DEBUG nmod: autodétermination idx=56 head=49
+DEBUG skip amod: sahraouis dep=amod head=1 pos=ADJ orig=2
+DEBUG skip amod: tous dep=amod head=14 pos=ADJ orig=12
+DEBUG skip amod: politiques dep=amod head=14 pos=ADJ orig=15
+DEBUG skip amod: régionale dep=amod head=19 pos=ADJ orig=20
+DEBUG skip amod: sahraouis dep=amod head=30 pos=ADJ orig=31
+DEBUG skip amod: toutes dep=amod head=45 pos=ADJ orig=43
+DEBUG skip amod: sahraouie dep=amod head=51 pos=ADJ orig=52
+DEBUG skip amod: unies dep=amod head=60 pos=ADJ orig=61
+DEBUG skip amod: libre dep=amod head=68 pos=ADJ orig=69
+DEBUG skip amod: naturelles dep=amod head=84 pos=ADJ orig=85
+DEBUG skip amod: Occidental dep=amod head=87 pos=ADJ orig=88
+DEBUG nmod: autodétermination idx=68 head=65
+DEBUG skip amod: sahraouis dep=amod head=1 pos=ADJ orig=2
+DEBUG skip amod: tous dep=amod head=14 pos=ADJ orig=12
+DEBUG skip amod: politiques dep=amod head=14 pos=ADJ orig=15
+DEBUG skip amod: régionale dep=amod head=19 pos=ADJ orig=20
+DEBUG skip amod: sahraouis dep=amod head=30 pos=ADJ orig=31
+DEBUG skip amod: toutes dep=amod head=45 pos=ADJ orig=43
+DEBUG skip amod: sahraouie dep=amod head=51 pos=ADJ orig=52
+DEBUG skip amod: unies dep=amod head=60 pos=ADJ orig=61
+DEBUG skip amod: libre dep=amod head=68 pos=ADJ orig=69
+DEBUG skip amod: naturelles dep=amod head=84 pos=ADJ orig=85
+DEBUG skip amod: Occidental dep=amod head=87 pos=ADJ orig=88
+DEBUG nmod: richesses idx=84 head=77
+DEBUG skip amod: sahraouis dep=amod head=1 pos=ADJ orig=2
+DEBUG skip amod: tous dep=amod head=14 pos=ADJ orig=12
+DEBUG skip amod: politiques dep=amod head=14 pos=ADJ orig=15
+DEBUG skip amod: régionale dep=amod head=19 pos=ADJ orig=20
+DEBUG skip amod: sahraouis dep=amod head=30 pos=ADJ orig=31
+DEBUG skip amod: toutes dep=amod head=45 pos=ADJ orig=43
+DEBUG skip amod: sahraouie dep=amod head=51 pos=ADJ orig=52
+DEBUG skip amod: unies dep=amod head=60 pos=ADJ orig=61
+DEBUG skip amod: libre dep=amod head=68 pos=ADJ orig=69
+DEBUG skip amod: naturelles dep=amod head=84 pos=ADJ orig=85
+DEBUG skip amod: Occidental dep=amod head=87 pos=ADJ orig=88
+  [  56/416] Il se passe de commentaires : « Je comprends trèDEBUG avec in funcs: True
+DEBUG nmod: participation idx=17 head=14
+DEBUG nmod: rencontre idx=20 head=17
+  [  57/416] Dans les sixties, ce n'était pas comme aujourd'hDEBUG avec in funcs: True
+  [  58/416] Sidi M'hamed Deddeche et Amgid Sidi Ahmed, deux DEBUG avec in funcs: True
+DEBUG nmod: territoires idx=14 head=11
+DEBUG skip prenominal: pacifistes idx=12 ≤ nmod idx=14
+DEBUG skip amod: dernier dep=amod head=26 pos=ADJ orig=27
+DEBUG skip amod: spirituelle dep=amod head=36 pos=ADJ orig=37
+DEBUG skip amod: occidental dep=amod head=39 pos=ADJ orig=40
+DEBUG nmod: Mme idx=17 head=11
+DEBUG skip prenominal: pacifistes idx=12 ≤ nmod idx=17
+DEBUG skip amod: dernier dep=amod head=26 pos=ADJ orig=27
+DEBUG skip amod: spirituelle dep=amod head=36 pos=ADJ orig=37
+DEBUG skip amod: occidental dep=amod head=39 pos=ADJ orig=40
+DEBUG nmod: voyage idx=61 head=59
+DEBUG skip amod: pacifistes dep=amod head=11 pos=ADJ orig=12
+DEBUG skip amod: dernier dep=amod head=26 pos=ADJ orig=27
+DEBUG skip amod: spirituelle dep=amod head=36 pos=ADJ orig=37
+DEBUG skip amod: occidental dep=amod head=39 pos=ADJ orig=40
+  [  59/416] A chaque fois qu'il sent la pression, le MakhzenDEBUG avec in funcs: True
+  [  60/416] Les observateurs espagnols, Carlos Sanchez et MaDEBUG avec in funcs: True
+  [  61/416] Qui a donné l'exemple ?                         DEBUG avec in funcs: True
+  [  62/416] La version 2010 intègre ainsi une case "RSA", caDEBUG avec in funcs: True
+DEBUG nmod: RSA idx=8 head=6
+DEBUG skip amod: active dep=amod head=16 pos=ADJ orig=17
+DEBUG nmod: solidarité idx=16 head=14
+DEBUG skip amod: active dep=amod head=16 pos=ADJ orig=17
+DEBUG nmod: revenu idx=26 head=23
+DEBUG skip amod: active dep=amod head=16 pos=ADJ orig=17
+DEBUG nmod: complément idx=36 head=32
+DEBUG skip amod: active dep=amod head=16 pos=ADJ orig=17
+DEBUG nmod: activité idx=39 head=36
+DEBUG skip amod: active dep=amod head=16 pos=ADJ orig=17
+DEBUG nmod: emploi idx=49 head=45
+DEBUG skip amod: active dep=amod head=16 pos=ADJ orig=17
+  [  63/416] N'étant pas préparés pour recevoir plus de dix qDEBUG avec in funcs: True
+DEBUG nmod: nez idx=49 head=46
+DEBUG skip amod: tout dep=amod head=19 pos=ADJ orig=18
+DEBUG skip amod: ininterrompu dep=amod head=26 pos=ADJ orig=27
+DEBUG skip amod: internationale dep=amod head=38 pos=ADJ orig=39
+  [  64/416] Ces sympathisants de différentes nationalités (IDEBUG avec in funcs: True
+DEBUG nmod: nationalités idx=4 head=1
+DEBUG skip amod: différentes dep=amod head=4 pos=DET orig=3
+  [  65/416] C'est à Dakhla, où ceux qui font office de « colDEBUG avec in funcs: True
+DEBUG nmod: match idx=36 head=32
+DEBUG skip amod: maroco dep=amod head=38 pos=ADJ orig=39
+DEBUG skip amod: - dep=amod head=36 pos=ADJ orig=40
+DEBUG skip amod: sahraoui dep=amod head=36 pos=ADJ orig=41
+DEBUG nmod: football idx=38 head=36
+DEBUG skip amod: maroco dep=amod head=38 pos=ADJ orig=39
+DEBUG reattach: - head 36→38
+DEBUG reattach: sahraoui head 36→38
+  [  66/416] Ont également assisté à cette occasion, des reprDEBUG avec in funcs: True
+DEBUG nmod: corps idx=10 head=8
+DEBUG skip amod: diplomatique dep=amod head=10 pos=ADJ orig=11
+DEBUG nmod: sud idx=21 head=19
+DEBUG skip amod: diplomatique dep=amod head=10 pos=ADJ orig=11
+  [  67/416] Attention : même la conversion n'est pas un chanDEBUG avec in funcs: True
+  [  68/416] Et cet homme d'affaires particulier est partout,DEBUG avec in funcs: True
+DEBUG nmod: affaires idx=5 head=2
+DEBUG reattach: particulier head 2→5
+DEBUG skip amod: grande dep=amod head=15 pos=ADJ orig=14
+DEBUG skip amod: télécoms dep=amod head=26 pos=ADJ orig=27
+DEBUG skip amod: laitières dep=amod head=46 pos=ADJ orig=47
+DEBUG nmod: pays idx=17 head=15
+DEBUG skip amod: particulier dep=amod head=5 pos=ADJ orig=6
+DEBUG skip prenominal: grande idx=14 ≤ nmod idx=17
+DEBUG skip amod: télécoms dep=amod head=26 pos=ADJ orig=27
+DEBUG skip amod: laitières dep=amod head=46 pos=ADJ orig=47
+DEBUG nmod: opérateurs idx=26 head=23
+DEBUG skip amod: particulier dep=amod head=5 pos=ADJ orig=6
+DEBUG skip amod: grande dep=amod head=15 pos=ADJ orig=14
+DEBUG skip amod: télécoms dep=amod head=26 pos=ADJ orig=27
+DEBUG skip amod: laitières dep=amod head=46 pos=ADJ orig=47
+DEBUG nmod: sucre idx=36 head=34
+DEBUG skip amod: particulier dep=amod head=5 pos=ADJ orig=6
+DEBUG skip amod: grande dep=amod head=15 pos=ADJ orig=14
+DEBUG skip amod: télécoms dep=amod head=26 pos=ADJ orig=27
+DEBUG skip amod: laitières dep=amod head=46 pos=ADJ orig=47
+  [  69/416] Vous m'accusez de "subjectivisme".              DEBUG avec in funcs: True
+  [  70/416] De nombreux Marocains le pensent en n'hésitant pDEBUG avec in funcs: True
+DEBUG nmod: pays idx=20 head=18
+DEBUG skip amod: nombreux dep=amod head=2 pos=ADJ orig=1
+DEBUG skip prenominal: premier idx=17 ≤ nmod idx=20
+DEBUG skip amod: entiers dep=amod head=26 pos=ADJ orig=27
+DEBUG skip amod: marocaine dep=amod head=31 pos=ADJ orig=32
+DEBUG skip amod: affairistes dep=amod head=37 pos=ADJ orig=38
+DEBUG nmod: économie idx=31 head=26
+DEBUG skip amod: nombreux dep=amod head=2 pos=ADJ orig=1
+DEBUG skip amod: premier dep=amod head=18 pos=ADJ orig=17
+DEBUG skip prenominal: entiers idx=27 ≤ nmod idx=31
+DEBUG skip amod: marocaine dep=amod head=31 pos=ADJ orig=32
+DEBUG skip amod: affairistes dep=amod head=37 pos=ADJ orig=38
+DEBUG nmod: réseaux idx=37 head=35
+DEBUG skip amod: nombreux dep=amod head=2 pos=ADJ orig=1
+DEBUG skip amod: premier dep=amod head=18 pos=ADJ orig=17
+DEBUG skip amod: entiers dep=amod head=26 pos=ADJ orig=27
+DEBUG skip amod: marocaine dep=amod head=31 pos=ADJ orig=32
+DEBUG skip amod: affairistes dep=amod head=37 pos=ADJ orig=38
+DEBUG nmod: corruption idx=44 head=41
+DEBUG skip amod: nombreux dep=amod head=2 pos=ADJ orig=1
+DEBUG skip amod: premier dep=amod head=18 pos=ADJ orig=17
+DEBUG skip amod: entiers dep=amod head=26 pos=ADJ orig=27
+DEBUG skip amod: marocaine dep=amod head=31 pos=ADJ orig=32
+DEBUG skip amod: affairistes dep=amod head=37 pos=ADJ orig=38
+DEBUG nmod: mécontents idx=51 head=49
+DEBUG skip amod: nombreux dep=amod head=2 pos=ADJ orig=1
+DEBUG skip amod: premier dep=amod head=18 pos=ADJ orig=17
+DEBUG skip amod: entiers dep=amod head=26 pos=ADJ orig=27
+DEBUG skip amod: marocaine dep=amod head=31 pos=ADJ orig=32
+DEBUG skip amod: affairistes dep=amod head=37 pos=ADJ orig=38
+  [  71/416] Mgr Velasio de Paolis n'est pas là pour aggraverDEBUG avec in funcs: True
+  [  72/416] Dès lors que le peuple décide de regagner sa libDEBUG avec in funcs: True
+  [  73/416] Que dit l'Eglise sur ce point délicat ?         DEBUG avec in funcs: True
+  [  74/416] Mais elle guette, oui, elle guette.             DEBUG avec in funcs: True
+  [  75/416] En nous livrant les clefs de l'histoire de ce prDEBUG avec in funcs: True
+DEBUG nmod: histoire idx=8 head=4
+DEBUG skip amod: industriel dep=amod head=11 pos=ADJ orig=12
+DEBUG skip amod: énergétiques dep=amod head=27 pos=ADJ orig=28
+DEBUG nmod: projet idx=11 head=8
+DEBUG skip amod: industriel dep=amod head=11 pos=ADJ orig=12
+DEBUG skip amod: énergétiques dep=amod head=27 pos=ADJ orig=28
+DEBUG nmod: passé idx=22 head=20
+DEBUG skip amod: industriel dep=amod head=11 pos=ADJ orig=12
+DEBUG skip amod: énergétiques dep=amod head=27 pos=ADJ orig=28
+  [  76/416] En application de ce principe, les articles 166 DEBUG avec in funcs: True
+DEBUG nmod: principe idx=4 head=1
+DEBUG skip amod: Général dep=amod head=12 pos=ADJ orig=13
+DEBUG skip amod: français dep=amod head=15 pos=ADJ orig=16
+DEBUG nmod: Code idx=12 head=7
+DEBUG skip amod: Général dep=amod head=12 pos=ADJ orig=13
+DEBUG skip amod: français dep=amod head=15 pos=ADJ orig=16
+DEBUG nmod: Impôts idx=15 head=12
+DEBUG skip prenominal: Général idx=13 ≤ nmod idx=15
+DEBUG skip amod: français dep=amod head=15 pos=ADJ orig=16
+DEBUG nmod: imposition idx=25 head=22
+DEBUG skip amod: Général dep=amod head=12 pos=ADJ orig=13
+DEBUG skip amod: français dep=amod head=15 pos=ADJ orig=16
+DEBUG nmod: transfert idx=29 head=27
+DEBUG skip amod: Général dep=amod head=12 pos=ADJ orig=13
+DEBUG skip amod: français dep=amod head=15 pos=ADJ orig=16
+DEBUG nmod: domicile idx=31 head=29
+DEBUG skip amod: Général dep=amod head=12 pos=ADJ orig=13
+DEBUG skip amod: français dep=amod head=15 pos=ADJ orig=16
+  [  77/416] Consacrant, lui, l'essentiel de son temps et de DEBUG avec in funcs: True
+DEBUG nmod: temps idx=9 head=6
+DEBUG skip amod: grands dep=amod head=17 pos=ADJ orig=16
+DEBUG skip amod: économiques dep=amod head=17 pos=ADJ orig=18
+DEBUG skip amod: jeunes dep=amod head=26 pos=ADJ orig=25
+  [  78/416] Après avoir examiné l'état des relations bilatérDEBUG avec in funcs: True
+DEBUG nmod: relations idx=7 head=5
+DEBUG skip amod: bilatérales dep=amod head=7 pos=ADJ orig=8
+DEBUG nmod: Etat idx=15 head=12
+DEBUG skip amod: bilatérales dep=amod head=7 pos=ADJ orig=8
+  [  79/416] C'est de cette façon que des conditions socio-écDEBUG avec in funcs: True
+  [  80/416] Je me demande s'il y a une loi chez nous qui peuDEBUG avec in funcs: True
+  [  81/416] Tout en estimant que « le Maroc est sous protectDEBUG avec in funcs: True
+DEBUG nmod: aides idx=16 head=14
+DEBUG skip amod: français dep=amod head=9 pos=ADJ orig=10
+DEBUG skip amod: militaires dep=amod head=16 pos=ADJ orig=17
+DEBUG skip amod: marocain dep=amod head=22 pos=ADJ orig=23
+DEBUG skip amod: sahraouis dep=amod head=70 pos=ADJ orig=71
+DEBUG nmod: puissance idx=20 head=16
+DEBUG skip amod: français dep=amod head=9 pos=ADJ orig=10
+DEBUG skip prenominal: militaires idx=17 ≤ nmod idx=20
+DEBUG skip amod: marocain dep=amod head=22 pos=ADJ orig=23
+DEBUG skip amod: sahraouis dep=amod head=70 pos=ADJ orig=71
+DEBUG nmod: colonialisme idx=22 head=16
+DEBUG skip amod: français dep=amod head=9 pos=ADJ orig=10
+DEBUG skip prenominal: militaires idx=17 ≤ nmod idx=22
+DEBUG skip amod: marocain dep=amod head=22 pos=ADJ orig=23
+DEBUG skip amod: sahraouis dep=amod head=70 pos=ADJ orig=71
+DEBUG nmod: Conseil idx=34 head=29
+DEBUG skip amod: français dep=amod head=9 pos=ADJ orig=10
+DEBUG skip amod: militaires dep=amod head=16 pos=ADJ orig=17
+DEBUG skip amod: marocain dep=amod head=22 pos=ADJ orig=23
+DEBUG skip amod: sahraouis dep=amod head=70 pos=ADJ orig=71
+DEBUG nmod: sécurité idx=36 head=34
+DEBUG skip amod: français dep=amod head=9 pos=ADJ orig=10
+DEBUG skip amod: militaires dep=amod head=16 pos=ADJ orig=17
+DEBUG skip amod: marocain dep=amod head=22 pos=ADJ orig=23
+DEBUG skip amod: sahraouis dep=amod head=70 pos=ADJ orig=71
+DEBUG nmod: missions idx=51 head=49
+DEBUG skip amod: français dep=amod head=9 pos=ADJ orig=10
+DEBUG skip amod: militaires dep=amod head=16 pos=ADJ orig=17
+DEBUG skip amod: marocain dep=amod head=22 pos=ADJ orig=23
+DEBUG skip amod: sahraouis dep=amod head=70 pos=ADJ orig=71
+DEBUG nmod: droits idx=63 head=61
+DEBUG skip amod: français dep=amod head=9 pos=ADJ orig=10
+DEBUG skip amod: militaires dep=amod head=16 pos=ADJ orig=17
+DEBUG skip amod: marocain dep=amod head=22 pos=ADJ orig=23
+DEBUG skip amod: sahraouis dep=amod head=70 pos=ADJ orig=71
+DEBUG nmod: homme idx=67 head=63
+DEBUG skip amod: français dep=amod head=9 pos=ADJ orig=10
+DEBUG skip amod: militaires dep=amod head=16 pos=ADJ orig=17
+DEBUG skip amod: marocain dep=amod head=22 pos=ADJ orig=23
+DEBUG skip amod: sahraouis dep=amod head=70 pos=ADJ orig=71
+DEBUG nmod: territoires idx=70 head=58
+DEBUG skip amod: français dep=amod head=9 pos=ADJ orig=10
+DEBUG skip amod: militaires dep=amod head=16 pos=ADJ orig=17
+DEBUG skip amod: marocain dep=amod head=22 pos=ADJ orig=23
+DEBUG skip amod: sahraouis dep=amod head=70 pos=ADJ orig=71
+  [  82/416] Faire une part à l'éblouissement, savoir se lâchDEBUG avec in funcs: True
+DEBUG nmod: éblouissement idx=6 head=2
+DEBUG skip amod: immédiat dep=amod head=26 pos=ADJ orig=27
+  [  83/416] c'est-à-dire--poursuit-il son argument--, " avanDEBUG avec in funcs: True
+DEBUG nmod: main idx=44 head=41
+  [  84/416] Selon ce discours--maintenant bien rodé--, avec DEBUG avec in funcs: True
+DEBUG nmod: pouvoir idx=20 head=18
+DEBUG skip amod: II dep=amod head=13 pos=NUM orig=14
+DEBUG skip amod: VI dep=amod head=22 pos=NUM orig=23
+DEBUG avec final: role=comitative bm=ni dep=case
+  [  85/416] Pour rappel, le Sahara Occidental a été envahi pDEBUG avec in funcs: True
+DEBUG nmod: territoire idx=21 head=18
+DEBUG skip amod: Occidental dep=amod head=4 pos=ADJ orig=5
+DEBUG skip prenominal: espagnol idx=19 ≤ nmod idx=21
+  [  86/416] Toutefois, dans des camps de réfugiés, la cause DEBUG avec in funcs: True
+DEBUG nmod: réfugiés idx=6 head=4
+DEBUG skip amod: politique dep=amod head=9 pos=ADJ orig=10
+DEBUG skip amod: humaine dep=amod head=15 pos=ADJ orig=16
+  [  87/416] Il me l'a dit à la Haye ».                      DEBUG avec in funcs: True
+  [  88/416] Le président de l'Égypte, Hosni Moubarak, éprouvDEBUG avec in funcs: True
+DEBUG nmod: diplomate idx=14 head=20
+DEBUG reattach: viscérale head 20→14
+DEBUG skip amod: islamique dep=amod head=24 pos=ADJ orig=25
+DEBUG nmod: République idx=24 head=20
+DEBUG skip amod: viscérale dep=amod head=14 pos=ADJ orig=21
+DEBUG skip amod: islamique dep=amod head=24 pos=ADJ orig=25
+  [  89/416] L'acteur espagnol Alex Angulo a attribué "La CamDEBUG avec in funcs: True
+DEBUG nmod: film idx=16 head=14
+DEBUG skip amod: espagnol dep=amod head=2 pos=ADJ orig=3
+DEBUG skip amod: courageux dep=amod head=36 pos=ADJ orig=38
+DEBUG skip amod: sahraoui dep=amod head=47 pos=ADJ orig=48
+DEBUG nmod: esprit idx=36 head=32
+DEBUG skip amod: espagnol dep=amod head=2 pos=ADJ orig=3
+DEBUG skip amod: courageux dep=amod head=36 pos=ADJ orig=38
+DEBUG skip amod: sahraoui dep=amod head=47 pos=ADJ orig=48
+DEBUG nmod: peuple idx=47 head=36
+DEBUG skip amod: espagnol dep=amod head=2 pos=ADJ orig=3
+DEBUG skip prenominal: courageux idx=38 ≤ nmod idx=47
+DEBUG skip amod: sahraoui dep=amod head=47 pos=ADJ orig=48
+  [  90/416] Tenue trois mois après la précédente réunion infDEBUG avec in funcs: True
+DEBUG nmod: mois idx=2 head=6
+DEBUG reattach: précédente head 6→2
+DEBUG reattach: informelle head 6→2
+DEBUG skip amod: nouvelle dep=amod head=17 pos=ADJ orig=16
+DEBUG skip amod: personnel dep=amod head=26 pos=ADJ orig=27
+DEBUG skip amod: général dep=amod head=29 pos=ADJ orig=30
+DEBUG skip amod: unies dep=amod head=32 pos=ADJ orig=33
+DEBUG skip amod: occidental dep=amod head=36 pos=ADJ orig=37
+DEBUG skip amod: observateurs dep=amod head=55 pos=ADJ orig=56
+DEBUG nmod: envoyé idx=26 head=22
+DEBUG skip amod: précédente dep=amod head=2 pos=ADJ orig=5
+DEBUG skip amod: informelle dep=amod head=2 pos=ADJ orig=7
+DEBUG skip amod: nouvelle dep=amod head=17 pos=ADJ orig=16
+DEBUG skip amod: personnel dep=amod head=26 pos=ADJ orig=27
+DEBUG skip amod: général dep=amod head=29 pos=ADJ orig=30
+DEBUG skip amod: unies dep=amod head=32 pos=ADJ orig=33
+DEBUG skip amod: occidental dep=amod head=36 pos=ADJ orig=37
+DEBUG skip amod: observateurs dep=amod head=55 pos=ADJ orig=56
+DEBUG nmod: secrétaire idx=29 head=26
+DEBUG skip amod: précédente dep=amod head=2 pos=ADJ orig=5
+DEBUG skip amod: informelle dep=amod head=2 pos=ADJ orig=7
+DEBUG skip amod: nouvelle dep=amod head=17 pos=ADJ orig=16
+DEBUG skip prenominal: personnel idx=27 ≤ nmod idx=29
+DEBUG skip amod: général dep=amod head=29 pos=ADJ orig=30
+DEBUG skip amod: unies dep=amod head=32 pos=ADJ orig=33
+DEBUG skip amod: occidental dep=amod head=36 pos=ADJ orig=37
+DEBUG skip amod: observateurs dep=amod head=55 pos=ADJ orig=56
+DEBUG nmod: Nations idx=32 head=29
+DEBUG skip amod: précédente dep=amod head=2 pos=ADJ orig=5
+DEBUG skip amod: informelle dep=amod head=2 pos=ADJ orig=7
+DEBUG skip amod: nouvelle dep=amod head=17 pos=ADJ orig=16
+DEBUG skip amod: personnel dep=amod head=26 pos=ADJ orig=27
+DEBUG skip prenominal: général idx=30 ≤ nmod idx=32
+DEBUG skip amod: unies dep=amod head=32 pos=ADJ orig=33
+DEBUG skip amod: occidental dep=amod head=36 pos=ADJ orig=37
+DEBUG skip amod: observateurs dep=amod head=55 pos=ADJ orig=56
+DEBUG nmod: présence idx=44 head=26
+DEBUG skip amod: précédente dep=amod head=2 pos=ADJ orig=5
+DEBUG skip amod: informelle dep=amod head=2 pos=ADJ orig=7
+DEBUG skip amod: nouvelle dep=amod head=17 pos=ADJ orig=16
+DEBUG skip prenominal: personnel idx=27 ≤ nmod idx=44
+DEBUG skip amod: général dep=amod head=29 pos=ADJ orig=30
+DEBUG skip amod: unies dep=amod head=32 pos=ADJ orig=33
+DEBUG skip amod: occidental dep=amod head=36 pos=ADJ orig=37
+DEBUG skip amod: observateurs dep=amod head=55 pos=ADJ orig=56
+DEBUG nmod: délégations idx=46 head=44
+DEBUG skip amod: précédente dep=amod head=2 pos=ADJ orig=5
+DEBUG skip amod: informelle dep=amod head=2 pos=ADJ orig=7
+DEBUG skip amod: nouvelle dep=amod head=17 pos=ADJ orig=16
+DEBUG skip amod: personnel dep=amod head=26 pos=ADJ orig=27
+DEBUG skip amod: général dep=amod head=29 pos=ADJ orig=30
+DEBUG skip amod: unies dep=amod head=32 pos=ADJ orig=33
+DEBUG skip amod: occidental dep=amod head=36 pos=ADJ orig=37
+DEBUG skip amod: observateurs dep=amod head=55 pos=ADJ orig=56
+DEBUG nmod: parties idx=49 head=46
+DEBUG skip amod: précédente dep=amod head=2 pos=ADJ orig=5
+DEBUG skip amod: informelle dep=amod head=2 pos=ADJ orig=7
+DEBUG skip amod: nouvelle dep=amod head=17 pos=ADJ orig=16
+DEBUG skip amod: personnel dep=amod head=26 pos=ADJ orig=27
+DEBUG skip amod: général dep=amod head=29 pos=ADJ orig=30
+DEBUG skip amod: unies dep=amod head=32 pos=ADJ orig=33
+DEBUG skip amod: occidental dep=amod head=36 pos=ADJ orig=37
+DEBUG skip amod: observateurs dep=amod head=55 pos=ADJ orig=56
+DEBUG nmod: pays idx=55 head=52
+DEBUG skip amod: précédente dep=amod head=2 pos=ADJ orig=5
+DEBUG skip amod: informelle dep=amod head=2 pos=ADJ orig=7
+DEBUG skip amod: nouvelle dep=amod head=17 pos=ADJ orig=16
+DEBUG skip amod: personnel dep=amod head=26 pos=ADJ orig=27
+DEBUG skip amod: général dep=amod head=29 pos=ADJ orig=30
+DEBUG skip amod: unies dep=amod head=32 pos=ADJ orig=33
+DEBUG skip amod: occidental dep=amod head=36 pos=ADJ orig=37
+DEBUG skip amod: observateurs dep=amod head=55 pos=ADJ orig=56
+  [  91/416] Le ras-le-bol fut général, la mobilisation inédiDEBUG avec in funcs: True
+  [  92/416] A aucun moment, du jour ou de la nuit s'il le faDEBUG avec in funcs: True
+DEBUG nmod: jour idx=5 head=2
+  [  93/416] Il a en outre exprimé la volonté de son pays de DEBUG avec in funcs: True
+DEBUG nmod: pays idx=9 head=6
+DEBUG skip amod: bilatérales dep=amod head=15 pos=ADJ orig=16
+DEBUG nmod: pays idx=20 head=15
+DEBUG skip prenominal: bilatérales idx=16 ≤ nmod idx=20
+  [  94/416] Pour rappel, l'Opep du gaz ou Forum des pays expDEBUG avec in funcs: True
+DEBUG nmod: gaz idx=7 head=5
+DEBUG skip amod: exportateurs dep=amod head=11 pos=ADJ orig=12
+DEBUG nmod: pays idx=11 head=9
+DEBUG skip amod: exportateurs dep=amod head=11 pos=ADJ orig=12
+  [  95/416] N'hésitez pas à m'envoyer actualités et libres tDEBUG avec in funcs: True
+  [  96/416] Jusqu'à quand la France officielle maintiendra-tDEBUG avec in funcs: True
+DEBUG nmod: protection idx=13 head=10
+DEBUG skip amod: officielle dep=amod head=4 pos=ADJ orig=5
+DEBUG nmod: agresseurs idx=15 head=13
+DEBUG skip amod: officielle dep=amod head=4 pos=ADJ orig=5
+DEBUG nmod: droits idx=17 head=15
+DEBUG skip amod: officielle dep=amod head=4 pos=ADJ orig=5
+DEBUG nmod: homme idx=21 head=17
+DEBUG skip amod: officielle dep=amod head=4 pos=ADJ orig=5
+  [  97/416] Il n'y en a point.                              DEBUG avec in funcs: True
+  [  98/416] M. Ross réussira-t-il à faire valoir le droit inDEBUG avec in funcs: True
+DEBUG nmod: membre idx=26 head=18
+DEBUG skip amod: international dep=amod head=9 pos=ADJ orig=10
+DEBUG skip amod: permanent dep=amod head=26 pos=ADJ orig=27
+DEBUG nmod: Conseil idx=29 head=26
+DEBUG skip amod: international dep=amod head=9 pos=ADJ orig=10
+DEBUG skip prenominal: permanent idx=27 ≤ nmod idx=29
+DEBUG nmod: sécurité idx=31 head=29
+DEBUG skip amod: international dep=amod head=9 pos=ADJ orig=10
+DEBUG skip amod: permanent dep=amod head=26 pos=ADJ orig=27
+DEBUG nmod: occurrence idx=42 head=38
+DEBUG skip amod: international dep=amod head=9 pos=ADJ orig=10
+DEBUG skip amod: permanent dep=amod head=26 pos=ADJ orig=27
+  [  99/416] Quand vous avez l'opportunité de camper un persoDEBUG avec in funcs: True
+DEBUG avec final: role=comitative bm=ni dep=case
+  [ 100/416] La préfecture de Police de Paris déconseille auxDEBUG avec in funcs: True
+DEBUG nmod: Police idx=3 head=1
+  [ 101/416] Ce résultat provient à hauteur de 18,5 ME de la DEBUG avec in funcs: True
+DEBUG nmod: ME idx=7 head=4
+DEBUG skip amod: opérationnelle dep=amod head=23 pos=ADJ orig=24
+DEBUG skip amod: ' dep=amod head=33 pos=PUNCT orig=32
+DEBUG nmod: rentabilité idx=13 head=10
+DEBUG skip amod: opérationnelle dep=amod head=23 pos=ADJ orig=24
+DEBUG skip amod: ' dep=amod head=33 pos=PUNCT orig=32
+DEBUG nmod: habitat idx=17 head=13
+DEBUG skip amod: opérationnelle dep=amod head=23 pos=ADJ orig=24
+DEBUG skip amod: ' dep=amod head=33 pos=PUNCT orig=32
+DEBUG nmod: loisirs idx=19 head=17
+DEBUG skip amod: opérationnelle dep=amod head=23 pos=ADJ orig=24
+DEBUG skip amod: ' dep=amod head=33 pos=PUNCT orig=32
+DEBUG nmod: % idx=27 head=23
+DEBUG skip prenominal: opérationnelle idx=24 ≤ nmod idx=27
+DEBUG skip amod: ' dep=amod head=33 pos=PUNCT orig=32
+  [ 102/416] Moi plus je vois des vidéos de ce jeu, plus je mDEBUG avec in funcs: True
+DEBUG nmod: jeu idx=8 head=5
+DEBUG skip amod: vrais dep=amod head=23 pos=ADJ orig=22
+  [ 103/416] La gestion et l'exploitation de la salle de concDEBUG avec in funcs: True
+DEBUG nmod: salle idx=8 head=1
+DEBUG nmod: concert idx=10 head=8
+DEBUG nmod: location idx=26 head=21
+DEBUG nmod: salles idx=28 head=26
+  [ 104/416] Maintenant, si des supporters veulent aider le cDEBUG avec in funcs: True
+DEBUG nmod: souscription idx=14 head=10
+  [ 105/416] Elle se remarie et un autre fils va naître, SergDEBUG avec in funcs: True
+  [ 106/416] Outre ses aspects fantasy dans un environnement DEBUG avec in funcs: True
+DEBUG nmod: environnement idx=6 head=2
+DEBUG skip prenominal: fantasy idx=3 ≤ nmod idx=6
+DEBUG skip amod: moderne dep=amod head=6 pos=ADJ orig=7
+DEBUG skip amod: jeunes dep=amod head=15 pos=ADJ orig=14
+DEBUG skip amod: physiques dep=amod head=36 pos=ADJ orig=37
+DEBUG skip amod: jeune dep=amod head=41 pos=ADJ orig=40
+DEBUG nmod: personnages idx=15 head=12
+DEBUG skip amod: fantasy dep=amod head=2 pos=ADJ orig=3
+DEBUG skip amod: moderne dep=amod head=6 pos=ADJ orig=7
+DEBUG skip amod: jeunes dep=amod head=15 pos=ADJ orig=14
+DEBUG skip amod: physiques dep=amod head=36 pos=ADJ orig=37
+DEBUG skip amod: jeune dep=amod head=41 pos=ADJ orig=40
+DEBUG nmod: intrigue idx=19 head=15
+DEBUG skip amod: fantasy dep=amod head=2 pos=ADJ orig=3
+DEBUG skip amod: moderne dep=amod head=6 pos=ADJ orig=7
+DEBUG skip prenominal: jeunes idx=14 ≤ nmod idx=19
+DEBUG skip amod: physiques dep=amod head=36 pos=ADJ orig=37
+DEBUG skip amod: jeune dep=amod head=41 pos=ADJ orig=40
+DEBUG nmod: chat idx=33 head=31
+DEBUG skip amod: fantasy dep=amod head=2 pos=ADJ orig=3
+DEBUG skip amod: moderne dep=amod head=6 pos=ADJ orig=7
+DEBUG skip amod: jeunes dep=amod head=15 pos=ADJ orig=14
+DEBUG skip amod: physiques dep=amod head=36 pos=ADJ orig=37
+DEBUG skip amod: jeune dep=amod head=41 pos=ADJ orig=40
+⚠️  Ollama morphologique indisponible (réessai dans 60s)
+DEBUG avec final: role=comitative bm=ni dep=case
+  [ 107/416] À l'aide de leurs résultats, ils en viennent à lDEBUG avec in funcs: True
+DEBUG nmod: résultats idx=6 head=3
+DEBUG skip amod: telle dep=amod head=37 pos=ADJ orig=36
+DEBUG nmod: ml idx=28 head=24
+DEBUG skip amod: telle dep=amod head=37 pos=ADJ orig=36
+DEBUG nmod: janvier idx=31 head=30
+DEBUG skip amod: telle dep=amod head=37 pos=ADJ orig=36
+  [ 108/416] Créé en 1999, le show "Mamma Mia !"             DEBUG avec in funcs: True
+  [ 109/416] Du Vatican, dont le voile posé sur la vie privéeDEBUG avec in funcs: True
+  [ 110/416] Le message, bien que feutré, est clair : « nous DEBUG avec in funcs: True
+  [ 111/416] Après-midi libre de détente (piscine).          DEBUG avec in funcs: True
+DEBUG nmod: détente idx=3 head=0
+DEBUG skip prenominal: libre idx=1 ≤ nmod idx=3
+  [ 112/416] Des visites commentées permettront au public de DEBUG avec in funcs: True
+DEBUG avec final: role=comitative bm=ni dep=case
+  [ 113/416] Selon lui, l'approche Eclipse, créé pour lutter DEBUG avec in funcs: True
+DEBUG nmod: rue idx=15 head=13
+  [ 114/416] Mais nous ne bougeront pas tant que nos revendicDEBUG avec in funcs: True
+  [ 115/416] Après M. Karoubi, bloqué chez lui depuis jeudi pDEBUG avec in funcs: True
+DEBUG nmod: internet idx=33 head=32
+  [ 116/416] Un timbre a été émis en Israël pour marquer le 1DEBUG avec in funcs: True
+DEBUG nmod: naissance idx=14 head=11
+DEBUG skip prenominal: 150e idx=10 ≤ nmod idx=14
+DEBUG skip amod: sioniste dep=amod head=25 pos=ADJ orig=26
+DEBUG nmod: mouvement idx=25 head=23
+DEBUG skip amod: 150e dep=amod head=11 pos=ADJ orig=10
+DEBUG skip amod: sioniste dep=amod head=25 pos=ADJ orig=26
+DEBUG nmod: mai idx=30 head=29
+DEBUG skip amod: 150e dep=amod head=11 pos=ADJ orig=10
+DEBUG skip amod: sioniste dep=amod head=25 pos=ADJ orig=26
+  [ 117/416] Au sein de cette équipe professionnelle, chacun DEBUG avec in funcs: True
+DEBUG nmod: équipe idx=4 head=1
+DEBUG skip amod: professionnelle dep=amod head=4 pos=ADJ orig=5
+DEBUG skip amod: basque dep=amod head=28 pos=ADJ orig=29
+DEBUG nmod: ville idx=22 head=19
+DEBUG skip amod: professionnelle dep=amod head=4 pos=ADJ orig=5
+DEBUG skip amod: basque dep=amod head=28 pos=ADJ orig=29
+  [ 118/416] L'Inter, champion d'Europe en titre, est logiqueDEBUG avec in funcs: True
+DEBUG nmod: titre idx=9 head=4
+DEBUG skip amod: limité dep=amod head=19 pos=ADJ orig=21
+DEBUG skip amod: aller dep=amod head=27 pos=ADJ orig=28
+DEBUG nmod: quarts idx=30 head=27
+DEBUG skip amod: limité dep=amod head=19 pos=ADJ orig=21
+DEBUG skip prenominal: aller idx=28 ≤ nmod idx=30
+DEBUG nmod: finale idx=32 head=30
+DEBUG skip amod: limité dep=amod head=19 pos=ADJ orig=21
+DEBUG skip amod: aller dep=amod head=27 pos=ADJ orig=28
+DEBUG nmod: champions idx=37 head=35
+DEBUG skip amod: limité dep=amod head=19 pos=ADJ orig=21
+DEBUG skip amod: aller dep=amod head=27 pos=ADJ orig=28
+DEBUG nmod: corps idx=45 head=42
+DEBUG skip amod: limité dep=amod head=19 pos=ADJ orig=21
+DEBUG skip amod: aller dep=amod head=27 pos=ADJ orig=28
+  [ 119/416] Quatre jours plus tard, ceux-ci pourront se retrDEBUG avec in funcs: True
+DEBUG nmod: finale idx=17 head=14
+DEBUG nmod: août idx=23 head=22
+  [ 120/416] Chaque grande entreprise possède son centre de tDEBUG avec in funcs: True
+DEBUG nmod: téléphonistes idx=7 head=5
+DEBUG skip amod: grande dep=amod head=2 pos=ADJ orig=1
+DEBUG nmod: centres idx=18 head=16
+DEBUG skip amod: grande dep=amod head=2 pos=ADJ orig=1
+DEBUG nmod: appels idx=21 head=18
+DEBUG skip amod: grande dep=amod head=2 pos=ADJ orig=1
+  [ 121/416] Prenant la parole, Charles Mwando Nsimba a solliDEBUG avec in funcs: True
+  [ 122/416] Ce mercredi soir, il s'est installé dans un logeDEBUG avec in funcs: True
+DEBUG nmod: soir idx=2 head=1
+DEBUG nmod: sud-ouest idx=19 head=17
+  [ 123/416] Depuis le début de l'affaire, la candidate à la DEBUG avec in funcs: True
+DEBUG nmod: affaire idx=6 head=2
+DEBUG skip amod: première dep=amod head=23 pos=ADJ orig=22
+DEBUG nmod: primaire idx=12 head=9
+DEBUG skip amod: première dep=amod head=23 pos=ADJ orig=22
+DEBUG nmod: congé idx=17 head=9
+DEBUG skip amod: première dep=amod head=23 pos=ADJ orig=22
+DEBUG nmod: fonctions idx=20 head=17
+DEBUG skip amod: première dep=amod head=23 pos=ADJ orig=22
+DEBUG nmod: secrétaire idx=23 head=20
+DEBUG skip amod: première dep=amod head=23 pos=ADJ orig=22
+DEBUG nmod: parti idx=25 head=23
+DEBUG skip prenominal: première idx=22 ≤ nmod idx=25
+DEBUG nmod: distance idx=34 head=32
+DEBUG skip amod: première dep=amod head=23 pos=ADJ orig=22
+DEBUG nmod: sujet idx=41 head=38
+DEBUG skip amod: première dep=amod head=23 pos=ADJ orig=22
+  [ 124/416] Cette élection "n'est pas seulement la plus dispDEBUG avec in funcs: True
+DEBUG nmod: pays idx=53 head=51
+DEBUG skip amod: record dep=amod head=37 pos=ADJ orig=38
+DEBUG skip amod: traditionnels dep=amod head=40 pos=ADJ orig=41
+DEBUG skip prenominal: principal idx=50 ≤ nmod idx=53
+DEBUG avec final: role=comitative bm=ni dep=case
+DEBUG avec final: role=comitative bm=ni dep=case
+  [ 125/416] Odeurs, saveurs, couleurs... tout se mélange pouDEBUG avec in funcs: True
+DEBUG nmod: gourmands idx=15 head=13
+DEBUG skip prenominal: grand idx=12 ≤ nmod idx=15
+DEBUG nmod: produits idx=19 head=17
+DEBUG skip amod: grand dep=amod head=13 pos=ADJ orig=12
+DEBUG nmod: qualité idx=21 head=19
+DEBUG skip amod: grand dep=amod head=13 pos=ADJ orig=12
+  [ 126/416] Il faut savoir que les appareils de la dernière DEBUG avec in funcs: True
+DEBUG nmod: génération idx=9 head=5
+DEBUG skip amod: dernière dep=amod head=9 pos=ADJ orig=8
+DEBUG skip amod: supérieure dep=amod head=12 pos=ADJ orig=13
+DEBUG skip amod: profondes dep=amod head=24 pos=ADJ orig=26
+DEBUG nmod: main idx=16 head=12
+DEBUG skip amod: dernière dep=amod head=9 pos=ADJ orig=8
+DEBUG skip prenominal: supérieure idx=13 ≤ nmod idx=16
+DEBUG skip amod: profondes dep=amod head=24 pos=ADJ orig=26
+DEBUG nmod: C idx=20 head=10
+DEBUG skip amod: dernière dep=amod head=9 pos=ADJ orig=8
+DEBUG skip amod: supérieure dep=amod head=12 pos=ADJ orig=13
+DEBUG skip amod: profondes dep=amod head=24 pos=ADJ orig=26
+DEBUG nmod: ° idx=32 head=29
+DEBUG skip amod: dernière dep=amod head=9 pos=ADJ orig=8
+DEBUG skip amod: supérieure dep=amod head=12 pos=ADJ orig=13
+DEBUG skip amod: profondes dep=amod head=24 pos=ADJ orig=26
+DEBUG nmod: C idx=33 head=29
+DEBUG skip amod: dernière dep=amod head=9 pos=ADJ orig=8
+DEBUG skip amod: supérieure dep=amod head=12 pos=ADJ orig=13
+DEBUG skip amod: profondes dep=amod head=24 pos=ADJ orig=26
+DEBUG nmod: douleur idx=44 head=42
+DEBUG skip amod: dernière dep=amod head=9 pos=ADJ orig=8
+DEBUG skip amod: supérieure dep=amod head=12 pos=ADJ orig=13
+DEBUG skip amod: profondes dep=amod head=24 pos=ADJ orig=26
+  [ 127/416] Sean David Morton qui se fait appeler "le prophèDEBUG avec in funcs: True
+DEBUG nmod: dollars idx=21 head=19
+DEBUG nmod: Bourse idx=36 head=33
+  [ 128/416] De quoi inciter à une certaine prudence.        DEBUG avec in funcs: True
+  [ 129/416] L'excédent brut d'exploitation atteint 47,4 millDEBUG avec in funcs: True
+DEBUG nmod: exploitation idx=6 head=2
+DEBUG skip prenominal: brut idx=3 ≤ nmod idx=6
+DEBUG skip amod: opérationnel dep=amod head=22 pos=ADJ orig=23
+DEBUG skip amod: courant dep=amod head=22 pos=ADJ orig=24
+DEBUG nmod: euros idx=12 head=9
+DEBUG skip amod: brut dep=amod head=2 pos=ADJ orig=3
+DEBUG skip amod: opérationnel dep=amod head=22 pos=ADJ orig=23
+DEBUG skip amod: courant dep=amod head=22 pos=ADJ orig=24
+DEBUG nmod: % idx=18 head=15
+DEBUG skip amod: brut dep=amod head=2 pos=ADJ orig=3
+DEBUG skip amod: opérationnel dep=amod head=22 pos=ADJ orig=23
+DEBUG skip amod: courant dep=amod head=22 pos=ADJ orig=24
+DEBUG nmod: % idx=30 head=27
+DEBUG skip amod: brut dep=amod head=2 pos=ADJ orig=3
+DEBUG skip amod: opérationnel dep=amod head=22 pos=ADJ orig=23
+DEBUG skip amod: courant dep=amod head=22 pos=ADJ orig=24
+DEBUG nmod: euros idx=37 head=34
+DEBUG skip amod: brut dep=amod head=2 pos=ADJ orig=3
+DEBUG skip amod: opérationnel dep=amod head=22 pos=ADJ orig=23
+DEBUG skip amod: courant dep=amod head=22 pos=ADJ orig=24
+  [ 130/416] Pour autant, nous avions tranché.               DEBUG avec in funcs: True
+  [ 131/416] Sa moyenne de 0,54 but par match est la meilleurDEBUG avec in funcs: True
+DEBUG nmod: but idx=4 head=1
+DEBUG nmod: match idx=6 head=1
+  [ 132/416] L'attaquant du Bayern Munich demande aussi, et sDEBUG avec in funcs: True
+  [ 133/416] Troisième temps, Andrea Dovizioso (Honda) s'en eDEBUG avec in funcs: True
+DEBUG nmod: M1 idx=28 head=27
+DEBUG skip amod: Troisième dep=amod head=1 pos=ADJ orig=0
+DEBUG skip amod: tous dep=amod head=25 pos=ADJ orig=24
+DEBUG nmod: seconde idx=36 head=34
+DEBUG skip amod: Troisième dep=amod head=1 pos=ADJ orig=0
+DEBUG skip amod: tous dep=amod head=25 pos=ADJ orig=24
+DEBUG nmod: leader idx=38 head=36
+DEBUG skip amod: Troisième dep=amod head=1 pos=ADJ orig=0
+DEBUG skip amod: tous dep=amod head=25 pos=ADJ orig=24
+  [ 134/416] En tous cas, la réorientation du géant des réseaDEBUG avec in funcs: True
+DEBUG nmod: géant idx=7 head=5
+DEBUG skip amod: bonne dep=amod head=16 pos=ADJ orig=15
+DEBUG nmod: réseaux idx=9 head=7
+DEBUG skip amod: bonne dep=amod head=16 pos=ADJ orig=15
+DEBUG nmod: IP idx=10 head=9
+DEBUG skip amod: bonne dep=amod head=16 pos=ADJ orig=15
+DEBUG nmod: Wimax idx=21 head=19
+DEBUG skip amod: bonne dep=amod head=16 pos=ADJ orig=15
+  [ 135/416] Il y a un personnage très absent tout au long duDEBUG avec in funcs: True
+  [ 136/416] Retrouver notre inspiration.                    DEBUG avec in funcs: True
+  [ 137/416] Si Moody's estime que leur note ne devrait pas bDEBUG avec in funcs: True
+  [ 138/416] Nombre d'investisseurs qui, auparavant, voyaientDEBUG avec in funcs: True
+DEBUG nmod: investisseurs idx=3 head=0
+DEBUG skip amod: mauvais dep=amod head=13 pos=ADJ orig=12
+DEBUG skip amod: importantes dep=amod head=32 pos=ADJ orig=33
+DEBUG nmod: liquidités idx=18 head=16
+DEBUG skip amod: mauvais dep=amod head=13 pos=ADJ orig=12
+DEBUG skip amod: importantes dep=amod head=32 pos=ADJ orig=33
+DEBUG nmod: entreprises idx=21 head=16
+DEBUG skip amod: mauvais dep=amod head=13 pos=ADJ orig=12
+DEBUG skip amod: importantes dep=amod head=32 pos=ADJ orig=33
+DEBUG nmod: constitution idx=28 head=25
+DEBUG skip amod: mauvais dep=amod head=13 pos=ADJ orig=12
+DEBUG skip amod: importantes dep=amod head=32 pos=ADJ orig=33
+DEBUG nmod: réserves idx=30 head=28
+DEBUG skip amod: mauvais dep=amod head=13 pos=ADJ orig=12
+DEBUG skip amod: importantes dep=amod head=32 pos=ADJ orig=33
+DEBUG nmod: liquidités idx=32 head=30
+DEBUG skip amod: mauvais dep=amod head=13 pos=ADJ orig=12
+DEBUG skip amod: importantes dep=amod head=32 pos=ADJ orig=33
+  [ 139/416] Ca énerve beaucoup de personnes, mais pour l'utiDEBUG avec in funcs: True
+DEBUG nmod: cas idx=20 head=18
+DEBUG skip amod: final dep=amod head=10 pos=ADJ orig=11
+  [ 140/416] C'est un caillou blanc.                         DEBUG avec in funcs: True
+  [ 141/416] Ainsi, ces cadres, de par leur clarté et leur crDEBUG avec in funcs: True
+DEBUG nmod: actions idx=18 head=16
+DEBUG nmod: Banque idx=21 head=18
+  [ 142/416] Il s'agit des importateurs utilisés par le ComitDEBUG avec in funcs: True
+DEBUG nmod: passage idx=16 head=14
+DEBUG nmod: port idx=18 head=16
+  [ 143/416] On s'était dit : "Quand on aura un premier pas dDEBUG avec in funcs: True
+DEBUG nmod: fait idx=14 head=12
+DEBUG skip prenominal: premier idx=11 ≤ nmod idx=14
+  [ 144/416] Il faut toutefois noter qu'il est alors de bon tDEBUG avec in funcs: True
+  [ 145/416] Qu'est-ce que 1.000 emplois quand on en détruit DEBUG avec in funcs: True
+  [ 146/416] De 10h à 12h et 14h à 17h office de tourisme.   DEBUG avec in funcs: True
+DEBUG nmod: 12h idx=3 head=1
+DEBUG nmod: office idx=8 head=5
+DEBUG nmod: tourisme idx=10 head=8
+  [ 147/416] En 2004, a-t-il indiqué, nous avons appliqué ce DEBUG avec in funcs: True
+DEBUG nmod: système idx=22 head=19
+DEBUG skip prenominal: désastreux idx=20 ≤ nmod idx=22
+DEBUG nmod: éclairage idx=25 head=22
+DEBUG skip amod: désastreux dep=amod head=19 pos=ADJ orig=20
+DEBUG nmod: kérosène idx=27 head=22
+DEBUG skip amod: désastreux dep=amod head=19 pos=ADJ orig=20
+  [ 148/416] Ce dimanche 30, à Pleumeur-Bodou, sur le site deDEBUG avec in funcs: True
+DEBUG nmod: site idx=11 head=1
+  [ 149/416] Là, on saura qui est le coupable et qui est la vDEBUG avec in funcs: True
+  [ 150/416] Comment repoussez vous les bateaux d'immigrés daDEBUG avec in funcs: True
+DEBUG nmod: immigrés idx=7 head=4
+DEBUG skip amod: internationales dep=amod head=10 pos=ADJ orig=11
+  [ 151/416] Le Football Atlantique Rochelais (FAR) organise DEBUG avec in funcs: True
+DEBUG nmod: formation idx=22 head=20
+DEBUG skip amod: Atlantique dep=amod head=1 pos=ADJ orig=2
+DEBUG skip amod: Rochelais dep=amod head=1 pos=ADJ orig=3
+  [ 152/416] Ce sera l'ultime étape de coupe de France pour lDEBUG avec in funcs: True
+DEBUG nmod: coupe idx=7 head=5
+DEBUG skip prenominal: ultime idx=4 ≤ nmod idx=7
+DEBUG skip amod: incontournable dep=amod head=41 pos=ADJ orig=40
+DEBUG skip amod: internationale dep=amod head=41 pos=ADJ orig=42
+DEBUG nmod: catégories idx=12 head=5
+DEBUG skip prenominal: ultime idx=4 ≤ nmod idx=12
+DEBUG skip amod: incontournable dep=amod head=41 pos=ADJ orig=40
+DEBUG skip amod: internationale dep=amod head=41 pos=ADJ orig=42
+DEBUG nmod: espoirs idx=13 head=12
+DEBUG skip amod: ultime dep=amod head=5 pos=ADJ orig=4
+DEBUG skip amod: incontournable dep=amod head=41 pos=ADJ orig=40
+DEBUG skip amod: internationale dep=amod head=41 pos=ADJ orig=42
+DEBUG nmod: championnats idx=18 head=16
+DEBUG skip amod: ultime dep=amod head=5 pos=ADJ orig=4
+DEBUG skip amod: incontournable dep=amod head=41 pos=ADJ orig=40
+DEBUG skip amod: internationale dep=amod head=41 pos=ADJ orig=42
+DEBUG nmod: vétérans idx=23 head=16
+DEBUG skip amod: ultime dep=amod head=5 pos=ADJ orig=4
+DEBUG skip amod: incontournable dep=amod head=41 pos=ADJ orig=40
+DEBUG skip amod: internationale dep=amod head=41 pos=ADJ orig=42
+  [ 153/416] Lourdement endetté (160 milliards d'euros fin 20DEBUG avec in funcs: True
+DEBUG nmod: euros idx=7 head=4
+DEBUG skip amod: public dep=amod head=24 pos=ADJ orig=25
+DEBUG nmod: % idx=28 head=24
+DEBUG skip prenominal: public idx=25 ≤ nmod idx=28
+DEBUG nmod: PIB idx=30 head=28
+DEBUG skip amod: public dep=amod head=24 pos=ADJ orig=25
+DEBUG nmod: % idx=38 head=33
+DEBUG skip amod: public dep=amod head=24 pos=ADJ orig=25
+DEBUG avec final: role=comitative bm=ni dep=case
+  [ 154/416] Certes la France peut se consoler avec les piètrDEBUG avec in funcs: True
+DEBUG nmod: voisin idx=12 head=9
+DEBUG skip prenominal: piètres idx=8 ≤ nmod idx=12
+DEBUG skip amod: italien dep=amod head=12 pos=ADJ orig=13
+DEBUG skip amod: noires dep=amod head=17 pos=ADJ orig=18
+DEBUG nmod: lanternes idx=17 head=15
+DEBUG skip amod: piètres dep=amod head=9 pos=ADJ orig=8
+DEBUG skip amod: italien dep=amod head=12 pos=ADJ orig=13
+DEBUG skip amod: noires dep=amod head=17 pos=ADJ orig=18
+DEBUG nmod: classement idx=25 head=15
+DEBUG skip amod: piètres dep=amod head=9 pos=ADJ orig=8
+DEBUG skip amod: italien dep=amod head=12 pos=ADJ orig=13
+DEBUG skip amod: noires dep=amod head=17 pos=ADJ orig=18
+DEBUG avec final: role=comitative bm=ni dep=case
+  [ 155/416] La Nouvelle-Zélande a remporté la deuxième CoupeDEBUG avec in funcs: True
+DEBUG nmod: ans idx=18 head=22
+DEBUG reattach: premier head 22→18
+DEBUG nmod: 5 idx=38 head=36
+DEBUG skip amod: premier dep=amod head=18 pos=ADJ orig=21
+DEBUG nmod: - idx=39 head=36
+DEBUG skip amod: premier dep=amod head=18 pos=ADJ orig=21
+DEBUG nmod: 0 idx=40 head=36
+DEBUG skip amod: premier dep=amod head=18 pos=ADJ orig=21
+  [ 156/416] Elle a affirmé l'obligation de faire "un match pDEBUG avec in funcs: True
+  [ 157/416] De son côté, l'agence de sûreté nucléaire japonaDEBUG avec in funcs: True
+DEBUG nmod: sûreté idx=8 head=6
+DEBUG skip amod: nucléaire dep=amod head=8 pos=ADJ orig=9
+DEBUG skip amod: japonaise dep=amod head=8 pos=ADJ orig=10
+DEBUG nmod: accident idx=20 head=16
+DEBUG skip amod: nucléaire dep=amod head=8 pos=ADJ orig=9
+DEBUG skip amod: japonaise dep=amod head=8 pos=ADJ orig=10
+DEBUG nmod: centrale idx=23 head=20
+DEBUG skip amod: nucléaire dep=amod head=8 pos=ADJ orig=9
+DEBUG skip amod: japonaise dep=amod head=8 pos=ADJ orig=10
+DEBUG nmod: niveau idx=27 head=16
+DEBUG skip amod: nucléaire dep=amod head=8 pos=ADJ orig=9
+DEBUG skip amod: japonaise dep=amod head=8 pos=ADJ orig=10
+  [ 158/416] Comme chaque soir à 18h40, il tranche, malmène eDEBUG avec in funcs: True
+  [ 159/416] Côté organisation, la municipalité va apporter sDEBUG avec in funcs: True
+DEBUG nmod: Boule idx=14 head=11
+DEBUG skip amod: logistique dep=amod head=8 pos=ADJ orig=9
+DEBUG skip amod: Canéjanaise dep=amod head=14 pos=ADJ orig=15
+DEBUG skip amod: canéjanais dep=amod head=24 pos=ADJ orig=25
+DEBUG skip amod: exceptionnel dep=amod head=39 pos=ADJ orig=40
+DEBUG nmod: préparatifs idx=31 head=28
+DEBUG skip amod: logistique dep=amod head=8 pos=ADJ orig=9
+DEBUG skip amod: Canéjanaise dep=amod head=14 pos=ADJ orig=15
+DEBUG skip amod: canéjanais dep=amod head=24 pos=ADJ orig=25
+DEBUG skip amod: exceptionnel dep=amod head=39 pos=ADJ orig=40
+DEBUG nmod: histoire idx=44 head=39
+DEBUG skip amod: logistique dep=amod head=8 pos=ADJ orig=9
+DEBUG skip amod: Canéjanaise dep=amod head=14 pos=ADJ orig=15
+DEBUG skip amod: canéjanais dep=amod head=24 pos=ADJ orig=25
+DEBUG skip prenominal: exceptionnel idx=40 ≤ nmod idx=44
+DEBUG nmod: club idx=46 head=44
+DEBUG skip amod: logistique dep=amod head=8 pos=ADJ orig=9
+DEBUG skip amod: Canéjanaise dep=amod head=14 pos=ADJ orig=15
+DEBUG skip amod: canéjanais dep=amod head=24 pos=ADJ orig=25
+DEBUG skip amod: exceptionnel dep=amod head=39 pos=ADJ orig=40
+  [ 160/416] Même du fond de l'enfer, Dany Laferrière reste uDEBUG avec in funcs: True
+DEBUG nmod: enfer idx=6 head=2
+DEBUG skip amod: heureux dep=amod head=12 pos=ADJ orig=13
+  [ 161/416] Faut-il éviter de se rendre dans les pays du souDEBUG avec in funcs: True
+DEBUG nmod: sous-continent idx=10 head=8
+DEBUG skip amod: indien dep=amod head=10 pos=ADJ orig=11
+  [ 162/416] Celle-ci a également perdu du terrain sur l'euroDEBUG avec in funcs: True
+DEBUG nmod: GBP idx=17 head=15
+  [ 163/416] " J'ai senti, au cours de mon déplacement à PragDEBUG avec in funcs: True
+DEBUG nmod: déplacement idx=10 head=7
+  [ 164/416] Fini les vacances pour le jeune Pascal Haupais qDEBUG avec in funcs: True
+DEBUG nmod: CM1 idx=15 head=13
+DEBUG skip amod: jeune dep=amod head=6 pos=ADJ orig=5
+  [ 165/416] Plus de 20 personnes ont en outre été blessées, DEBUG avec in funcs: True
+DEBUG nmod: environs idx=24 head=21
+DEBUG skip prenominal: chiites idx=22 ≤ nmod idx=24
+DEBUG nmod: capitale idx=27 head=24
+DEBUG skip amod: chiites dep=amod head=21 pos=ADJ orig=22
+DEBUG nmod: témoins idx=33 head=17
+DEBUG skip amod: chiites dep=amod head=21 pos=ADJ orig=22
+  [ 166/416] Puis, à l'école, deux autres délégués sont interDEBUG avec in funcs: True
+  [ 167/416] Sur place vente de livres consacrés à Jean FerraDEBUG avec in funcs: True
+DEBUG nmod: livres idx=4 head=2
+  [ 168/416] En tout, ce sont près d'une centaine de conteneuDEBUG avec in funcs: True
+DEBUG nmod: conteneurs idx=11 head=9
+DEBUG skip amod: étudiants dep=amod head=19 pos=ADJ orig=20
+  [ 169/416] Le ton a d'ailleurs été donné hier par le généraDEBUG avec in funcs: True
+DEBUG nmod: conférence idx=18 head=15
+DEBUG skip amod: hebdomadaire dep=amod head=18 pos=ADJ orig=21
+DEBUG skip amod: parlementaire dep=amod head=26 pos=ADJ orig=27
+DEBUG nmod: presse idx=20 head=18
+DEBUG reattach: hebdomadaire head 18→20
+DEBUG skip amod: parlementaire dep=amod head=26 pos=ADJ orig=27
+DEBUG nmod: bloc idx=26 head=24
+DEBUG skip amod: hebdomadaire dep=amod head=20 pos=ADJ orig=21
+DEBUG skip amod: parlementaire dep=amod head=26 pos=ADJ orig=27
+DEBUG nmod: Changement idx=29 head=26
+DEBUG skip amod: hebdomadaire dep=amod head=20 pos=ADJ orig=21
+DEBUG skip prenominal: parlementaire idx=27 ≤ nmod idx=29
+  [ 170/416] De plus, on pourra aussi trouver une nouveauté aDEBUG avec in funcs: True
+DEBUG nmod: jeu idx=13 head=11
+DEBUG nmod: bois idx=15 head=13
+DEBUG avec final: role=comitative bm=ni dep=case
+  [ 171/416] À son bord, deux frères de 25 et 23 ans demeuranDEBUG avec in funcs: True
+DEBUG nmod: bord idx=2 head=5
+DEBUG nmod: ans idx=10 head=5
+  [ 172/416] Ça va forcément me rappeler des souvenirs.      DEBUG avec in funcs: True
+  [ 173/416] Grâce à une plate-forme logicielle intégrée aux DEBUG avec in funcs: True
+DEBUG nmod: forme idx=5 head=3
+DEBUG skip amod: logicielle dep=amod head=5 pos=ADJ orig=6
+DEBUG nmod: emails idx=15 head=13
+DEBUG skip amod: logicielle dep=amod head=5 pos=ADJ orig=6
+DEBUG nmod: marketing idx=25 head=24
+DEBUG skip amod: logicielle dep=amod head=5 pos=ADJ orig=6
+DEBUG nmod: chiffre idx=35 head=32
+DEBUG skip amod: logicielle dep=amod head=5 pos=ADJ orig=6
+DEBUG nmod: affaires idx=38 head=35
+DEBUG skip amod: logicielle dep=amod head=5 pos=ADJ orig=6
+  [ 174/416] Chaque site propose des coupons de réductions (aDEBUG avec in funcs: True
+DEBUG nmod: réductions idx=6 head=4
+DEBUG nmod: réductions idx=10 head=4
+DEBUG nmod: moyenne idx=18 head=16
+DEBUG nmod: activité idx=25 head=22
+DEBUG avec final: role=comitative bm=ni dep=case
+  [ 175/416] M. Di Rupo, dont le parti avait remporté les éleDEBUG avec in funcs: True
+DEBUG nmod: juin idx=12 head=10
+DEBUG skip amod: francophone dep=amod head=14 pos=ADJ orig=15
+  [ 176/416] Les problèmes des Etats très endettés sont bien DEBUG avec in funcs: True
+DEBUG nmod: Etats idx=3 head=1
+DEBUG skip amod: ' dep=amod head=21 pos=PUNCT orig=20
+DEBUG nmod: monde idx=29 head=27
+DEBUG skip amod: ' dep=amod head=21 pos=PUNCT orig=20
+  [ 177/416] "C'est la panique totale sur le marché, et la chDEBUG avec in funcs: True
+DEBUG nmod: marché idx=8 head=4
+DEBUG skip prenominal: totale idx=5 ≤ nmod idx=8
+DEBUG skip amod: souverain dep=amod head=17 pos=ADJ orig=18
+DEBUG nmod: cours idx=14 head=12
+DEBUG skip amod: totale dep=amod head=4 pos=ADJ orig=5
+DEBUG skip amod: souverain dep=amod head=17 pos=ADJ orig=18
+  [ 178/416] Quel est le coût d'un tel projet ?              DEBUG avec in funcs: True
+DEBUG nmod: projet idx=8 head=0
+DEBUG skip amod: tel dep=amod head=8 pos=ADJ orig=7
+  [ 179/416] Cette loi, qui contrôle l'établissement de nouveDEBUG avec in funcs: True
+DEBUG nmod: unités idx=10 head=7
+DEBUG skip amod: nouvelles dep=amod head=10 pos=ADJ orig=9
+DEBUG skip amod: existants dep=amod head=18 pos=ADJ orig=19
+DEBUG nmod: production idx=12 head=10
+DEBUG skip prenominal: nouvelles idx=9 ≤ nmod idx=12
+DEBUG skip amod: existants dep=amod head=18 pos=ADJ orig=19
+DEBUG nmod: sites idx=18 head=16
+DEBUG skip amod: nouvelles dep=amod head=10 pos=ADJ orig=9
+DEBUG skip amod: existants dep=amod head=18 pos=ADJ orig=19
+DEBUG nmod: UA idx=29 head=26
+DEBUG skip amod: nouvelles dep=amod head=10 pos=ADJ orig=9
+DEBUG skip amod: existants dep=amod head=18 pos=ADJ orig=19
+DEBUG nmod: UA idx=32 head=26
+DEBUG skip amod: nouvelles dep=amod head=10 pos=ADJ orig=9
+DEBUG skip amod: existants dep=amod head=18 pos=ADJ orig=19
+  [ 180/416] Pour souligner les 35 ans du Théâtre du TrilliumDEBUG avec in funcs: True
+DEBUG nmod: Théâtre idx=6 head=4
+DEBUG skip amod: artistique dep=amod head=11 pos=ADJ orig=12
+DEBUG skip amod: quatrième dep=amod head=24 pos=ADJ orig=23
+  [ 181/416] Mardi midi, l'automobiliste était toujours en gaDEBUG avec in funcs: True
+DEBUG nmod: midi idx=1 head=0
+DEBUG nmod: vue idx=11 head=9
+  [ 182/416] En d'autres mots, la pandémie a été un peu moinsDEBUG avec in funcs: True
+  [ 183/416] Cependant, vous êtes invités à respecter un certDEBUG avec in funcs: True
+DEBUG nmod: critères idx=11 head=9
+DEBUG skip prenominal: certain idx=8 ≤ nmod idx=11
+  [ 184/416] On a le droit "d'être contre".                  DEBUG avec in funcs: True
+  [ 185/416] Selon People, la jeune femme a très rapidement eDEBUG avec in funcs: True
+DEBUG nmod: vue idx=14 head=11
+DEBUG skip amod: jeune dep=amod head=5 pos=ADJ orig=4
+  [ 186/416] « Les changements d'horaire, c'est plutôt une boDEBUG avec in funcs: True
+DEBUG nmod: horaire idx=5 head=2
+DEBUG skip amod: bonne dep=amod head=12 pos=ADJ orig=11
+DEBUG nmod: attente idx=25 head=22
+DEBUG skip amod: bonne dep=amod head=12 pos=ADJ orig=11
+  [ 187/416] Annoncé hier matin--dans les colonnes de L'IndépDEBUG avec in funcs: True
+DEBUG nmod: succession idx=18 head=14
+DEBUG skip prenominal: sérieux idx=15 ≤ nmod idx=18
+DEBUG skip amod: actuel dep=amod head=34 pos=ADJ orig=35
+DEBUG skip amod: premier dep=amod head=42 pos=ADJ orig=41
+DEBUG nmod: exercice idx=34 head=30
+DEBUG skip amod: sérieux dep=amod head=14 pos=ADJ orig=15
+DEBUG skip amod: actuel dep=amod head=34 pos=ADJ orig=35
+DEBUG skip amod: premier dep=amod head=42 pos=ADJ orig=41
+  [ 188/416] Envoyez le mot "DARGAUD" suivi de vos coordonnéeDEBUG avec in funcs: True
+DEBUG nmod: 20 idx=12 head=11
+DEBUG nmod: 30 idx=13 head=11
+DEBUG nmod: euro idx=19 head=16
+DEBUG nmod: coût idx=21 head=16
+DEBUG nmod: SMS idx=23 head=21
+  [ 189/416] Barack Obama s'est baigné samedi dans une statioDEBUG avec in funcs: True
+DEBUG nmod: golfe idx=19 head=17
+DEBUG skip amod: balnéaire dep=amod head=9 pos=ADJ orig=10
+DEBUG skip amod: affirmant dep=amod head=17 pos=VERB orig=13
+DEBUG skip prenominal: toutes idx=15 ≤ nmod idx=19
+DEBUG skip amod: noire dep=amod head=33 pos=ADJ orig=34
+  [ 190/416] Peut-être serait-il plus libérateur de crier bieDEBUG avec in funcs: True
+  [ 191/416] Une marge nette d'intérêts solide et le contrôleDEBUG avec in funcs: True
+DEBUG nmod: intérêts idx=5 head=1
+DEBUG skip prenominal: nette idx=2 ≤ nmod idx=5
+DEBUG reattach: solide head 1→5
+DEBUG skip amod: net dep=amod head=25 pos=ADJ orig=26
+DEBUG skip amod: douteuses dep=amod head=45 pos=ADJ orig=46
+DEBUG nmod: coûts idx=11 head=9
+DEBUG skip amod: nette dep=amod head=1 pos=ADJ orig=2
+DEBUG skip amod: solide dep=amod head=5 pos=ADJ orig=6
+DEBUG skip amod: net dep=amod head=25 pos=ADJ orig=26
+DEBUG skip amod: douteuses dep=amod head=45 pos=ADJ orig=46
+DEBUG nmod: % idx=29 head=25
+DEBUG skip amod: nette dep=amod head=1 pos=ADJ orig=2
+DEBUG skip amod: solide dep=amod head=5 pos=ADJ orig=6
+DEBUG skip prenominal: net idx=26 ≤ nmod idx=29
+DEBUG skip amod: douteuses dep=amod head=45 pos=ADJ orig=46
+DEBUG nmod: euros idx=37 head=34
+DEBUG skip amod: nette dep=amod head=1 pos=ADJ orig=2
+DEBUG skip amod: solide dep=amod head=5 pos=ADJ orig=6
+DEBUG skip amod: net dep=amod head=25 pos=ADJ orig=26
+DEBUG skip amod: douteuses dep=amod head=45 pos=ADJ orig=46
+DEBUG nmod: provisions idx=43 head=41
+DEBUG skip amod: nette dep=amod head=1 pos=ADJ orig=2
+DEBUG skip amod: solide dep=amod head=5 pos=ADJ orig=6
+DEBUG skip amod: net dep=amod head=25 pos=ADJ orig=26
+DEBUG skip amod: douteuses dep=amod head=45 pos=ADJ orig=46
+DEBUG nmod: créances idx=45 head=43
+DEBUG skip amod: nette dep=amod head=1 pos=ADJ orig=2
+DEBUG skip amod: solide dep=amod head=5 pos=ADJ orig=6
+DEBUG skip amod: net dep=amod head=25 pos=ADJ orig=26
+DEBUG skip amod: douteuses dep=amod head=45 pos=ADJ orig=46
+  [ 192/416] 200 vols ont été annulés samedi, et ce malgré laDEBUG avec in funcs: True
+DEBUG nmod: porte-parole idx=13 head=11
+DEBUG skip amod: premier dep=amod head=19 pos=ADJ orig=18
+DEBUG nmod: compagnie idx=16 head=13
+DEBUG skip amod: premier dep=amod head=19 pos=ADJ orig=18
+DEBUG nmod: jour idx=19 head=11
+DEBUG skip amod: premier dep=amod head=19 pos=ADJ orig=18
+DEBUG nmod: gréve idx=22 head=19
+DEBUG skip prenominal: premier idx=18 ≤ nmod idx=22
+  [ 193/416] « Il n'y a pas de problème de banlieue et la banDEBUG avec in funcs: True
+DEBUG nmod: banlieue idx=9 head=7
+  [ 194/416] Chicago (41-41) coiffe ainsi au poteau Toronto (DEBUG avec in funcs: True
+DEBUG nmod: 41 idx=2 head=0
+DEBUG nmod: - idx=3 head=0
+DEBUG nmod: 41 idx=4 head=0
+DEBUG nmod: 40 idx=12 head=10
+DEBUG nmod: - idx=13 head=10
+DEBUG nmod: 42 idx=14 head=10
+DEBUG nmod: 131 idx=24 head=19
+DEBUG nmod: - idx=25 head=19
+DEBUG nmod: 113 idx=26 head=19
+  [ 195/416] Et côté coloration, Miss France n'est pas à son DEBUG avec in funcs: True
+DEBUG nmod: essai idx=14 head=11
+  [ 196/416] Hormis ce professeur d'anglais, au lycée, qui, qDEBUG avec in funcs: True
+DEBUG nmod: anglais idx=5 head=2
+DEBUG nmod: lycée idx=8 head=2
+  [ 197/416] Pendant que le Chef d'Etat Major Soumaila BagayoDEBUG avec in funcs: True
+DEBUG nmod: Etat idx=6 head=3
+DEBUG reattach: Major head 3→6
+DEBUG skip amod: incontrôlés dep=amod head=14 pos=ADJ orig=15
+DEBUG skip amod: Républicaine dep=amod head=23 pos=ADJ orig=24
+DEBUG skip amod: dernier dep=amod head=29 pos=ADJ orig=30
+DEBUG nmod: éléments idx=14 head=12
+DEBUG skip amod: Major dep=amod head=6 pos=ADJ orig=7
+DEBUG skip amod: incontrôlés dep=amod head=14 pos=ADJ orig=15
+DEBUG skip amod: Républicaine dep=amod head=23 pos=ADJ orig=24
+DEBUG skip amod: dernier dep=amod head=29 pos=ADJ orig=30
+DEBUG nmod: camp idx=20 head=12
+DEBUG skip amod: Major dep=amod head=6 pos=ADJ orig=7
+DEBUG skip amod: incontrôlés dep=amod head=14 pos=ADJ orig=15
+DEBUG skip amod: Républicaine dep=amod head=23 pos=ADJ orig=24
+DEBUG skip amod: dernier dep=amod head=29 pos=ADJ orig=30
+DEBUG nmod: Garde idx=23 head=20
+DEBUG skip amod: Major dep=amod head=6 pos=ADJ orig=7
+DEBUG skip amod: incontrôlés dep=amod head=14 pos=ADJ orig=15
+DEBUG skip amod: Républicaine dep=amod head=23 pos=ADJ orig=24
+DEBUG skip amod: dernier dep=amod head=29 pos=ADJ orig=30
+DEBUG nmod: change idx=44 head=42
+DEBUG skip amod: Major dep=amod head=6 pos=ADJ orig=7
+DEBUG skip amod: incontrôlés dep=amod head=14 pos=ADJ orig=15
+DEBUG skip amod: Républicaine dep=amod head=23 pos=ADJ orig=24
+DEBUG skip amod: dernier dep=amod head=29 pos=ADJ orig=30
+DEBUG nmod: mètres idx=56 head=54
+DEBUG skip amod: Major dep=amod head=6 pos=ADJ orig=7
+DEBUG skip amod: incontrôlés dep=amod head=14 pos=ADJ orig=15
+DEBUG skip amod: Républicaine dep=amod head=23 pos=ADJ orig=24
+DEBUG skip amod: dernier dep=amod head=29 pos=ADJ orig=30
+  [ 198/416] « Oui on le sait, mais je dirai qu'il la faut.  DEBUG avec in funcs: True
+  [ 199/416] La 18e édition des Victoires de la musique classDEBUG avec in funcs: True
+DEBUG nmod: Victoires idx=4 head=2
+DEBUG skip prenominal: 18e idx=1 ≤ nmod idx=4
+DEBUG skip amod: classique dep=amod head=7 pos=ADJ orig=8
+DEBUG nmod: musique idx=7 head=4
+DEBUG skip amod: 18e dep=amod head=2 pos=ADJ orig=1
+DEBUG skip amod: classique dep=amod head=7 pos=ADJ orig=8
+  [ 200/416] -Le tout saupoudré d'un niveau gustatif plus queDEBUG avec in funcs: True
+  [ 201/416] A 5 minutes à pieds du métro.                   DEBUG avec in funcs: True
+DEBUG nmod: pieds idx=4 head=2
+DEBUG nmod: métro idx=6 head=2
+  [ 202/416] Accueil amical de Benoit qui propose de très bonDEBUG avec in funcs: True
+DEBUG nmod: tendance idx=14 head=12
+DEBUG skip amod: amical dep=amod head=0 pos=ADJ orig=1
+DEBUG skip amod: bonnes dep=amod head=9 pos=ADJ orig=8
+DEBUG skip amod: hispanique dep=amod head=14 pos=ADJ orig=15
+DEBUG skip amod: espagnols dep=amod head=18 pos=ADJ orig=19
+DEBUG skip amod: doux dep=amod head=28 pos=ADJ orig=30
+DEBUG nmod: chichis idx=24 head=22
+DEBUG skip amod: amical dep=amod head=0 pos=ADJ orig=1
+DEBUG skip amod: bonnes dep=amod head=9 pos=ADJ orig=8
+DEBUG skip amod: hispanique dep=amod head=14 pos=ADJ orig=15
+DEBUG skip amod: espagnols dep=amod head=18 pos=ADJ orig=19
+DEBUG skip amod: doux dep=amod head=28 pos=ADJ orig=30
+  [ 203/416] Allez-y.                                        DEBUG avec in funcs: True
+  [ 204/416] Alors je retournes souvent au Campuchea, son hotDEBUG avec in funcs: True
+  [ 205/416] Anjou Sol'Art, est une entreprise dont les compéDEBUG avec in funcs: True
+DEBUG nmod: matière idx=12 head=10
+DEBUG skip amod: photovoltaïque dep=amod head=14 pos=ADJ orig=17
+DEBUG nmod: solaire idx=14 head=12
+DEBUG skip amod: photovoltaïque dep=amod head=14 pos=ADJ orig=17
+  [ 206/416] Après quelques séances de massage, je suis bien DEBUG avec in funcs: True
+DEBUG nmod: massage idx=4 head=2
+  [ 207/416] Au menu, en entrée, du pas grand chose, avec beaDEBUG avec in funcs: True
+DEBUG nmod: entrée idx=4 head=9
+DEBUG reattach: grand head 9→4
+DEBUG skip amod: balsamique dep=amod head=21 pos=ADJ orig=22
+DEBUG nmod: vinaigre idx=21 head=19
+DEBUG skip amod: grand dep=amod head=4 pos=ADJ orig=8
+DEBUG skip amod: balsamique dep=amod head=21 pos=ADJ orig=22
+DEBUG avec final: role=comitative bm=ni dep=case
+  [ 208/416] Au sortir d'une séance de cinéma, nous avons décDEBUG avec in funcs: True
+DEBUG nmod: séance idx=5 head=1
+DEBUG skip amod: vivant dep=amod head=14 pos=ADJ orig=15
+DEBUG nmod: cinéma idx=7 head=5
+DEBUG skip amod: vivant dep=amod head=14 pos=ADJ orig=15
+  [ 209/416] Aussitôt après le dessert on nous passe la serpiDEBUG avec in funcs: True
+  [ 210/416] Avec plus de 40000 références, on est assuré d'uDEBUG avec in funcs: True
+⚠️  Ollama morphologique indisponible (réessai dans 60s)
+DEBUG avec final: role=comitative bm=ni dep=case
+  [ 211/416] Bon, allez, je suis connue pour être pinailleuseDEBUG avec in funcs: True
+  [ 212/416] Bonjour, Nous avons fait l'acquisition d'un O'HaDEBUG avec in funcs: True
+DEBUG nmod: modèle idx=13 head=11
+  [ 213/416] Boutique bobo chic mais il manque l'essentiel : DEBUG avec in funcs: True
+  [ 214/416] Bref, la rue des maréchaux de nancy vous permettDEBUG avec in funcs: True
+DEBUG nmod: maréchaux idx=5 head=3
+  [ 215/416] Bref, à déconseiller !                          DEBUG avec in funcs: True
+  [ 216/416] Bémol : le refus des cartes de paiement !       DEBUG avec in funcs: True
+DEBUG nmod: cartes idx=5 head=3
+DEBUG nmod: paiement idx=7 head=5
+  [ 217/416] C'est l'adresse de l'hôtel de ville de Faches ThDEBUG avec in funcs: True
+DEBUG nmod: hôtel idx=8 head=4
+DEBUG nmod: ville idx=10 head=8
+  [ 218/416] C'est tellement rare de pouvoir dîner au coin duDEBUG avec in funcs: True
+DEBUG nmod: feu idx=10 head=8
+  [ 219/416] C'est un lieu incontournable, car il permet de sDEBUG avec in funcs: True
+DEBUG nmod: famille idx=16 head=12
+DEBUG skip amod: incontournable dep=amod head=3 pos=ADJ orig=4
+  [ 220/416] Cà oui, on peut dire que c'était à la fois futurDEBUG avec in funcs: True
+DEBUG nmod: moitié idx=20 head=17
+DEBUG avec final: role=comitative bm=ni dep=case
+  [ 221/416] Car l'on peut trouver très aisément des préservaDEBUG avec in funcs: True
+  [ 222/416] Cela fait 10 ans que je fais du déplacement profDEBUG avec in funcs: True
+  [ 223/416] Cette école est très bien sérieuse et aide beaucDEBUG avec in funcs: True
+  [ 224/416] Elles donnent à toucher, fabriquer, débattre, inDEBUG avec in funcs: True
+  [ 225/416] Emplacement génial pour qui veut aller chercher DEBUG avec in funcs: True
+  [ 226/416] En 2 séances (maillot et aisselles) je vois déjàDEBUG avec in funcs: True
+  [ 227/416] En espérant que ce genre de salon sérieux et proDEBUG avec in funcs: True
+DEBUG nmod: salon idx=6 head=4
+DEBUG skip amod: sérieux dep=amod head=6 pos=ADJ orig=7
+DEBUG nmod: rue idx=20 head=18
+DEBUG skip amod: sérieux dep=amod head=6 pos=ADJ orig=7
+  [ 228/416] En plus il est gentil, à l'écoute et on voit qu'DEBUG avec in funcs: True
+  [ 229/416] Enfin, arrive la douloureuse qui est parfaitemenDEBUG avec in funcs: True
+DEBUG nmod: prestations idx=13 head=11
+  [ 230/416] Enfin un bar à Paris où l'on peut trouver du mezDEBUG avec in funcs: True
+  [ 231/416] Et la qualité du service est trés trés trés... bDEBUG avec in funcs: True
+DEBUG nmod: service idx=4 head=2
+  [ 232/416] Et un jacuzzi minuscule.                        DEBUG avec in funcs: True
+  [ 233/416] Fini les plats décevants !                      DEBUG avec in funcs: True
+  [ 234/416] Génial, et en plus c'est rapide.                DEBUG avec in funcs: True
+  [ 235/416] Ici c'est très professionnelle.                 DEBUG avec in funcs: True
+  [ 236/416] Il sont formés à vous arnaquer.                 DEBUG avec in funcs: True
+  [ 237/416] Il vaut mieux réserver car ce petit coin de NaplDEBUG avec in funcs: True
+  [ 238/416] Il y a même un café avec des pingouins !        DEBUG avec in funcs: True
+DEBUG nmod: pingouins idx=8 head=5
+DEBUG avec final: role=comitative bm=ni dep=case
+  [ 239/416] Ils enregistrent ma demande d'annulation, et comDEBUG avec in funcs: True
+DEBUG nmod: annulation idx=6 head=3
+  [ 240/416] Ils m'ont dit que c'est un système de sécurité qDEBUG avec in funcs: True
+DEBUG nmod: sécurité idx=11 head=9
+  [ 241/416] Ils ont réalisé un excellent travail            DEBUG avec in funcs: True
+  [ 242/416] Ils sont sur Cherbourg depuis 2007.             DEBUG avec in funcs: True
+  [ 243/416] J'y vais très souvent, car comme on dit on changDEBUG avec in funcs: True
+  [ 244/416] J'adore la bouffe et le style.                  DEBUG avec in funcs: True
+  [ 245/416] J'ai donc choisi de ne faire qu'une coupe + balaDEBUG avec in funcs: True
+DEBUG nmod: balayage idx=12 head=10
+  [ 246/416] J'ai installé une chaudière à condensation dans DEBUG avec in funcs: True
+DEBUG nmod: condensation idx=7 head=5
+DEBUG skip amod: électriques dep=amod head=16 pos=ADJ orig=17
+  [ 247/416] J'ai rencontré par hasard Lionel en cherchant suDEBUG avec in funcs: True
+DEBUG nmod: domicile idx=14 head=12
+  [ 248/416] J'y suis allé 2 fois à une semaine d'intervalle DEBUG avec in funcs: True
+DEBUG nmod: semaine idx=9 head=6
+DEBUG nmod: intervalle idx=12 head=9
+  [ 249/416] Je recommande vivement ce magasin à tous ceux quDEBUG avec in funcs: True
+  [ 250/416] Je suis élève de Sreemati depuis 5 ans, et dès qDEBUG avec in funcs: True
+  [ 251/416] Je veux bien que cela soit une chambre économiquDEBUG avec in funcs: True
+DEBUG nmod: nuitée idx=13 head=11
+DEBUG skip amod: économique dep=amod head=7 pos=ADJ orig=8
+  [ 252/416] La carte regorge de trésors tant en crêpes qu'enDEBUG avec in funcs: True
+DEBUG nmod: galettes idx=10 head=7
+  [ 253/416] La différence entre les grandes et les petites dDEBUG avec in funcs: True
+  [ 254/416] La paroisse Marie-Reine-des-Coeurs est située auDEBUG avec in funcs: True
+DEBUG nmod: rue idx=9 head=7
+DEBUG nmod: M idx=16 head=15
+DEBUG nmod: 1N4 idx=17 head=16
+  [ 255/416] Le cadre est très joli, mais l'ambiance n'est paDEBUG avec in funcs: True
+DEBUG nmod: Pub idx=21 head=17
+DEBUG skip amod: anglais dep=amod head=21 pos=ADJ orig=22
+DEBUG nmod: musique idx=27 head=25
+DEBUG skip amod: anglais dep=amod head=21 pos=ADJ orig=22
+  [ 256/416] Le patron semble avoir à cœur de ne pas négligerDEBUG avec in funcs: True
+DEBUG nmod: vins idx=15 head=13
+  [ 257/416] Le signe qui ne trompe pas, ce midi là... les clDEBUG avec in funcs: True
+DEBUG nmod: table idx=14 head=12
+  [ 258/416] Les patientes habituées savent qu'il a beaucoup DEBUG avec in funcs: True
+  [ 259/416] Les prix sont abordables pour la qualité des proDEBUG avec in funcs: True
+DEBUG nmod: produits idx=8 head=6
+DEBUG nmod: salle idx=13 head=11
+  [ 260/416] Les prix sont beaucoup plus élevés que dans d'auDEBUG avec in funcs: True
+  [ 261/416] Les terrains de tennis ferment à 18h !          DEBUG avec in funcs: True
+DEBUG nmod: tennis idx=3 head=1
+  [ 262/416] Leur chocolat chaud est divin !                 DEBUG avec in funcs: True
+  [ 263/416] Madame Tellier est une excellente comptable que DEBUG avec in funcs: True
+  [ 264/416] Magasin de chaussures pour enfants/adolescents tDEBUG avec in funcs: True
+DEBUG nmod: chaussures idx=2 head=0
+DEBUG reattach: convivial head 0→2
+DEBUG nmod: enfants idx=4 head=2
+DEBUG reattach: convivial head 2→4
+  [ 265/416] Mais à souligner que jamais la musique ne prend DEBUG avec in funcs: True
+  [ 266/416] Merci beaucoup à lui !                          DEBUG avec in funcs: True
+  [ 267/416] Nos plats étaient globalement bons (saumon vapeuDEBUG avec in funcs: True
+DEBUG nmod: rouget idx=13 head=11
+DEBUG skip amod: vapeur dep=amod head=6 pos=ADJ orig=7
+  [ 268/416] Notre expérience dans le domaine du destockage vDEBUG avec in funcs: True
+DEBUG nmod: domaine idx=4 head=1
+DEBUG skip amod: meilleures dep=amod head=17 pos=ADJ orig=16
+DEBUG skip amod: financières dep=amod head=17 pos=ADJ orig=18
+DEBUG nmod: destockage idx=6 head=4
+DEBUG skip amod: meilleures dep=amod head=17 pos=ADJ orig=16
+DEBUG skip amod: financières dep=amod head=17 pos=ADJ orig=18
+DEBUG nmod: invendus idx=13 head=10
+DEBUG skip amod: meilleures dep=amod head=17 pos=ADJ orig=16
+DEBUG skip amod: financières dep=amod head=17 pos=ADJ orig=18
+DEBUG nmod: distribution idx=28 head=26
+DEBUG skip amod: meilleures dep=amod head=17 pos=ADJ orig=16
+DEBUG skip amod: financières dep=amod head=17 pos=ADJ orig=18
+  [ 269/416] Nous avons dépensé avec ma femme 145 € pour une DEBUG avec in funcs: True
+DEBUG nmod: alcool idx=19 head=10
+DEBUG avec final: role=comitative bm=ni dep=case
+  [ 270/416] Nous avons pris possesion de 2 chambres cabines DEBUG avec in funcs: True
+DEBUG nmod: commun idx=12 head=10
+DEBUG skip amod: cabines dep=amod head=6 pos=ADJ orig=7
+  [ 271/416] On y retourne cet été !                         DEBUG avec in funcs: True
+  [ 272/416] Par contre, si vous êtes nombreux passez votre cDEBUG avec in funcs: True
+  [ 273/416] Par contre l'accueil est impeccable et très chalDEBUG avec in funcs: True
+  [ 274/416] Petits coups de vin à boire au verre, pour 2-4 €DEBUG avec in funcs: True
+DEBUG nmod: vin idx=3 head=1
+DEBUG skip prenominal: Petits idx=0 ≤ nmod idx=3
+DEBUG skip amod: succulent dep=amod head=20 pos=ADJ orig=21
+  [ 275/416] Pour couronner le tout, les personnes de la réceDEBUG avec in funcs: True
+DEBUG nmod: réception idx=9 head=6
+  [ 276/416] Pour la première fois, j'avais besoin d'une pairDEBUG avec in funcs: True
+DEBUG nmod: lunette idx=14 head=12
+DEBUG skip amod: première dep=amod head=3 pos=ADJ orig=2
+DEBUG skip amod: seule dep=amod head=32 pos=ADJ orig=29
+DEBUG skip amod: tendance dep=amod head=34 pos=ADJ orig=35
+DEBUG skip amod: grandes dep=amod head=40 pos=ADJ orig=39
+DEBUG skip amod: petits dep=amod head=44 pos=ADJ orig=43
+DEBUG skip amod: classique dep=amod head=56 pos=ADJ orig=62
+  [ 277/416] Pour terminer ils disent qu'ils ont internet graDEBUG avec in funcs: True
+  [ 278/416] Produits super sympa et qui rendent bien sur monDEBUG avec in funcs: True
+  [ 279/416] Ps : l'année prochaine on y retourne d'office...DEBUG avec in funcs: True
+  [ 280/416] Qu'on se le dise !                              DEBUG avec in funcs: True
+  [ 281/416] Que rechercher de plus lorsqu'on a paisiblement DEBUG avec in funcs: True
+  [ 282/416] Que ce soit à titre professionnel (pour ma sociéDEBUG avec in funcs: True
+DEBUG nmod: société idx=9 head=4
+DEBUG skip prenominal: professionnel idx=5 ≤ nmod idx=9
+DEBUG skip amod: personnel dep=amod head=13 pos=ADJ orig=14
+  [ 283/416] Si vous avez le malheur d'y déjeuner lorsque lesDEBUG avec in funcs: True
+DEBUG nmod: pire idx=20 head=18
+  [ 284/416] Si vous souhaitez régaler "vos papilles" n'hésitDEBUG avec in funcs: True
+  [ 285/416] Son dirigeant est disponible et à l'écoute de seDEBUG avec in funcs: True
+DEBUG nmod: clients idx=11 head=8
+  [ 286/416] Temps d'attente un peu long mais peut-être qu'avDEBUG avec in funcs: True
+DEBUG nmod: attente idx=3 head=0
+DEBUG reattach: long head 0→3
+DEBUG skip amod: nouveaux dep=amod head=13 pos=ADJ orig=12
+DEBUG avec final: role=comitative bm=ni dep=case
+  [ 287/416] Trop cher, il y a des pizzeria meilleure et moinDEBUG avec in funcs: True
+  [ 288/416] Un endroit simple, propre et bien entretenu, uneDEBUG avec in funcs: True
+DEBUG nmod: vacances idx=18 head=14
+DEBUG skip amod: simple dep=amod head=1 pos=ADJ orig=2
+DEBUG skip amod: sympa dep=amod head=10 pos=ADJ orig=11
+DEBUG skip prenominal: idéal idx=15 ≤ nmod idx=18
+DEBUG nmod: famille idx=20 head=18
+DEBUG skip amod: simple dep=amod head=1 pos=ADJ orig=2
+DEBUG skip amod: sympa dep=amod head=10 pos=ADJ orig=11
+DEBUG skip amod: idéal dep=amod head=14 pos=ADJ orig=15
+  [ 289/416] Voila, j'espère que ce commentaire pourra prouveDEBUG avec in funcs: True
+  [ 290/416] Vous repartirez très déçu...                    DEBUG avec in funcs: True
+  [ 291/416] j'ai appelé, croyant dans ma grande naîveté qu'uDEBUG avec in funcs: True
+  [ 292/416] j'ai eu besoin de faire rénover mes serrures à lDEBUG avec in funcs: True
+DEBUG nmod: Dépannage idx=22 head=21
+DEBUG skip amod: particulier dep=amod head=14 pos=ADJ orig=15
+  [ 293/416] je ne vais rien oublier de cette soirée au MH.  DEBUG avec in funcs: True
+  [ 294/416] plus de 80 euros 2 menus à pas cher deux kirs unDEBUG avec in funcs: True
+DEBUG nmod: bouteille idx=12 head=10
+  [ 295/416] pour mettre aux normes l'installation électriqueDEBUG avec in funcs: True
+DEBUG nmod: appart idx=10 head=6
+DEBUG skip prenominal: électrique idx=7 ≤ nmod idx=10
+  [ 296/416] très bon accueil les chambres sont très agréableDEBUG avec in funcs: True
+DEBUG nmod: qualité idx=12 head=11
+DEBUG skip amod: bon dep=amod head=2 pos=ADJ orig=1
+DEBUG skip prenominal: bon idx=10 ≤ nmod idx=12
+DEBUG nmod: prix idx=13 head=11
+DEBUG skip amod: bon dep=amod head=2 pos=ADJ orig=1
+DEBUG skip prenominal: bon idx=10 ≤ nmod idx=13
+  [ 297/416] un café 17 euros !                              DEBUG avec in funcs: True
+DEBUG nmod: euros idx=3 head=1
+  [ 298/416] Ça donne le goût d'avoir une "bedaine"..        DEBUG avec in funcs: True
+  [ 299/416] Il a notamment gagné une étape du Tour d'Italie DEBUG avec in funcs: True
+DEBUG nmod: Tour idx=7 head=5
+DEBUG skip amod: même dep=amod head=30 pos=ADJ orig=29
+  [ 300/416] Les autres principaux représentants de ce mouvemDEBUG avec in funcs: True
+DEBUG nmod: mouvement idx=6 head=3
+DEBUG skip prenominal: autres idx=1 ≤ nmod idx=6
+DEBUG skip prenominal: principaux idx=2 ≤ nmod idx=6
+  [ 301/416] Bud Collyer est un acteur américain né le 18 juiDEBUG avec in funcs: True
+DEBUG nmod: juin idx=9 head=8
+DEBUG skip amod: américain dep=amod head=4 pos=ADJ orig=5
+DEBUG nmod: septembre idx=24 head=23
+DEBUG skip amod: américain dep=amod head=4 pos=ADJ orig=5
+  [ 302/416] La colonisation d'un territoire immense à partirDEBUG avec in funcs: True
+DEBUG nmod: territoire idx=5 head=1
+DEBUG skip amod: immense dep=amod head=5 pos=ADJ orig=6
+  [ 303/416] RADSL signifie « Rate-Adaptive Digital SubscribeDEBUG avec in funcs: True
+DEBUG nmod: abonné idx=18 head=15
+DEBUG skip amod: numérique dep=amod head=18 pos=ADJ orig=19
+DEBUG skip amod: adaptable dep=amod head=21 pos=ADJ orig=22
+DEBUG nmod: débit idx=21 head=15
+DEBUG skip amod: numérique dep=amod head=18 pos=ADJ orig=19
+DEBUG skip amod: adaptable dep=amod head=21 pos=ADJ orig=22
+  [ 304/416] Dans cette même perspective et pour accélérer laDEBUG avec in funcs: True
+DEBUG nmod: connaissances idx=10 head=8
+DEBUG skip amod: même dep=amod head=3 pos=ADJ orig=2
+DEBUG skip amod: publics dep=amod head=16 pos=ADJ orig=17
+DEBUG skip amod: ivoiriens dep=amod head=16 pos=ADJ orig=18
+DEBUG skip amod: éducative dep=amod head=26 pos=ADJ orig=27
+DEBUG skip amod: primaire dep=amod head=31 pos=ADJ orig=32
+DEBUG nmod: pays idx=13 head=8
+DEBUG skip amod: même dep=amod head=3 pos=ADJ orig=2
+DEBUG skip amod: publics dep=amod head=16 pos=ADJ orig=17
+DEBUG skip amod: ivoiriens dep=amod head=16 pos=ADJ orig=18
+DEBUG skip amod: éducative dep=amod head=26 pos=ADJ orig=27
+DEBUG skip amod: primaire dep=amod head=31 pos=ADJ orig=32
+  [ 305/416] Les produits échangés sont essentiellement du seDEBUG avec in funcs: True
+  [ 306/416] Cet article décrit les critères administratifs pDEBUG avec in funcs: True
+  [ 307/416] Cela fut nécessaire jusqu'à l'arrivée de l'Open DEBUG avec in funcs: True
+  [ 308/416] Le 6 mai 2011, il met un terme à sa carrière spoDEBUG avec in funcs: True
+DEBUG nmod: mai idx=2 head=1
+DEBUG skip amod: sportive dep=amod head=11 pos=ADJ orig=12
+  [ 309/416] Aller dans ce restaurant est tout simplement un DEBUG avec in funcs: True
+  [ 310/416] Chen Xitong (né en juin 1930 dans le disctict d'DEBUG avec in funcs: True
+DEBUG nmod: République idx=22 head=18
+DEBUG skip prenominal: politique idx=19 ≤ nmod idx=22
+DEBUG skip amod: populaire dep=amod head=22 pos=ADJ orig=23
+DEBUG skip amod: hauts dep=amod head=34 pos=ADJ orig=33
+DEBUG skip amod: communiste dep=amod head=36 pos=ADJ orig=37
+DEBUG skip amod: chinois dep=amod head=36 pos=ADJ orig=38
+DEBUG nmod: dirigeants idx=34 head=31
+DEBUG skip amod: politique dep=amod head=18 pos=ADJ orig=19
+DEBUG skip amod: populaire dep=amod head=22 pos=ADJ orig=23
+DEBUG skip amod: hauts dep=amod head=34 pos=ADJ orig=33
+DEBUG skip amod: communiste dep=amod head=36 pos=ADJ orig=37
+DEBUG skip amod: chinois dep=amod head=36 pos=ADJ orig=38
+DEBUG nmod: Parti idx=36 head=34
+DEBUG skip amod: politique dep=amod head=18 pos=ADJ orig=19
+DEBUG skip amod: populaire dep=amod head=22 pos=ADJ orig=23
+DEBUG skip prenominal: hauts idx=33 ≤ nmod idx=36
+DEBUG skip amod: communiste dep=amod head=36 pos=ADJ orig=37
+DEBUG skip amod: chinois dep=amod head=36 pos=ADJ orig=38
+  [ 311/416] Vedel fut consulté à de nombreuses reprises par DEBUG avec in funcs: True
+DEBUG nmod: obédience idx=22 head=9
+DEBUG skip amod: nombreuses dep=amod head=6 pos=ADJ orig=5
+DEBUG skip prenominal: français idx=10 ≤ nmod idx=22
+DEBUG skip amod: certain dep=amod head=28 pos=ADJ orig=27
+DEBUG skip amod: étrangers dep=amod head=30 pos=ADJ orig=31
+DEBUG nmod: gouvernements idx=30 head=28
+DEBUG skip amod: nombreuses dep=amod head=6 pos=ADJ orig=5
+DEBUG skip amod: français dep=amod head=9 pos=ADJ orig=10
+DEBUG skip prenominal: certain idx=27 ≤ nmod idx=30
+DEBUG skip amod: étrangers dep=amod head=30 pos=ADJ orig=31
+  [ 312/416] Un taux de zéro n'exclut pas des changements impDEBUG avec in funcs: True
+DEBUG nmod: distribution idx=12 head=8
+DEBUG skip prenominal: importants idx=9 ≤ nmod idx=12
+DEBUG nmod: âges idx=14 head=12
+DEBUG skip amod: importants dep=amod head=8 pos=ADJ orig=9
+DEBUG nmod: natalité idx=22 head=20
+DEBUG skip amod: importants dep=amod head=8 pos=ADJ orig=9
+  [ 313/416] Les étoiles fixes reposaient sur la sphère la plDEBUG avec in funcs: True
+DEBUG nmod: fixes idx=15 head=13
+DEBUG skip amod: fixes dep=amod head=1 pos=ADJ orig=2
+DEBUG skip amod: extérieure dep=amod head=6 pos=ADJ orig=9
+  [ 314/416] On décide d'abandonner les matériaux coûteux, coDEBUG avec in funcs: True
+DEBUG nmod: magnésium idx=11 head=6
+DEBUG skip prenominal: coûteux idx=7 ≤ nmod idx=11
+  [ 315/416] La station a été lancée le 7 septembre 1986 au cDEBUG avec in funcs: True
+DEBUG nmod: septembre idx=7 head=6
+  [ 316/416] Elle a été impliquée dans plusieurs accidents aéDEBUG avec in funcs: True
+  [ 317/416] Il s'agit donc d'un thyréophore basal, proche deDEBUG avec in funcs: True
+  [ 318/416] La ligne Wallace, qui passe entre les îles de BoDEBUG avec in funcs: True
+  [ 319/416] Un homme avec un téléphone sans fil à la main esDEBUG avec in funcs: True
+DEBUG nmod: téléphone idx=4 head=1
+DEBUG nmod: fil idx=6 head=4
+DEBUG nmod: main idx=9 head=4
+DEBUG avec final: role=comitative bm=ni dep=case
+  [ 320/416] Eglise Saint Denis (XIIIe, XIVe, XVIe, XVIIIe siDEBUG avec in funcs: True
+DEBUG nmod: siècles idx=11 head=0
+DEBUG skip amod: XIIIe dep=amod head=11 pos=ADJ orig=4
+DEBUG skip amod: XVIIIe dep=amod head=11 pos=ADJ orig=10
+  [ 321/416] Latour se tourne ensuite vers des travaux plus tDEBUG avec in funcs: True
+  [ 322/416] Tam joue depuis la saison 2007-2008 avec les RemDEBUG avec in funcs: True
+DEBUG nmod: 2007 idx=5 head=4
+DEBUG skip amod: junior dep=amod head=15 pos=ADJ orig=18
+DEBUG skip amod: majeur dep=amod head=15 pos=ADJ orig=19
+DEBUG nmod: - idx=6 head=4
+DEBUG skip amod: junior dep=amod head=15 pos=ADJ orig=18
+DEBUG skip amod: majeur dep=amod head=15 pos=ADJ orig=19
+DEBUG nmod: 2008 idx=7 head=4
+DEBUG skip amod: junior dep=amod head=15 pos=ADJ orig=18
+DEBUG skip amod: majeur dep=amod head=15 pos=ADJ orig=19
+DEBUG nmod: Ligue idx=15 head=10
+DEBUG skip amod: junior dep=amod head=15 pos=ADJ orig=18
+DEBUG skip amod: majeur dep=amod head=15 pos=ADJ orig=19
+DEBUG nmod: hockey idx=17 head=15
+DEBUG reattach: junior head 15→17
+DEBUG reattach: majeur head 15→17
+DEBUG avec final: role=comitative bm=ni dep=case
+  [ 323/416] L'association des producteurs de fruits de SaverDEBUG avec in funcs: True
+DEBUG nmod: producteurs idx=4 head=2
+DEBUG skip amod: fruitiers dep=amod head=18 pos=ADJ orig=19
+DEBUG nmod: fruits idx=6 head=4
+DEBUG skip amod: fruitiers dep=amod head=18 pos=ADJ orig=19
+DEBUG nmod: taille idx=15 head=13
+DEBUG skip amod: fruitiers dep=amod head=18 pos=ADJ orig=19
+DEBUG nmod: arbres idx=18 head=15
+DEBUG skip amod: fruitiers dep=amod head=18 pos=ADJ orig=19
+  [ 324/416] Si l'organisation est libre, Mgr Lebrun insiste DEBUG avec in funcs: True
+DEBUG nmod: Parole idx=19 head=16
+DEBUG avec final: role=comitative bm=ni dep=case
+  [ 325/416] On peut arriver à Verrès aussi par la route natiDEBUG avec in funcs: True
+DEBUG nmod: Vallée idx=13 head=8
+DEBUG skip prenominal: nationale idx=9 ≤ nmod idx=13
+DEBUG nmod: col idx=19 head=8
+DEBUG skip prenominal: nationale idx=9 ≤ nmod idx=19
+  [ 326/416] Si, ce qui est probable, le Premier ministre greDEBUG avec in funcs: True
+DEBUG nmod: décision idx=16 head=13
+DEBUG skip amod: Premier dep=amod head=9 pos=ADJ orig=8
+DEBUG skip amod: grec dep=amod head=9 pos=ADJ orig=10
+DEBUG skip amod: financier dep=amod head=25 pos=ADJ orig=26
+DEBUG skip amod: européen dep=amod head=25 pos=ADJ orig=27
+DEBUG nmod: sauvetage idx=25 head=23
+DEBUG skip amod: Premier dep=amod head=9 pos=ADJ orig=8
+DEBUG skip amod: grec dep=amod head=9 pos=ADJ orig=10
+DEBUG skip amod: financier dep=amod head=25 pos=ADJ orig=26
+DEBUG skip amod: européen dep=amod head=25 pos=ADJ orig=27
+DEBUG nmod: pays idx=33 head=30
+DEBUG skip amod: Premier dep=amod head=9 pos=ADJ orig=8
+DEBUG skip amod: grec dep=amod head=9 pos=ADJ orig=10
+DEBUG skip amod: financier dep=amod head=25 pos=ADJ orig=26
+DEBUG skip amod: européen dep=amod head=25 pos=ADJ orig=27
+DEBUG nmod: zone idx=36 head=30
+DEBUG skip amod: Premier dep=amod head=9 pos=ADJ orig=8
+DEBUG skip amod: grec dep=amod head=9 pos=ADJ orig=10
+DEBUG skip amod: financier dep=amod head=25 pos=ADJ orig=26
+DEBUG skip amod: européen dep=amod head=25 pos=ADJ orig=27
+DEBUG nmod: Euro idx=37 head=36
+DEBUG skip amod: Premier dep=amod head=9 pos=ADJ orig=8
+DEBUG skip amod: grec dep=amod head=9 pos=ADJ orig=10
+DEBUG skip amod: financier dep=amod head=25 pos=ADJ orig=26
+DEBUG skip amod: européen dep=amod head=25 pos=ADJ orig=27
+DEBUG nmod: effet idx=44 head=49
+DEBUG skip amod: Premier dep=amod head=9 pos=ADJ orig=8
+DEBUG skip amod: grec dep=amod head=9 pos=ADJ orig=10
+DEBUG skip amod: financier dep=amod head=25 pos=ADJ orig=26
+DEBUG skip amod: européen dep=amod head=25 pos=ADJ orig=27
+  [ 327/416] Le conseil général du Haut-Rhin lui a confié la DEBUG avec in funcs: True
+DEBUG nmod: signalisation idx=12 head=9
+DEBUG skip amod: général dep=amod head=1 pos=ADJ orig=2
+  [ 328/416] Simon Kessler (né le 14 mars 1975 à JohannesburgDEBUG avec in funcs: True
+DEBUG nmod: mars idx=6 head=5
+DEBUG skip amod: cycliste dep=amod head=13 pos=ADJ orig=14
+DEBUG skip amod: professionnel dep=amod head=13 pos=ADJ orig=15
+DEBUG skip amod: sud-africain dep=amod head=13 pos=ADJ orig=16
+  [ 329/416] "St. Anger" est le premier single du 8ème album DEBUG avec in funcs: True
+DEBUG nmod: album idx=10 head=7
+DEBUG skip prenominal: premier idx=6 ≤ nmod idx=10
+DEBUG skip amod: 8ème dep=amod head=10 pos=ADJ orig=9
+DEBUG skip amod: studio dep=amod head=10 pos=ADJ orig=11
+DEBUG skip amod: même dep=amod head=16 pos=ADJ orig=15
+DEBUG nmod: nom idx=16 head=10
+DEBUG skip amod: premier dep=amod head=7 pos=ADJ orig=6
+DEBUG skip prenominal: 8ème idx=9 ≤ nmod idx=16
+DEBUG skip prenominal: studio idx=11 ≤ nmod idx=16
+DEBUG skip amod: même dep=amod head=16 pos=ADJ orig=15
+  [ 330/416] Idem pour l'achèvement de l'autoroute Est-Ouest DEBUG avec in funcs: True
+DEBUG nmod: autoroute idx=8 head=4
+DEBUG nmod: Est-Ouest idx=9 head=8
+  [ 331/416] Au milieu du VIIIe siècle, un prédicateur de BasDEBUG avec in funcs: True
+DEBUG nmod: siècle idx=4 head=1
+DEBUG skip amod: VIIIe dep=amod head=4 pos=ADJ orig=3
+  [ 332/416] Pour Pokémon, il en faut exactement 60.         DEBUG avec in funcs: True
+  [ 333/416] Son coût (en investissements seulement) est chifDEBUG avec in funcs: True
+DEBUG nmod: investissements idx=4 head=1
+DEBUG nmod: euros idx=14 head=11
+  [ 334/416] Retrouvez également des sondages, des vidéos et DEBUG avec in funcs: True
+DEBUG nmod: people idx=11 head=3
+DEBUG skip amod: préférés dep=amod head=11 pos=ADJ orig=12
+  [ 335/416] La pratique combinée de ces trois points a pour DEBUG avec in funcs: True
+DEBUG nmod: points idx=6 head=1
+DEBUG nmod: kleśa idx=17 head=14
+  [ 336/416] La pièce est retirée de l'affiche après 17 repréDEBUG avec in funcs: True
+  [ 337/416] En demi-finale, le Japonais Hidetoshi Nakata marDEBUG avec in funcs: True
+DEBUG nmod: match idx=12 head=10
+DEBUG skip prenominal: seul idx=9 ≤ nmod idx=12
+DEBUG skip amod: franc dep=amod head=19 pos=ADJ orig=20
+DEBUG nmod: mètres idx=23 head=19
+DEBUG skip amod: seul dep=amod head=10 pos=ADJ orig=9
+DEBUG skip prenominal: franc idx=20 ≤ nmod idx=23
+DEBUG nmod: terre idx=28 head=26
+DEBUG skip amod: seul dep=amod head=10 pos=ADJ orig=9
+DEBUG skip amod: franc dep=amod head=19 pos=ADJ orig=20
+  [ 338/416] Il écrit des articles libéraux en faveur de LafaDEBUG avec in funcs: True
+DEBUG nmod: faveur idx=6 head=3
+DEBUG skip prenominal: libéraux idx=4 ≤ nmod idx=6
+DEBUG skip amod: américaine dep=amod head=13 pos=ADJ orig=14
+DEBUG skip amod: encyclopédique dep=amod head=22 pos=ADJ orig=23
+DEBUG nmod: 1826 idx=16 head=13
+DEBUG skip amod: libéraux dep=amod head=3 pos=ADJ orig=4
+DEBUG skip prenominal: américaine idx=14 ≤ nmod idx=16
+DEBUG skip amod: encyclopédique dep=amod head=22 pos=ADJ orig=23
+DEBUG nmod: - idx=17 head=13
+DEBUG skip amod: libéraux dep=amod head=3 pos=ADJ orig=4
+DEBUG skip prenominal: américaine idx=14 ≤ nmod idx=17
+DEBUG skip amod: encyclopédique dep=amod head=22 pos=ADJ orig=23
+DEBUG nmod: 1827 idx=18 head=13
+DEBUG skip amod: libéraux dep=amod head=3 pos=ADJ orig=4
+DEBUG skip prenominal: américaine idx=14 ≤ nmod idx=18
+DEBUG skip amod: encyclopédique dep=amod head=22 pos=ADJ orig=23
+DEBUG nmod: février idx=25 head=22
+DEBUG skip amod: libéraux dep=amod head=3 pos=ADJ orig=4
+DEBUG skip amod: américaine dep=amod head=13 pos=ADJ orig=14
+DEBUG skip prenominal: encyclopédique idx=23 ≤ nmod idx=25
+  [ 339/416] Les armes de Grenoble sont d'or aux trois roses DEBUG avec in funcs: True
+DEBUG nmod: roses idx=10 head=7
+DEBUG nmod: gueules idx=12 head=10
+  [ 340/416] Les pierres de calcaire de la Champagne mancelleDEBUG avec in funcs: True
+DEBUG nmod: calcaire idx=3 head=1
+DEBUG skip amod: mancelle dep=amod head=6 pos=ADJ orig=7
+DEBUG skip amod: granitiques dep=amod head=10 pos=ADJ orig=11
+DEBUG skip amod: dures dep=amod head=10 pos=ADJ orig=13
+DEBUG skip amod: rougeâtres dep=amod head=10 pos=ADJ orig=17
+DEBUG skip amod: nécessaire dep=amod head=27 pos=ADJ orig=28
+DEBUG skip amod: sombre dep=amod head=36 pos=ADJ orig=37
+DEBUG nmod: environs idx=20 head=10
+DEBUG skip amod: mancelle dep=amod head=6 pos=ADJ orig=7
+DEBUG skip prenominal: granitiques idx=11 ≤ nmod idx=20
+DEBUG skip prenominal: dures idx=13 ≤ nmod idx=20
+DEBUG skip prenominal: rougeâtres idx=17 ≤ nmod idx=20
+DEBUG skip amod: nécessaire dep=amod head=27 pos=ADJ orig=28
+DEBUG skip amod: sombre dep=amod head=36 pos=ADJ orig=37
+DEBUG nmod: lieu idx=45 head=43
+DEBUG skip amod: mancelle dep=amod head=6 pos=ADJ orig=7
+DEBUG skip amod: granitiques dep=amod head=10 pos=ADJ orig=11
+DEBUG skip amod: dures dep=amod head=10 pos=ADJ orig=13
+DEBUG skip amod: rougeâtres dep=amod head=10 pos=ADJ orig=17
+DEBUG skip amod: nécessaire dep=amod head=27 pos=ADJ orig=28
+DEBUG skip amod: sombre dep=amod head=36 pos=ADJ orig=37
+  [ 341/416] En 1945, le destroyer de l'US Navy USS O'Hare (DDEBUG avec in funcs: True
+  [ 342/416] Il devient joueur autonome à l'automne.         DEBUG avec in funcs: True
+  [ 343/416] Saint Agile de Rebais, ou saint Aile, a été le pDEBUG avec in funcs: True
+DEBUG nmod: diocèse idx=18 head=13
+DEBUG skip prenominal: premier idx=12 ≤ nmod idx=18
+  [ 344/416] Le Marché commun du Golfe, devant déboucher versDEBUG avec in funcs: True
+DEBUG nmod: place idx=12 head=10
+DEBUG skip amod: commun dep=amod head=1 pos=ADJ orig=2
+DEBUG skip amod: commune dep=amod head=16 pos=ADJ orig=17
+DEBUG skip amod: future dep=amod head=47 pos=ADJ orig=46
+DEBUG skip amod: centrale dep=amod head=47 pos=ADJ orig=48
+DEBUG nmod: monnaie idx=16 head=10
+DEBUG skip amod: commun dep=amod head=1 pos=ADJ orig=2
+DEBUG skip amod: commune dep=amod head=16 pos=ADJ orig=17
+DEBUG skip amod: future dep=amod head=47 pos=ADJ orig=46
+DEBUG skip amod: centrale dep=amod head=47 pos=ADJ orig=48
+DEBUG nmod: raison idx=26 head=24
+DEBUG skip amod: commun dep=amod head=1 pos=ADJ orig=2
+DEBUG skip amod: commune dep=amod head=16 pos=ADJ orig=17
+DEBUG skip amod: future dep=amod head=47 pos=ADJ orig=46
+DEBUG skip amod: centrale dep=amod head=47 pos=ADJ orig=48
+DEBUG nmod: divergences idx=31 head=24
+DEBUG skip amod: commun dep=amod head=1 pos=ADJ orig=2
+DEBUG skip amod: commune dep=amod head=16 pos=ADJ orig=17
+DEBUG skip amod: future dep=amod head=47 pos=ADJ orig=46
+DEBUG skip amod: centrale dep=amod head=47 pos=ADJ orig=48
+DEBUG nmod: siège idx=43 head=41
+DEBUG skip amod: commun dep=amod head=1 pos=ADJ orig=2
+DEBUG skip amod: commune dep=amod head=16 pos=ADJ orig=17
+DEBUG skip amod: future dep=amod head=47 pos=ADJ orig=46
+DEBUG skip amod: centrale dep=amod head=47 pos=ADJ orig=48
+DEBUG nmod: Banque idx=47 head=43
+DEBUG skip amod: commun dep=amod head=1 pos=ADJ orig=2
+DEBUG skip amod: commune dep=amod head=16 pos=ADJ orig=17
+DEBUG skip amod: future dep=amod head=47 pos=ADJ orig=46
+DEBUG skip amod: centrale dep=amod head=47 pos=ADJ orig=48
+  [ 345/416] Ainsi, bien que TiVo réponde aux clauses de la GDEBUG avec in funcs: True
+DEBUG nmod: source idx=16 head=15
+DEBUG skip amod: source dep=amod head=23 pos=ADJ orig=24
+DEBUG nmod: code idx=23 head=20
+DEBUG skip amod: source dep=amod head=23 pos=ADJ orig=24
+  [ 346/416] En 1784 il fut anobli et s'appela désormais « voDEBUG avec in funcs: True
+  [ 347/416] Ainsi, le général français Philippe Morillon, quDEBUG avec in funcs: True
+⚠️  Ollama morphologique indisponible (réessai dans 60s)
+  [ 348/416] Le village de Saint-Léonard n'est desservie que DEBUG avec in funcs: True
+DEBUG nmod: RD idx=24 head=21
+DEBUG skip amod: communales dep=amod head=10 pos=ADJ orig=11
+  [ 349/416] Il a aussi écrit en vers le Tiếng địch sông Ô (LDEBUG avec in funcs: True
+DEBUG nmod: flute idx=17 head=13
+DEBUG skip amod: première dep=amod head=37 pos=ADJ orig=36
+DEBUG skip amod: municipal dep=amod head=47 pos=ADJ orig=48
+DEBUG skip amod: autres dep=amod head=56 pos=ADJ orig=55
+DEBUG skip amod: provincial dep=amod head=64 pos=ADJ orig=65
+DEBUG nmod: Rivière idx=20 head=17
+DEBUG skip amod: première dep=amod head=37 pos=ADJ orig=36
+DEBUG skip amod: municipal dep=amod head=47 pos=ADJ orig=48
+DEBUG skip amod: autres dep=amod head=56 pos=ADJ orig=55
+DEBUG skip amod: provincial dep=amod head=64 pos=ADJ orig=65
+DEBUG nmod: Ô idx=21 head=20
+DEBUG skip amod: première dep=amod head=37 pos=ADJ orig=36
+DEBUG skip amod: municipal dep=amod head=47 pos=ADJ orig=48
+DEBUG skip amod: autres dep=amod head=56 pos=ADJ orig=55
+DEBUG skip amod: provincial dep=amod head=64 pos=ADJ orig=65
+DEBUG nmod: soirées idx=40 head=37
+DEBUG skip prenominal: première idx=36 ≤ nmod idx=40
+DEBUG skip amod: municipal dep=amod head=47 pos=ADJ orig=48
+DEBUG skip amod: autres dep=amod head=56 pos=ADJ orig=55
+DEBUG skip amod: provincial dep=amod head=64 pos=ADJ orig=65
+DEBUG nmod: mai idx=44 head=40
+DEBUG skip amod: première dep=amod head=37 pos=ADJ orig=36
+DEBUG skip amod: municipal dep=amod head=47 pos=ADJ orig=48
+DEBUG skip amod: autres dep=amod head=56 pos=ADJ orig=55
+DEBUG skip amod: provincial dep=amod head=64 pos=ADJ orig=65
+DEBUG nmod: Théâtre idx=47 head=37
+DEBUG skip prenominal: première idx=36 ≤ nmod idx=47
+DEBUG skip amod: municipal dep=amod head=47 pos=ADJ orig=48
+DEBUG skip amod: autres dep=amod head=56 pos=ADJ orig=55
+DEBUG skip amod: provincial dep=amod head=64 pos=ADJ orig=65
+DEBUG nmod: mai idx=61 head=56
+DEBUG skip amod: première dep=amod head=37 pos=ADJ orig=36
+DEBUG skip amod: municipal dep=amod head=47 pos=ADJ orig=48
+DEBUG skip prenominal: autres idx=55 ≤ nmod idx=61
+DEBUG skip amod: provincial dep=amod head=64 pos=ADJ orig=65
+  [ 350/416] La première version de ce jeu, Crown 602 fabriquDEBUG avec in funcs: True
+DEBUG nmod: jeu idx=5 head=2
+DEBUG skip prenominal: première idx=1 ≤ nmod idx=5
+  [ 351/416] Il est fortement bridé sur la version routière, DEBUG avec in funcs: True
+DEBUG nmod: M3 idx=24 head=21
+DEBUG skip amod: routière dep=amod head=6 pos=ADJ orig=7
+DEBUG skip amod: flatteuses dep=amod head=16 pos=ADJ orig=19
+  [ 352/416] Il est souvent victime de petites arnaques de laDEBUG avec in funcs: True
+DEBUG nmod: part idx=9 head=3
+DEBUG skip amod: petites dep=amod head=6 pos=ADJ orig=5
+DEBUG nmod: équipe idx=13 head=9
+DEBUG skip amod: petites dep=amod head=6 pos=ADJ orig=5
+  [ 353/416] Son seul souvenir, c'est cette mélodie envoutantDEBUG avec in funcs: True
+  [ 354/416] Conséquence : la moitié des entreprises ayant obDEBUG avec in funcs: True
+DEBUG nmod: entreprises idx=5 head=3
+DEBUG nmod: cas idx=23 head=21
+  [ 355/416] Ainsi le mot populisme contient dans la définitiDEBUG avec in funcs: True
+DEBUG nmod: populisme idx=3 head=2
+DEBUG skip amod: tous dep=amod head=14 pos=ADJ orig=12
+DEBUG skip amod: tout dep=amod head=20 pos=ADJ orig=18
+DEBUG nmod: classe idx=16 head=14
+DEBUG skip prenominal: tous idx=12 ≤ nmod idx=16
+DEBUG skip amod: tout dep=amod head=20 pos=ADJ orig=18
+DEBUG nmod: peuple idx=23 head=20
+DEBUG skip amod: tous dep=amod head=14 pos=ADJ orig=12
+DEBUG skip prenominal: tout idx=18 ≤ nmod idx=23
+  [ 356/416] Le groupe est composé de Phil Hartley (chant), MDEBUG avec in funcs: True
+DEBUG nmod: chant idx=8 head=5
+DEBUG nmod: basse idx=14 head=11
+DEBUG nmod: guitare idx=20 head=17
+  [ 357/416] Le téléphone avait un défaut de fabrication et iDEBUG avec in funcs: True
+DEBUG nmod: fabrication idx=6 head=4
+  [ 358/416] Ce stage se déroule du lundi 4 au vendredi 8 juiDEBUG avec in funcs: True
+DEBUG nmod: vendredi idx=8 head=6
+DEBUG nmod: juillet idx=10 head=9
+  [ 359/416] Abraham est né à Dantzig, Allemagne (maintenant DEBUG avec in funcs: True
+DEBUG nmod: marchands idx=17 head=15
+DEBUG skip amod: juifs dep=amod head=17 pos=ADJ orig=18
+  [ 360/416] Il tente d'empêcher des chasseurs de trésor de sDEBUG avec in funcs: True
+DEBUG nmod: trésor idx=8 head=6
+  [ 361/416] Prédisant un duo avec le chanteur, le public s'aDEBUG avec in funcs: True
+DEBUG nmod: chanteur idx=5 head=2
+DEBUG skip amod: bouillonnant dep=amod head=14 pos=ADJ orig=15
+DEBUG skip amod: usuel dep=amod head=25 pos=ADJ orig=26
+DEBUG skip amod: autobiographique dep=amod head=29 pos=ADJ orig=30
+DEBUG nmod: chansons idx=29 head=25
+DEBUG skip amod: bouillonnant dep=amod head=14 pos=ADJ orig=15
+DEBUG skip prenominal: usuel idx=26 ≤ nmod idx=29
+DEBUG skip amod: autobiographique dep=amod head=29 pos=ADJ orig=30
+DEBUG avec final: role=comitative bm=ni dep=case
+  [ 362/416] Les Nations Unies mènent une campagne mondiale «DEBUG avec in funcs: True
+  [ 363/416] On possède un grand nombre d'attestations ancienDEBUG avec in funcs: True
+DEBUG nmod: attestations idx=7 head=4
+DEBUG skip prenominal: grand idx=3 ≤ nmod idx=7
+DEBUG skip amod: anciennes dep=amod head=7 pos=ADJ orig=8
+DEBUG nmod: nom idx=10 head=7
+DEBUG skip amod: grand dep=amod head=4 pos=ADJ orig=3
+DEBUG skip prenominal: anciennes idx=8 ≤ nmod idx=10
+  [ 364/416] Il est servi dans un pot en verre, contenant uneDEBUG avec in funcs: True
+DEBUG nmod: verre idx=7 head=5
+DEBUG skip amod: rose dep=amod head=16 pos=ADJ orig=17
+DEBUG skip amod: chantilly dep=amod head=31 pos=ADJ orig=32
+  [ 365/416] Le chef a ramené de ses années au Japon une cuisDEBUG avec in funcs: True
+DEBUG nmod: qualité idx=20 head=18
+DEBUG skip amod: audacieuse dep=amod head=10 pos=ADJ orig=12
+DEBUG nmod: esbroufe idx=23 head=18
+DEBUG skip amod: audacieuse dep=amod head=10 pos=ADJ orig=12
+  [ 366/416] Les activités de protestation ont été conduites DEBUG avec in funcs: True
+DEBUG nmod: protestation idx=3 head=1
+DEBUG skip amod: nucléaires dep=amod head=15 pos=ADJ orig=16
+DEBUG nmod: mouvement idx=12 head=10
+DEBUG skip amod: nucléaires dep=amod head=15 pos=ADJ orig=16
+DEBUG nmod: centrales idx=15 head=10
+DEBUG skip amod: nucléaires dep=amod head=15 pos=ADJ orig=16
+  [ 367/416] Le dessous des ailes varie du blanc au gris seloDEBUG avec in funcs: True
+DEBUG nmod: ailes idx=3 head=1
+  [ 368/416] Elle a été découverte à 1000 m d'altitude dans lDEBUG avec in funcs: True
+DEBUG nmod: altitude idx=9 head=6
+DEBUG nmod: Cardamomes idx=14 head=12
+  [ 369/416] Le coureur de l'équipe BBox Bouygues Telecom DamDEBUG avec in funcs: True
+DEBUG nmod: équipe idx=5 head=1
+DEBUG nmod: championnats idx=20 head=17
+  [ 370/416] De nombreux gouvernements et associations des drDEBUG avec in funcs: True
+DEBUG nmod: droits idx=6 head=2
+DEBUG skip prenominal: nombreux idx=1 ≤ nmod idx=6
+DEBUG skip amod: international dep=amod head=13 pos=ADJ orig=14
+DEBUG skip amod: spéciale dep=amod head=24 pos=ADJ orig=25
+DEBUG skip amod: occidental dep=amod head=43 pos=ADJ orig=44
+DEBUG nmod: Homme idx=10 head=6
+DEBUG skip amod: nombreux dep=amod head=2 pos=ADJ orig=1
+DEBUG skip amod: international dep=amod head=13 pos=ADJ orig=14
+DEBUG skip amod: spéciale dep=amod head=24 pos=ADJ orig=25
+DEBUG skip amod: occidental dep=amod head=43 pos=ADJ orig=44
+DEBUG nmod: mandat idx=21 head=19
+DEBUG skip amod: nombreux dep=amod head=2 pos=ADJ orig=1
+DEBUG skip amod: international dep=amod head=13 pos=ADJ orig=14
+DEBUG skip amod: spéciale dep=amod head=24 pos=ADJ orig=25
+DEBUG skip amod: occidental dep=amod head=43 pos=ADJ orig=44
+DEBUG nmod: Mission idx=24 head=21
+DEBUG skip amod: nombreux dep=amod head=2 pos=ADJ orig=1
+DEBUG skip amod: international dep=amod head=13 pos=ADJ orig=14
+DEBUG skip amod: spéciale dep=amod head=24 pos=ADJ orig=25
+DEBUG skip amod: occidental dep=amod head=43 pos=ADJ orig=44
+DEBUG nmod: protection idx=35 head=19
+DEBUG skip amod: nombreux dep=amod head=2 pos=ADJ orig=1
+DEBUG skip amod: international dep=amod head=13 pos=ADJ orig=14
+DEBUG skip amod: spéciale dep=amod head=24 pos=ADJ orig=25
+DEBUG skip amod: occidental dep=amod head=43 pos=ADJ orig=44
+DEBUG nmod: droits idx=37 head=35
+DEBUG skip amod: nombreux dep=amod head=2 pos=ADJ orig=1
+DEBUG skip amod: international dep=amod head=13 pos=ADJ orig=14
+DEBUG skip amod: spéciale dep=amod head=24 pos=ADJ orig=25
+DEBUG skip amod: occidental dep=amod head=43 pos=ADJ orig=44
+DEBUG nmod: Homme idx=41 head=37
+DEBUG skip amod: nombreux dep=amod head=2 pos=ADJ orig=1
+DEBUG skip amod: international dep=amod head=13 pos=ADJ orig=14
+DEBUG skip amod: spéciale dep=amod head=24 pos=ADJ orig=25
+DEBUG skip amod: occidental dep=amod head=43 pos=ADJ orig=44
+  [ 371/416] Le français est utilisé au travail par 50,8% desDEBUG avec in funcs: True
+DEBUG nmod: travailleurs idx=10 head=8
+DEBUG skip amod: officielles dep=amod head=27 pos=ADJ orig=28
+DEBUG nmod: travailleurs idx=23 head=21
+DEBUG skip amod: officielles dep=amod head=27 pos=ADJ orig=28
+  [ 372/416] L'Académie Équestre a été dans la sélection de 2DEBUG avec in funcs: True
+DEBUG nmod: Monde idx=16 head=14
+DEBUG skip amod: Équestre dep=amod head=2 pos=ADJ orig=3
+DEBUG nmod: Voltige idx=18 head=14
+DEBUG skip amod: Équestre dep=amod head=2 pos=ADJ orig=3
+  [ 373/416] Candidat malheureux à l'élection présidentielle DEBUG avec in funcs: True
+DEBUG nmod: élection idx=5 head=0
+DEBUG skip prenominal: malheureux idx=1 ≤ nmod idx=5
+DEBUG skip amod: présidentielle dep=amod head=5 pos=ADJ orig=6
+DEBUG skip amod: parlementaire dep=amod head=39 pos=ADJ orig=40
+DEBUG nmod: août idx=9 head=5
+DEBUG skip amod: malheureux dep=amod head=0 pos=ADJ orig=1
+DEBUG skip prenominal: présidentielle idx=6 ≤ nmod idx=9
+DEBUG skip amod: parlementaire dep=amod head=39 pos=ADJ orig=40
+DEBUG nmod: République idx=20 head=17
+DEBUG skip amod: malheureux dep=amod head=0 pos=ADJ orig=1
+DEBUG skip amod: présidentielle dep=amod head=5 pos=ADJ orig=6
+DEBUG skip amod: parlementaire dep=amod head=39 pos=ADJ orig=40
+DEBUG nmod: décembre idx=23 head=22
+DEBUG skip amod: malheureux dep=amod head=0 pos=ADJ orig=1
+DEBUG skip amod: présidentielle dep=amod head=5 pos=ADJ orig=6
+DEBUG skip amod: parlementaire dep=amod head=39 pos=ADJ orig=40
+DEBUG nmod: censure idx=39 head=37
+DEBUG skip amod: malheureux dep=amod head=0 pos=ADJ orig=1
+DEBUG skip amod: présidentielle dep=amod head=5 pos=ADJ orig=6
+DEBUG skip amod: parlementaire dep=amod head=39 pos=ADJ orig=40
+  [ 374/416] Ils n'avaient pas de casquettes et leurs cheveuxDEBUG avec in funcs: True
+  [ 375/416] En outre, il a été décidé de faire Freddy un pédDEBUG avec in funcs: True
+DEBUG nmod: milieu idx=17 head=14
+DEBUG skip amod: traditionnel dep=amod head=17 pos=ADJ orig=18
+DEBUG nmod: tueur idx=22 head=17
+DEBUG skip prenominal: traditionnel idx=18 ≤ nmod idx=22
+DEBUG nmod: enfants idx=25 head=22
+DEBUG skip amod: traditionnel dep=amod head=17 pos=ADJ orig=18
+  [ 376/416] Lorsqu'on y réfléchit, jamais Jean Paul II n'a aDEBUG avec in funcs: True
+DEBUG nmod: liberté idx=18 head=15
+DEBUG nmod: conscience idx=20 head=18
+  [ 377/416] Ce cabinet d'ostéopathie est vraiment très bien.DEBUG avec in funcs: True
+DEBUG nmod: ostéopathie idx=4 head=1
+  [ 378/416] Elle est organisée par "Poesia-2 Ottobre", une aDEBUG avec in funcs: True
+DEBUG nmod: but idx=12 head=10
+DEBUG skip amod: lucratif dep=amod head=12 pos=ADJ orig=14
+DEBUG skip amod: privilégié dep=amod head=25 pos=ADJ orig=26
+DEBUG skip amod: interculturel dep=amod head=28 pos=ADJ orig=29
+DEBUG skip amod: humanistes dep=amod head=34 pos=ADJ orig=35
+DEBUG nmod: poésie idx=21 head=18
+DEBUG skip amod: lucratif dep=amod head=12 pos=ADJ orig=14
+DEBUG skip amod: privilégié dep=amod head=25 pos=ADJ orig=26
+DEBUG skip amod: interculturel dep=amod head=28 pos=ADJ orig=29
+DEBUG skip amod: humanistes dep=amod head=34 pos=ADJ orig=35
+DEBUG nmod: dialogue idx=28 head=25
+DEBUG skip amod: lucratif dep=amod head=12 pos=ADJ orig=14
+DEBUG skip prenominal: privilégié idx=26 ≤ nmod idx=28
+DEBUG skip amod: interculturel dep=amod head=28 pos=ADJ orig=29
+DEBUG skip amod: humanistes dep=amod head=34 pos=ADJ orig=35
+DEBUG nmod: valeurs idx=34 head=32
+DEBUG skip amod: lucratif dep=amod head=12 pos=ADJ orig=14
+DEBUG skip amod: privilégié dep=amod head=25 pos=ADJ orig=26
+DEBUG skip amod: interculturel dep=amod head=28 pos=ADJ orig=29
+DEBUG skip amod: humanistes dep=amod head=34 pos=ADJ orig=35
+  [ 379/416] Elle n'est pas très douée pour montrer ses émotiDEBUG avec in funcs: True
+  [ 380/416] Leland Stanford posa un clou d'or (le Golden SpiDEBUG avec in funcs: True
+DEBUG nmod: or idx=7 head=4
+DEBUG skip amod: premier dep=amod head=20 pos=ADJ orig=19
+DEBUG nmod: transcontinental idx=20 head=17
+DEBUG skip amod: premier dep=amod head=20 pos=ADJ orig=19
+DEBUG nmod: université idx=31 head=27
+DEBUG skip amod: premier dep=amod head=20 pos=ADJ orig=19
+  [ 381/416] Mais l'eau elle-même, est un bien commun qui ne DEBUG avec in funcs: True
+  [ 382/416] La fraise de Cachoubie est réputée plus savoureuDEBUG avec in funcs: True
+  [ 383/416] Dans les facultés de pharmacie, les assistants éDEBUG avec in funcs: True
+DEBUG nmod: pharmacie idx=4 head=2
+DEBUG nmod: stage idx=17 head=15
+DEBUG nmod: ans idx=20 head=15
+  [ 384/416] Han s'engage finalement dans la bataille, couvreDEBUG avec in funcs: True
+  [ 385/416] Quelques années plus tard, il préconise d'appeleDEBUG avec in funcs: True
+DEBUG nmod: ballet idx=14 head=12
+DEBUG nmod: chorégraphie idx=23 head=22
+  [ 386/416] « Le ministère de l'Intérieur affirme que des meDEBUG avec in funcs: True
+DEBUG nmod: Intérieur idx=6 head=2
+DEBUG skip amod: décisives dep=amod head=10 pos=ADJ orig=11
+DEBUG skip amod: telles dep=amod head=20 pos=DET orig=19
+DEBUG nmod: loi idx=26 head=23
+DEBUG skip amod: décisives dep=amod head=10 pos=ADJ orig=11
+DEBUG skip amod: telles dep=amod head=20 pos=DET orig=19
+DEBUG avec final: role=comitative bm=ni dep=case
+  [ 387/416] Le récit dans lequel John explique certaines desDEBUG avec in funcs: True
+DEBUG nmod: transformations idx=8 head=6
+DEBUG skip amod: similaire dep=amod head=44 pos=ADJ orig=45
+DEBUG skip amod: réalisable dep=amod head=69 pos=ADJ orig=70
+DEBUG nmod: au-delà idx=60 head=56
+DEBUG skip amod: similaire dep=amod head=44 pos=ADJ orig=45
+DEBUG skip amod: réalisable dep=amod head=69 pos=ADJ orig=70
+  [ 388/416] En effet, dans le cadre de la théorie néoclassiqDEBUG avec in funcs: True
+DEBUG nmod: théorie idx=8 head=5
+DEBUG skip amod: néoclassique dep=amod head=8 pos=ADJ orig=9
+DEBUG skip amod: économique dep=amod head=13 pos=ADJ orig=14
+DEBUG nmod: consommation idx=30 head=28
+DEBUG skip amod: néoclassique dep=amod head=8 pos=ADJ orig=9
+DEBUG skip amod: économique dep=amod head=13 pos=ADJ orig=14
+DEBUG nmod: intérêt idx=55 head=52
+DEBUG skip amod: néoclassique dep=amod head=8 pos=ADJ orig=9
+DEBUG skip amod: économique dep=amod head=13 pos=ADJ orig=14
+  [ 389/416] Le fonctionnement de la famille immigrée et les DEBUG avec in funcs: True
+DEBUG nmod: famille idx=4 head=1
+DEBUG skip amod: existantes dep=amod head=8 pos=ADJ orig=9
+DEBUG skip amod: mémoriels dep=amod head=30 pos=ADJ orig=31
+DEBUG skip amod: originales dep=amod head=30 pos=ADJ orig=32
+DEBUG nmod: parents idx=12 head=8
+DEBUG skip prenominal: existantes idx=9 ≤ nmod idx=12
+DEBUG skip amod: mémoriels dep=amod head=30 pos=ADJ orig=31
+DEBUG skip amod: originales dep=amod head=30 pos=ADJ orig=32
+DEBUG nmod: mémoire idx=16 head=14
+DEBUG skip amod: existantes dep=amod head=8 pos=ADJ orig=9
+DEBUG skip amod: mémoriels dep=amod head=30 pos=ADJ orig=31
+DEBUG skip amod: originales dep=amod head=30 pos=ADJ orig=32
+DEBUG nmod: transferts idx=30 head=28
+DEBUG skip amod: existantes dep=amod head=8 pos=ADJ orig=9
+DEBUG skip amod: mémoriels dep=amod head=30 pos=ADJ orig=31
+DEBUG skip amod: originales dep=amod head=30 pos=ADJ orig=32
+  [ 390/416] Il est l'ancien directeur de l'hebdomadaire franDEBUG avec in funcs: True
+DEBUG nmod: hebdomadaire idx=9 head=5
+DEBUG skip prenominal: ancien idx=4 ≤ nmod idx=9
+DEBUG skip amod: francophone dep=amod head=9 pos=ADJ orig=10
+DEBUG skip amod: Hebdomadaire dep=amod head=12 pos=ADJ orig=13
+DEBUG skip amod: arabophone dep=amod head=16 pos=ADJ orig=17
+DEBUG nmod: Journal idx=12 head=9
+DEBUG skip amod: ancien dep=amod head=5 pos=ADJ orig=4
+DEBUG skip prenominal: francophone idx=10 ≤ nmod idx=12
+DEBUG skip amod: Hebdomadaire dep=amod head=12 pos=ADJ orig=13
+DEBUG skip amod: arabophone dep=amod head=16 pos=ADJ orig=17
+  [ 391/416] En 1992, ils sont éliminés par le club congolaisDEBUG avec in funcs: True
+DEBUG nmod: 2 idx=21 head=20
+DEBUG skip amod: congolais dep=amod head=8 pos=ADJ orig=9
+DEBUG skip amod: premier dep=amod head=17 pos=ADJ orig=16
+DEBUG nmod: 1 idx=23 head=21
+DEBUG skip amod: congolais dep=amod head=8 pos=ADJ orig=9
+DEBUG skip amod: premier dep=amod head=17 pos=ADJ orig=16
+DEBUG nmod: - idx=24 head=23
+DEBUG skip amod: congolais dep=amod head=8 pos=ADJ orig=9
+DEBUG skip amod: premier dep=amod head=17 pos=ADJ orig=16
+DEBUG nmod: 0 idx=25 head=24
+DEBUG skip amod: congolais dep=amod head=8 pos=ADJ orig=9
+DEBUG skip amod: premier dep=amod head=17 pos=ADJ orig=16
+  [ 392/416] Dame Blanche Nord ou cité des peintres, surnom dDEBUG avec in funcs: True
+DEBUG nmod: Nord idx=2 head=0
+DEBUG skip amod: Blanche dep=amod head=0 pos=PROPN orig=1
+DEBUG skip amod: célébres dep=amod head=16 pos=ADJ orig=17
+DEBUG skip amod: parisienne dep=amod head=33 pos=ADJ orig=34
+DEBUG nmod: peintres idx=6 head=4
+DEBUG skip amod: Blanche dep=amod head=0 pos=PROPN orig=1
+DEBUG skip amod: célébres dep=amod head=16 pos=ADJ orig=17
+DEBUG skip amod: parisienne dep=amod head=33 pos=ADJ orig=34
+DEBUG nmod: peintres idx=16 head=14
+DEBUG skip amod: Blanche dep=amod head=0 pos=PROPN orig=1
+DEBUG skip amod: célébres dep=amod head=16 pos=ADJ orig=17
+DEBUG skip amod: parisienne dep=amod head=33 pos=ADJ orig=34
+DEBUG nmod: ville idx=28 head=25
+DEBUG skip amod: Blanche dep=amod head=0 pos=PROPN orig=1
+DEBUG skip amod: célébres dep=amod head=16 pos=ADJ orig=17
+DEBUG skip amod: parisienne dep=amod head=33 pos=ADJ orig=34
+  [ 393/416] De nombreuses espèces devenues rares ou menacéesDEBUG avec in funcs: True
+DEBUG nmod: nunavik idx=14 head=10
+DEBUG skip amod: nombreuses dep=amod head=2 pos=ADJ orig=1
+DEBUG skip prenominal: boréale idx=11 ≤ nmod idx=14
+  [ 394/416] N'arrivez surtout pas quelques minutes en retardDEBUG avec in funcs: True
+DEBUG nmod: retard idx=7 head=5
+  [ 395/416] Charles Monginot (1825-1900) est un peintre franDEBUG avec in funcs: True
+DEBUG nmod: 1825 idx=3 head=0
+DEBUG skip amod: français dep=amod head=9 pos=ADJ orig=10
+DEBUG nmod: - idx=4 head=0
+DEBUG skip amod: français dep=amod head=9 pos=ADJ orig=10
+DEBUG nmod: 1900 idx=5 head=0
+DEBUG skip amod: français dep=amod head=9 pos=ADJ orig=10
+  [ 396/416] Licencié en histoire et géographie, il enseigna DEBUG avec in funcs: True
+  [ 397/416] À l'issue des élections municipales de juin 2008DEBUG avec in funcs: True
+DEBUG nmod: élections idx=5 head=3
+DEBUG skip amod: municipales dep=amod head=5 pos=ADJ orig=6
+DEBUG nmod: juin idx=8 head=5
+DEBUG skip prenominal: municipales idx=6 ≤ nmod idx=8
+DEBUG nmod: commune idx=22 head=19
+DEBUG skip amod: municipales dep=amod head=5 pos=ADJ orig=6
+  [ 398/416] Le conseil général, propriétaire du bâtiment de DEBUG avec in funcs: True
+DEBUG nmod: bâtiment idx=6 head=4
+DEBUG skip amod: général dep=amod head=1 pos=ADJ orig=2
+DEBUG skip amod: ancienne dep=amod head=11 pos=ADJ orig=10
+DEBUG skip amod: commercial dep=amod head=18 pos=ADJ orig=19
+DEBUG skip amod: court dep=amod head=33 pos=ADJ orig=32
+DEBUG nmod: gare idx=11 head=6
+DEBUG skip amod: général dep=amod head=1 pos=ADJ orig=2
+DEBUG skip amod: ancienne dep=amod head=11 pos=ADJ orig=10
+DEBUG skip amod: commercial dep=amod head=18 pos=ADJ orig=19
+DEBUG skip amod: court dep=amod head=33 pos=ADJ orig=32
+DEBUG nmod: communication idx=24 head=22
+DEBUG skip amod: général dep=amod head=1 pos=ADJ orig=2
+DEBUG skip amod: ancienne dep=amod head=11 pos=ADJ orig=10
+DEBUG skip amod: commercial dep=amod head=18 pos=ADJ orig=19
+DEBUG skip amod: court dep=amod head=33 pos=ADJ orig=32
+DEBUG avec final: role=comitative bm=ni dep=case
+  [ 399/416] Les papillons sont visibles entre mai et juin daDEBUG avec in funcs: True
+DEBUG nmod: altitudes idx=13 head=10
+DEBUG skip amod: faibles dep=amod head=13 pos=ADJ orig=12
+DEBUG nmod: juillet idx=30 head=29
+DEBUG skip amod: faibles dep=amod head=13 pos=ADJ orig=12
+  [ 400/416] Le pré salé dans son dernier méandre avant l'océDEBUG avec in funcs: True
+DEBUG nmod: méandre idx=6 head=1
+DEBUG skip prenominal: salé idx=2 ≤ nmod idx=6
+DEBUG skip amod: dernier dep=amod head=6 pos=ADJ orig=5
+DEBUG nmod: océan idx=10 head=6
+DEBUG skip amod: salé dep=amod head=1 pos=ADJ orig=2
+DEBUG skip prenominal: dernier idx=5 ≤ nmod idx=10
+DEBUG nmod: type idx=21 head=18
+DEBUG skip amod: salé dep=amod head=1 pos=ADJ orig=2
+DEBUG skip amod: dernier dep=amod head=6 pos=ADJ orig=5
+  [ 401/416] Les transactions se font essentiellement en espèDEBUG avec in funcs: True
+  [ 402/416] Equipe de professionnels avec des années d'expérDEBUG avec in funcs: True
+DEBUG nmod: professionnels idx=2 head=0
+DEBUG nmod: années idx=5 head=0
+DEBUG nmod: expérience idx=8 head=5
+DEBUG avec final: role=comitative bm=ni dep=case
+  [ 403/416] Il forme ainsi des générations de chartistes jusDEBUG avec in funcs: True
+DEBUG nmod: chartistes idx=6 head=4
+  [ 404/416] Robert Royer découvre également des foyers de l'DEBUG avec in funcs: True
+DEBUG nmod: âge idx=9 head=5
+DEBUG skip amod: quotidienne dep=amod head=17 pos=ADJ orig=18
+DEBUG nmod: bronze idx=11 head=9
+DEBUG skip amod: quotidienne dep=amod head=17 pos=ADJ orig=18
+DEBUG nmod: vie idx=17 head=14
+DEBUG skip amod: quotidienne dep=amod head=17 pos=ADJ orig=18
+DEBUG nmod: Gaulois idx=20 head=17
+DEBUG skip prenominal: quotidienne idx=18 ≤ nmod idx=20
+DEBUG nmod: ferme idx=29 head=25
+DEBUG skip amod: quotidienne dep=amod head=17 pos=ADJ orig=18
+  [ 405/416] En outre, les revendications infondées du Maroc DEBUG avec in funcs: True
+DEBUG nmod: territoire idx=10 head=4
+DEBUG skip prenominal: infondées idx=5 ≤ nmod idx=10
+DEBUG skip amod: Internationale dep=amod head=16 pos=ADJ orig=17
+DEBUG nmod: Justice idx=19 head=16
+DEBUG skip amod: infondées dep=amod head=4 pos=ADJ orig=5
+DEBUG skip prenominal: Internationale idx=17 ≤ nmod idx=19
+  [ 406/416] Bien qu'il ait eu un fils, Damien, Satan est homDEBUG avec in funcs: True
+DEBUG nmod: arc idx=42 head=41
+DEBUG skip amod: nombreuses dep=amod head=18 pos=ADJ orig=17
+DEBUG skip amod: long dep=amod head=28 pos=ADJ orig=31
+DEBUG avec final: role=comitative bm=ni dep=case
+  [ 407/416] Il étudie sous la direction de photographes recoDEBUG avec in funcs: True
+DEBUG nmod: photographes idx=6 head=4
+DEBUG skip amod: autres dep=amod head=16 pos=ADJ orig=15
+DEBUG skip amod: photographique dep=amod head=20 pos=ADJ orig=21
+DEBUG nmod: médecins idx=16 head=11
+DEBUG skip amod: autres dep=amod head=16 pos=ADJ orig=15
+DEBUG skip amod: photographique dep=amod head=20 pos=ADJ orig=21
+DEBUG avec final: role=comitative bm=ni dep=case
+  [ 408/416] Le Concert d'Astrée est un ensemble musical franDEBUG avec in funcs: True
+DEBUG nmod: musique idx=11 head=7
+DEBUG skip prenominal: musical idx=8 ≤ nmod idx=11
+DEBUG skip prenominal: français idx=9 ≤ nmod idx=11
+DEBUG skip amod: baroque dep=amod head=11 pos=ADJ orig=12
+  [ 409/416] En 1931, l'A établit son siège à côté de la maisDEBUG avec in funcs: True
+DEBUG nmod: maison idx=13 head=10
+DEBUG nmod: étudiants idx=15 head=13
+  [ 410/416] Comme en 2007, le club local d'Arsenal remporte DEBUG avec in funcs: True
+  [ 411/416] Les CRES ne fédèrent donc pas de manière directeDEBUG avec in funcs: True
+DEBUG nmod: base idx=12 head=10
+DEBUG skip amod: directe dep=amod head=7 pos=ADJ orig=8
+DEBUG skip amod: fédératives dep=amod head=22 pos=ADJ orig=23
+DEBUG nmod: structures idx=22 head=20
+DEBUG skip amod: directe dep=amod head=7 pos=ADJ orig=8
+DEBUG skip amod: fédératives dep=amod head=22 pos=ADJ orig=23
+DEBUG nmod: terrain idx=31 head=29
+DEBUG skip amod: directe dep=amod head=7 pos=ADJ orig=8
+DEBUG skip amod: fédératives dep=amod head=22 pos=ADJ orig=23
+  [ 412/416] Pour les chrétiens hellénistiques, la notion d'éDEBUG avec in funcs: True
+DEBUG nmod: éros idx=9 head=6
+DEBUG skip amod: hellénistiques dep=amod head=2 pos=ADJ orig=3
+  [ 413/416] Ces illusions ont été particulièrement étudiées DEBUG avec in funcs: True
+DEBUG nmod: synthèse idx=13 head=10
+DEBUG skip amod: numérique dep=amod head=13 pos=ADJ orig=14
+DEBUG nmod: sons idx=16 head=13
+DEBUG skip prenominal: numérique idx=14 ≤ nmod idx=16
+DEBUG nmod: ordinateur idx=37 head=33
+DEBUG skip amod: numérique dep=amod head=13 pos=ADJ orig=14
+DEBUG nmod: illusions idx=44 head=41
+DEBUG skip amod: numérique dep=amod head=13 pos=ADJ orig=14
+  [ 414/416] L'élection du 24 octobre 1999 est la première élDEBUG avec in funcs: True
+DEBUG nmod: octobre idx=5 head=4
+DEBUG skip amod: première dep=amod head=10 pos=ADJ orig=9
+DEBUG skip amod: présidentielle dep=amod head=10 pos=ADJ orig=11
+DEBUG skip amod: pluraliste dep=amod head=10 pos=ADJ orig=12
+DEBUG skip amod: comparable dep=amod head=28 pos=ADJ orig=33
+DEBUG skip amod: précédentes dep=amod head=35 pos=ADJ orig=36
+DEBUG avec final: role=comitative bm=ni dep=case
+  [ 415/416] Une réunion du conseil national du syndicat des DEBUG avec in funcs: True
+DEBUG nmod: conseil idx=3 head=1
+DEBUG skip amod: national dep=amod head=3 pos=ADJ orig=4
+DEBUG skip amod: prochaines dep=amod head=29 pos=ADJ orig=28
+DEBUG nmod: syndicat idx=6 head=3
+DEBUG skip prenominal: national idx=4 ≤ nmod idx=6
+DEBUG skip amod: prochaines dep=amod head=29 pos=ADJ orig=28
+DEBUG nmod: communaux idx=8 head=6
+DEBUG skip amod: national dep=amod head=3 pos=ADJ orig=4
+DEBUG skip amod: prochaines dep=amod head=29 pos=ADJ orig=28
+DEBUG nmod: grève idx=17 head=14
+DEBUG skip amod: national dep=amod head=3 pos=ADJ orig=4
+DEBUG skip amod: prochaines dep=amod head=29 pos=ADJ orig=28
+DEBUG nmod: mouvement idx=23 head=21
+DEBUG skip amod: national dep=amod head=3 pos=ADJ orig=4
+DEBUG skip amod: prochaines dep=amod head=29 pos=ADJ orig=28
+  [ 416/416] Anne-Sophie Mathis, née le 13 juin 1977 à Nancy,DEBUG avec in funcs: True
+DEBUG nmod: juin idx=8 head=7
+DEBUG skip amod: française dep=amod head=15 pos=ADJ orig=16
+
+
+════════════════════════════════════════════════════════════
+  PARSING vs UD French GSD  (pipeline complet)
+════════════════════════════════════════════════════════════
+  Tokens gold        : 10017
+  Tokens système     : 9788
+  Tokens alignés     : 9108 (90.9% du gold)
+
+  UPOS  POS Accuracy            :  96.89%
+  UAS   Unlabeled Attach. Score :  84.79%
+  LAS   Labeled Attach. Score   :  79.41%
+  LAS-c LAS (label principal)   :  80.98%
+
+  ── Top confusions POS (gold → sys) ──
+        PROPN → NOUN     : 35
+          SYM → NOUN     : 25
+          ADJ → VERB     : 24
+         NOUN → ADJ      : 23
+         NOUN → PROPN    : 12
+         NOUN → ADV      : 10
+          ADV → ADP      : 10
+            X → NOUN     : 8
+
+  ── Top confusions dep — label seul, head correct (gold → sys) ──
+            obl:mod → obl:arg        : 35
+              appos → nmod           : 27
+            obl:arg → obl:mod        : 20
+            expl:pv → expl:comp      : 19
+            obj:lvc → obj            : 17
+               nmod → nummod         : 16
+              nsubj → expletive      : 14
+               nmod → amod           : 14
+════════════════════════════════════════════════════════════
+
+  JSON exporté : parser_eval_20260608_034852.json

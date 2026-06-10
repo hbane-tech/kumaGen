@@ -32,33 +32,63 @@ def _load_lang_markers(db) -> dict:
     return markers
 
 
+# def detect_language(sentence: str, db=None) -> str:
+#     """
+#     Detects 'fr' or 'en'. Defaults to 'fr'.
+#     Priority:
+#       1. langdetect library
+#       2. French accent characters
+#       3. KG node overlap heuristic
+#     """
+#     try:
+#         from langdetect import detect
+#         lang = detect(sentence)
+#         return lang if lang in ('fr', 'en') else 'fr'
+#     except Exception:
+#         pass
+
+#     accents = set('àâäéèêëîïôùûüÿçœæÀÂÄÉÈÊËÎÏÔÙÛÜŸÇŒÆ')
+#     if any(c in accents for c in sentence):
+#         return 'fr'
+
+#     if db:
+#         markers  = _load_lang_markers(db)
+#         words    = set(sentence.lower().split())
+#         en_score = len(words & markers.get('en', set()))
+#         fr_score = len(words & markers.get('fr', set()))
+#         if en_score > fr_score:
+#             return 'en'
+#         if fr_score > en_score:
+#             return 'fr'
+
+#     return 'fr'
+
 def detect_language(sentence: str, db=None) -> str:
     """
     Detects 'fr' or 'en'. Defaults to 'fr'.
-    Priority:
-      1. langdetect library
-      2. French accent characters
-      3. KG node overlap heuristic
     """
+    # 1. Accents français → fr immédiat
+    accents = set('àâäéèêëîïôùûüÿçœæÀÂÄÉÈÊËÎÏÔÙÛÜŸÇŒÆ')
+    if any(c in accents for c in sentence):
+        return 'fr'
+
+    # 2. Heuristique KG avant langdetect
+    if db:
+        markers  = _load_lang_markers(db)
+        words    = set(sentence.lower().split())
+        en_score = len(words & markers.get('en', set()))
+        fr_score = len(words & markers.get('fr', set()))
+        if fr_score > en_score:
+            return 'fr'
+        if en_score > fr_score:
+            return 'en'
+
+    # 3. langdetect en dernier recours
     try:
         from langdetect import detect
         lang = detect(sentence)
         return lang if lang in ('fr', 'en') else 'fr'
     except Exception:
         pass
-
-    accents = set('àâäéèêëîïôùûüÿçœæÀÂÄÉÈÊËÎÏÔÙÛÜŸÇŒÆ')
-    if any(c in accents for c in sentence):
-        return 'fr'
-
-    if db:
-        markers  = _load_lang_markers(db)
-        words    = set(sentence.lower().split())
-        en_score = len(words & markers.get('en', set()))
-        fr_score = len(words & markers.get('fr', set()))
-        if en_score > fr_score:
-            return 'en'
-        if fr_score > en_score:
-            return 'fr'
 
     return 'fr'

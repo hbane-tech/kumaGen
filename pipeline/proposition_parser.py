@@ -155,7 +155,12 @@ def build_np(head_tok: dict, all_tokens: list,
     # acl = bare participial adjective: jóginna, jɛra...
     acl = next((t for t in deps
                 if _dep(t) == 'acl'
-                and _pos(t) == 'VERB'), None)
+                and _pos(t) == 'VERB'
+                and not any(
+                    tt.get('head_index') == _orig(t)
+                    and tt.get('role') == 'purposive'
+                    for tt in all_tokens
+                )), None)
     for t in [poss, nmod, plain_nmod, acl] + adjs:
         if t: used.add(id(t))
 
@@ -250,6 +255,7 @@ class Proposition:
     verb:       dict
     all_tokens: list
     connector:  str = ''    # how this prop connects to previous
+    conn_suffix: str = ''   # suffix applied to subject NP (ex: 'kan')
 
     def __post_init__(self):
         self._used    = set()
@@ -304,8 +310,6 @@ class Proposition:
             s = self._find(role='pronoun')
 
         # If still no subject (promoted xcomp — parent verb was dropped)
-        # find the nearest nsubj pronoun in all_tokens that is
-        # positionally close to this verb and not yet claimed
         if not s and _dep(self.verb) == 'xcomp':
             verb_orig = _orig(self.verb)
             s = next(
@@ -315,6 +319,16 @@ class Proposition:
                  and _dep(t) == 'nsubj'
                  and abs(_orig(t) - verb_orig) <= 4),
                 None)
+
+        # acl purposif : le sujet est le nom dont dépend ce verbe
+        # 'pour la soutenir' → soutenir.head_index = étudiant → sujet = étudiant
+        if not s and _dep(self.verb) == 'acl':
+            head_orig = self.verb.get('head_index', -1)
+            s = next((t for t in self.all_tokens
+                      if _orig(t) == head_orig
+                      and _pos(t) in ('NOUN', 'PROPN', 'PRON')), None)
+            print(f"DEBUG subject acl: head_orig={head_orig} found={s.get('surface') if s else None} bm={s.get('bm') if s else None}")
+
         return s
 
     @property
@@ -455,6 +469,7 @@ class Proposition:
     def _subj_str(self) -> str:
         s = self.subject
         if not s: return ''
+        print(f"DEBUG _subj_str: s={s.get('surface')} bm={s.get('bm')} np={self._np(s)}")
         self._used.add(id(s))
         # Use demonstrative bm directly (already 'o in')
         if _role(s) == 'demonstrative':
@@ -474,7 +489,11 @@ class Proposition:
                 if t.get('head_index', -1) == s_orig:
                     self._used.add(id(t))
             return 'o in'
-        return self._np(s)
+        np_str = self._np(s)
+        # Appliquer conn_suffix si présent (ka fara NP kan)
+        if self.conn_suffix and np_str:
+            np_str = np_str + ' ' + self.conn_suffix
+        return np_str
 
     def _obj_str(self) -> str:
         o = self.obj
@@ -549,6 +568,12 @@ class Proposition:
 
         # Locative + na
         LOC = _j(self._loc_str(), 'na') if self.loc else ''
+        
+        # Marqueur de but (pour + infinitif)
+        _purposive = next((t for t in self._deps
+                          if t.get('role') == 'purposive'), None)
+        PURPOSE = _purposive.get('bm_marker', '') if _purposive else ''
+        if _purposive: self._used.add(id(_purposive))
 
         # ccomp: reported speech -> ko S TAM V
         ccomp_v = self.ccomp_verb
@@ -580,7 +605,10 @@ class Proposition:
         INTENS = self._intens_str()
         UNUSED = self._unused_str()
 
-        return _j(S, tam, O, XCOMP, V, IOBJ, DAT, LOC,
+        # return _j(S, tam, O, XCOMP, V, IOBJ, DAT, LOC,
+        #           CCOMP, ADV, INTENS, UNUSED)
+
+        return _j(S, tam, O, XCOMP, PURPOSE, V, IOBJ, DAT, LOC,
                   CCOMP, ADV, INTENS, UNUSED)
 
     def _render_passive(self) -> str:
@@ -676,9 +704,19 @@ class Proposition:
             return _j('kana', self._subj_str(), O, V, UNUSED)
         return _j(V, IOBJ, O, UNUSED)
 
+    def _render_mana(self) -> str:
+        """S mána O V  — éventualité/dès que (mána remplace TAM, placé après S)"""
+        S = self._subj_str()
+        O = self._obj_str()
+        V = _bm(self.verb)
+        self._used.add(id(self.verb))
+        return _j(S, 'mána', O, V)
+
     # ── Pattern selector ──────────────────────────────────────────
 
     def to_bambara(self) -> str:
+        if self.connector == 'mána':
+            return self._render_mana()
         if self.is_imperative:
             result = self._render_imperative()
         elif self.is_passive:
@@ -692,7 +730,6 @@ class Proposition:
         else:
             result = self._render_standard()
 
-        # Prepend connector if present
         if self.connector:
             return _j(self.connector, result)
         return result
@@ -719,7 +756,7 @@ _CONNECTOR_BM_FALLBACK = {
     'conditional': 'ní',
     'concessive':  'hali ni',
     'causal':      'sabu',
-    'purpose':     'janko',
+    'purpose':     'janko ka',
     'temporal':    'tuma min',
     'conjunction': 'ani',
     'contrast':    'kɔ́nɔ',
@@ -732,41 +769,44 @@ _CONNECTOR_BM: dict = {}
 
 def load_connector_bm(db) -> dict:
     """
-    Load connector role -> bm mappings from KG FunctionWord nodes.
-    Called once at engine startup.
-    Populates _CONNECTOR_BM cache.
+    Load connector role -> (bm, bm_suffix) mappings from KG FunctionWord nodes.
     """
     global _CONNECTOR_BM
     if _CONNECTOR_BM:
         return _CONNECTOR_BM  # already loaded
 
     if db is None:
-        _CONNECTOR_BM = dict(_CONNECTOR_BM_FALLBACK)
+        # Fallback par défaut adapté en dictionnaire de dictionnaires
+        _CONNECTOR_BM = {role: {'bm': bm, 'bm_suffix': ''} for role, bm in _CONNECTOR_BM_FALLBACK.items()}
         return _CONNECTOR_BM
 
     try:
+        # FIX CRITIQUE : On ajoute explicitement f.bm_suffix dans la requête Neo4j ! [S1]
         results = db.query("""
             MATCH (f:FunctionWord)
             WHERE f.role IN ['conditional','concessive','causal',
                              'purpose','temporal','conjunction',
                              'contrast','disjunction']
-            RETURN f.role AS role, f.bm AS bm
+            RETURN f.role AS role, f.bm AS bm, f.bm_suffix AS bm_suffix
         """)
         mapping = {}
         for r in results:
             role = r.get('role')
             bm   = r.get('bm')
+            suf  = r.get('bm_suffix') or '' # Protection contre le None
             if role and bm and role not in mapping:
-                mapping[role] = bm
-        # Merge with fallback for any missing roles
+                # On stocke les deux informations de manière étanche
+                mapping[role] = {'bm': bm, 'bm_suffix': suf}
+                
+        # Merge avec fallback pour la sécurité
         for role, bm in _CONNECTOR_BM_FALLBACK.items():
             if role not in mapping:
-                mapping[role] = bm
+                mapping[role] = {'bm': bm, 'bm_suffix': ''}
         _CONNECTOR_BM = mapping
-        print(f"     📖 Loaded {len(_CONNECTOR_BM)} connector mappings from KG")
+        print(f"     📖 Loaded {len(_CONNECTOR_BM)} connector mappings with suffixes from KG")
     except Exception as e:
         print(f"     ⚠️  Could not load connectors from KG: {e}, using fallback")
-        _CONNECTOR_BM = dict(_CONNECTOR_BM_FALLBACK)
+        _CONNECTOR_BM = {role: {'bm': bm, 'bm_suffix': ''} for role, bm in _CONNECTOR_BM_FALLBACK.items()}
 
     return _CONNECTOR_BM
 
@@ -805,22 +845,22 @@ def find_propositions(tokens: list) -> list:
         'ccomp',              # reported speech — handled inline in standard
     ))
 
-    # xcomp verbs are excluded ONLY if their parent verb is also
-    # a content verb in the proposition list.
-    # If parent was dropped (aller/avoir as tense aux), promote xcomp.
+
     all_content_origs = {_orig(t) for t in active
                          if _pos(t) == 'VERB' and _role(t) == 'content'
                          and _dep(t) not in _EMBEDDED_DEPS}
 
+    
     def _keep_verb(t):
-        if _dep(t) in _EMBEDDED_DEPS: return False
+        if _dep(t) in _EMBEDDED_DEPS:
+            return False
         if _dep(t) == 'xcomp':
-            # Keep xcomp if parent is NOT a top-level content verb
-            # (parent was dropped as aux -> promote this verb)
+            # Si le parent n'est pas un verbe de contenu, on le promeut
             parent_orig = t.get('head_index', -1)
             parent_is_proposition = parent_orig in all_content_origs
             return not parent_is_proposition
         return True
+    
 
     content_verbs = [t for t in active
                      if _pos(t) == 'VERB'
@@ -858,8 +898,10 @@ def find_propositions(tokens: list) -> list:
             if _role(t) not in _CONNECTOR_ROLES: continue
             if t.get('head_index', -1) == verb_orig:
                 bm_map = _CONNECTOR_BM or _CONNECTOR_BM_FALLBACK
-                prop.connector = t.get('bm', '') or \
-                                 bm_map.get(_role(t), '')
+                _conn_bm  = t.get('bm', '') or bm_map.get(_role(t), '')
+                _conn_suf = t.get('bm_suffix', '')
+                prop.connector    = _conn_bm
+                prop.conn_suffix  = _conn_suf
                 used_connectors.add(id(t))
                 break
 
@@ -871,8 +913,10 @@ def find_propositions(tokens: list) -> list:
                 if _dep(t) in ('mark', 'cc', 'advmod') and \
                    _orig(t) < verb_orig:
                     bm_map = _CONNECTOR_BM or _CONNECTOR_BM_FALLBACK
-                    prop.connector = t.get('bm', '') or \
-                                     bm_map.get(_role(t), '')
+                    _conn_bm  = t.get('bm', '') or bm_map.get(_role(t), '')
+                    _conn_suf = t.get('bm_suffix', '')
+                    prop.connector    = _conn_bm
+                    prop.conn_suffix  = _conn_suf
                     used_connectors.add(id(t))
                     break
 
@@ -947,112 +991,142 @@ def translate_propositions(tokens: list) -> str:
 
 def _translate_noun_phrase(tokens: list) -> str:
     """
-    Verbless sentence parser (headlines, titles, noun phrases).
-
-    Strategy: find LINK words as boundaries, split into NP groups,
-    build each group, assemble with link semantics.
-
-    Links:
-      de/du/des  -> genitive: NP2 ka NP1  (possessor before possessed)
-      au/à/dans  -> locative: NP la/na
-      pour       -> purpose:  janko NP
-      avec/ni    -> comitative: ni NP
-      parenthetical () -> kept as-is
-
-    e.g. 'Le bilan catastrophique des paramilitaires russes au Sahel'
-      -> [bilan catastrophique] [des] [paramilitaires russes] [au] [Sahel]
-      -> paramilitairew [bàlawuma] ka bilan bàlawuma Sahel la
+    Verbless sentence parser (headlines, titles, noun phrases) with dynamic sandwich logic.
+    100% Data-Driven : Frontières chargées dynamiquement depuis la taxonomie du KG.
     """
-    _GENITIVE  = {'de', 'du', 'des', "d'"}
-    _LOCATIVE  = {'au', 'à', 'en', 'dans', 'sur', 'chez',
-                  'in', 'at', 'on'}
-    _PURPOSE   = {'pour', 'for'}
-    _COMITAT   = {'avec', 'with'}
-    _ALL_LINKS = _GENITIVE | _LOCATIVE | _PURPOSE | _COMITAT
+    # FIX INITIALISATION : On déclare la variable globale une seule fois au sommet absolu
+    global _CONNECTOR_BM
 
     # Work with original tokens (keep prepositions as boundary markers)
     toks = [t for t in tokens if _role(t) != 'punct']
 
-    # Find link token positions
-    link_positions = [(i, t) for i, t in enumerate(toks)
-                      if t.get('surface','').lower() in _ALL_LINKS
-                      or t.get('role') == 'preposition'
-                      and t.get('surface','').lower() in _ALL_LINKS]
+    # ── CAPTURE ABSTRAITE DES FRONTIÈRES DE LIAISON (ZÉRO HARDCODE) ──
+    _ALLOWED_LINK_ROLES = {
+        'genitive', 'locative', 'purposive', 'purpose', 
+        'comitative', 'benefactive', 'temporal', 'conjunction'
+    }
+
+    link_positions = []
+    for idx, t in enumerate(toks):
+        if (t.get('pos') in ('ADP', 'CCONJ', 'SCONJ') 
+                or t.get('role') in _ALLOWED_LINK_ROLES 
+                or t.get('dep') in ('case', 'mark', 'cc')):
+            link_positions.append((idx, t))
 
     # Split into NP groups at link boundaries
     groups   = []
     link_ops = []
     prev     = 0
+    
     for idx, link_tok in link_positions:
         group = [t for t in toks[prev:idx]
-                 if _role(t) not in ('article','preposition',
-                                      'auxiliary','function_candidate')]
-        if group:
+                 if _role(t) not in ('article','preposition','auxiliary','function_candidate')]
+        
+        if idx == 0:
+            groups.append([])
+            link_ops.append((link_tok.get('role', 'simple'), link_tok.get('role',''), link_tok))
+        elif group:
             groups.append(group)
-            link_ops.append((link_tok.get('surface','').lower(),
-                             link_tok.get('role','')))
+            link_ops.append((link_tok.get('role', 'simple'), link_tok.get('role',''), link_tok))
         prev = idx + 1
+        
     # Last group
     last = [t for t in toks[prev:]
-            if _role(t) not in ('article','preposition',
-                                 'auxiliary','function_candidate')]
+            if _role(t) not in ('article','preposition','auxiliary','function_candidate')]
     if last:
         groups.append(last)
 
-    if not groups:
-        # No links found — single NP
-        active = [t for t in toks
-                  if _role(t) not in ('article','preposition',
-                                       'auxiliary','function_candidate')]
-        head = next((t for t in active
-                     if _dep(t) == 'ROOT'
-                     and _pos(t) in ('NOUN','PROPN')), None) or                next((t for t in active
-                     if _pos(t) in ('NOUN','PROPN')
-                     and _is_content(t)), None)
-        if not head:
-            return ' '.join(t.get('bm', t.get('lemma',''))
-                            for t in active if _is_content(t))
-        used = set()
-        return build_np(head, active, used)
-
     # Build each NP group
     def _build_group(group: list) -> str:
-        if not group: return ''
-        # Find head noun (ROOT dep or first noun)
-        head = next((t for t in group if _dep(t) == 'ROOT'
-                     and _pos(t) in ('NOUN','PROPN','ADJ')), None) or                next((t for t in group
-                     if _pos(t) in ('NOUN','PROPN')
-                     and _is_content(t)), None)
+        if not group: 
+            return ''
+            
+        # SÉCURISATION DU PRONOM OBJET INFLEXIBLE (ZÉRO HARDCODE)
+        _obj_pron = next((t for t in group if t.get('pos') == 'PRON' and t.get('dep') == 'obj'), None)
+        _verb_tok = next((t for t in group if t.get('pos') == 'VERB'), None)
+        
+        if _obj_pron and _verb_tok:
+            obj_val = _obj_pron.get('bm') or f"[{_obj_pron.get('lemma')}]"
+            verb_val = _verb_tok.get('bm') or f"[{_verb_tok.get('lemma')}]"
+            return _j(obj_val, verb_val)
+            
+        head = next((t for t in group if _dep(t) == 'ROOT' and _pos(t) in ('NOUN','PROPN','ADJ')), None) or \
+               next((t for t in group if _pos(t) in ('NOUN','PROPN') and _is_content(t)), None)
+               
         if not head:
-            # All adjectives or no clear head
-            return ' '.join(t.get('bm','') for t in group
-                            if _is_content(t) and t.get('bm'))
+            return ' '.join(t.get('bm','') for t in group if _is_content(t) and t.get('bm'))
+            
         used = set()
         return build_np(head, group, used)
 
     np_parts = [_build_group(g) for g in groups]
+    np_parts = [p for p in np_parts if p and p.strip()]
 
-    # Assemble with link semantics
-    # link_ops[i] = link between np_parts[i] and np_parts[i+1]
-    result = np_parts[0] if np_parts else ''
+    if not np_parts:
+        return ''
 
-    for i, (link_surf, link_role) in enumerate(link_ops):
-        if i + 1 >= len(np_parts): break
-        next_np = np_parts[i + 1]
-        if not next_np: continue
-
-        if link_surf in _GENITIVE:
-            # Genitive: POSSESSOR before POSSESSED
-            # Swap: next_np ka result (possessor first)
-            result = _j(next_np, result) if not result                      else _j(next_np, result)
-        elif link_surf in _LOCATIVE:
-            # Locative: append LOC la/na at end
-            result = _j(result, next_np, 'la')
-        elif link_surf in _PURPOSE:
-            result = _j(result, 'janko', next_np)
-        elif link_surf in _COMITAT:
-            result = _j(result, 'ni', next_np)
+    # ── ASSEMBLAGE PAR SANDWICH LINÉAIRE SÉCURISÉ (ZÉRO HARDCODE) ──
+    if link_positions and link_positions[0][0] == 0:
+        _, first_tok = link_positions[0]
+        _conn_bm  = first_tok.get('bm', '') if first_tok else ''
+        _conn_suf = first_tok.get('bm_suffix', '') if first_tok else ''
+        
+        first_np = np_parts[0]
+        if _conn_suf and _conn_suf.strip():
+            result = _j(_conn_bm, first_np, _conn_suf)
         else:
+            result = _j(_conn_bm, first_np)
+        
+        start_link_idx = 1
+    else:
+        result = np_parts[0]
+        start_link_idx = 0
+
+    # ── MATRICE D'ASSEMBLAGE ABSTRAITE PAR RÔLES ET METADONNÉES DU KG (ZÉRO HARDCODE) ──
+    for i, (link_role, original_role, link_tok) in enumerate(link_ops):
+        if i < start_link_idx:
+            continue
+            
+        next_np_idx = i if start_link_idx == 1 else i + 1
+        if next_np_idx >= len(np_parts):
+            next_np_idx = len(np_parts) - 1
+            
+        next_np = np_parts[next_np_idx] if next_np_idx < len(np_parts) else ''
+        if not next_np:
+            continue
+
+        # Utilisation sécurisée du cache global _CONNECTOR_BM déclaré au sommet de la fonction
+        kg_fallback = _CONNECTOR_BM.get(link_role, {}) if '_CONNECTOR_BM' in globals() or '_CONNECTOR_BM' in locals() else {}
+
+        # On va chercher la glose sémantique dans le token, ou dans le champ bm_marker / bm du cache global
+        _conn_bm  = link_tok.get('bm', '') or link_tok.get('bm_marker', '') if link_tok else (kg_fallback.get('bm', '') or kg_fallback.get('bm_marker', ''))
+        _conn_suf = link_tok.get('bm_suffix', '') if link_tok else kg_fallback.get('bm_suffix', '')
+
+        # Routage purement taxonomique basé sur les rôles abstraits de Neo4j
+        if link_role == 'genitive':
+            result = _j(next_np, result)
+            
+        elif link_role == 'locative':
+            result = _j(result, next_np, _conn_bm)
+            
+        elif link_role in ('purposive', 'purpose'):
+            # ALIGNEMENT ULTRA-DYNAMIQUE (ZÉRO HARDCODE)
+            # On applique la glose extraite du KG (_conn_bm). 
+            # Le suffixe (_conn_suf) n'est absolument pas obligatoire : on ne l'ajoute que s'il existe !
+            if _conn_suf and _conn_suf.strip():
+                result = _j(result, _conn_bm, next_np, _conn_suf)
+            else:
+                result = _j(result, _conn_bm, next_np)
+
+                
+        elif link_role in ('comitative', 'conjunction') or _conn_suf:
+            if _conn_suf and _conn_suf.strip():
+                result = _j(result, _conn_bm, next_np, _conn_suf)
+            else:
+                result = _j(result, _conn_bm, next_np)
+                
+        else:
+            # Fallback de juxtaposition neutre pour les rôles non spécifiés
             result = _j(result, next_np)
 
     return result

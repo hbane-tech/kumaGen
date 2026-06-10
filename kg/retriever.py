@@ -158,20 +158,11 @@ def _gloss_match_score(fr_raw: str, token: str) -> float:
     import re as _re
     pattern = r'(^|[ ,;(])' + _re.escape(t) + r'($|[ .,;)])'
     if _re.search(pattern, fr):
-        # Reject if token appears after an inverter qualifier
-        # 'lent à comprendre' should NOT match 'comprendre'
-        # 'manque de courage' should NOT match 'courage'
-        _INVERTERS = ('lent à ', 'lente à ', 'difficile à ',
-                      'manque de ', 'sans ', 'peu ', 'mal ',
-                      'incapable de ', 'ne pas ', 'absence de ')
+        # Reject if token is buried after 3+ other words
+        # (coincidental appearance, different concept).
+        # La levée des qualificateurs inverseurs ('lent à', 'manque de'…)
+        # est déléguée au reranking LLM + embeddings — zéro liste en dur.
         idx = fr.find(t)
-        if idx > 0:
-            before = fr[:idx].rstrip()
-            for inv in _INVERTERS:
-                if before.endswith(inv.rstrip()):
-                    return 0.0  # inverter found — reject this match
-        # Also reject if token is buried after 3+ other words
-        # (coincidental appearance, different concept)
         words_before = len(fr[:idx].split()) if idx > 0 else 0
         if words_before >= 4:
             return 0.0
@@ -232,11 +223,15 @@ class KGRetriever:
         eff_pos = None if is_verbal_noun else spacy_pos
 
         exact = self._exact_match(norm, frame, lang=lang, spacy_pos=eff_pos)
-        embed = self._embedding_match(
+
+        # Improved embedding with context (if available)
+        embed = self._embedding_match_with_context(
             norm, frame,
             exclude_bm={c['bm'] for c in exact if c['score'] >= 0.90},
+            context_tokens=context_tokens,
             lang=lang, spacy_pos=eff_pos
         )
+
         combined = exact + embed
         combined = _rerank(combined, norm, eff_pos or '')
         return combined[:top_k]
@@ -290,16 +285,37 @@ class KGRetriever:
 
         return candidates
 
-    def _embedding_match(self, norm: str, frame: str,
-                         exclude_bm: set, lang: str = 'fr',
-                         spacy_pos: str = None):
-        query_vec   = encode(norm)
+    def _embedding_match_with_context(self, norm: str, frame: str,
+                                     exclude_bm: set,
+                                     context_tokens: list = None,
+                                     lang: str = 'fr',
+                                     spacy_pos: str = None):
+        """
+        Enhanced embedding matching that uses surrounding context
+        to build a richer query representation.
+
+        If context_tokens available: encode(token + context) for better signal
+        Fallback to simple token encoding if no context.
+
+        This improves embedding retrieval by giving the encoder more semantic
+        information to work with, reducing false positives from mono-token
+        ambiguity.
+        """
         allowed_pos = _allowed_kg_pos(spacy_pos)
+        pos_filter = "AND s.pos IN $allowed_pos" if allowed_pos else ""
+
+        # Build query with context if available
+        if context_tokens and len(context_tokens) >= 2:
+            # Combine token + context for richer semantic representation
+            context_str = " ".join(context_tokens[:5])
+            query_text = f"{norm} {context_str}".strip()
+            query_vec = encode(query_text)
+        else:
+            # Fallback to simple token
+            query_vec = encode(norm)
 
         if np.linalg.norm(query_vec) == 0:
             return []
-
-        pos_filter = "AND s.pos IN $allowed_pos" if allowed_pos else ""
 
         results = self.db.query(f"""
         MATCH (w:Word)-[:HAS_SENSE]->(s:Sense)

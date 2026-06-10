@@ -55,7 +55,10 @@ QUOTATIVE:
 NOUN PHRASE ONLY:
   "noun_phrase"     : alienable possession  (la maison de mon mari, sa voiture)
   "noun_phrase_inh" : inalienable possession  (mon père, sa tête, son bras)
-  "noun_phrase_have": avoir/posséder  (j'ai de l'argent, il a une voiture)
+ "noun_phrase_have": avoir/posséder un objet, une mesure ou une quantité physique
+                      (j'ai de l'argent, il a une voiture, quel âge as-tu ?,
+                       combien d'enfants as-tu ?, tu as combien de frères ?)
+                      NOTE: 'quel âge as-tu ?' = possession matérielle + quantité → noun_phrase_have
 
 PRAGMATICS:
   "topicalised"     : topic fronted  (Bamako, ses habitants sont nombreux)
@@ -98,7 +101,7 @@ EXAMPLES:
 "mange !" -> {"clause_type":"imperative","tokens":[{"surface":"mange","lemma":"manger"}]}
 "je suis avec mon mari" -> {"clause_type":"comitative","tokens":[{"surface":"je","lemma":"je"},{"surface":"suis","lemma":"être"},{"surface":"avec","lemma":"avec"},{"surface":"mon","lemma":"mon"},{"surface":"mari","lemma":"mari"}]}
 "il y a un problème" -> {"clause_type":"existential","tokens":[{"surface":"il","lemma":"il"},{"surface":"y","lemma":"y"},{"surface":"a","lemma":"avoir"},{"surface":"un","lemma":"un"},{"surface":"problème","lemma":"problème"}]}
-
+"quel âge as-tu ?" -> {"clause_type":"noun_phrase_have","tokens":[{"surface":"quel","lemma":"quel"},{"surface":"âge","lemma":"âge"},{"surface":"as","lemma":"avoir"},{"surface":"tu","lemma":"tu"}]}
 "nous nous aimons" -> {"clause_type":"reciprocal","tokens":[{"surface":"nous","lemma":"nous"},{"surface":"nous","lemma":"nous"},{"surface":"aimons","lemma":"aimer"}]}
 
 Return ONLY valid JSON. No explanation. No markdown."""
@@ -198,7 +201,15 @@ def _prompt(sentence: str) -> str:
     return _SYSTEM_PROMPT + '\n\n' + _USER_TEMPLATE.format(sentence=sentence)
 
 
+_parser_circuit_open_until: float = 0.0   # epoch time; 0 = circuit closed
+_PARSER_RETRY_GAP = 60                    # seconds before retrying
+
+
 def _call_ollama(sentence: str, model: str = 'qwen2.5:3b') -> dict:
+    global _parser_circuit_open_until
+    import time as _time
+    if _time.time() < _parser_circuit_open_until:
+        return {}
     import requests
     payload = {
         'model':  model,
@@ -207,81 +218,17 @@ def _call_ollama(sentence: str, model: str = 'qwen2.5:3b') -> dict:
         'format': 'json',
         'options': {'temperature': 0, 'num_predict': 512},
     }
-    response = requests.post(
-        'http://localhost:11434/api/generate',
-        json=payload, timeout=120)
-    return _parse_response(response.json().get('response', ''))
-
-
-def _call_gemini(sentence: str, model: str = 'gemini-1.5-flash-8b') -> dict:
-    import os
-    from google import genai
-    from google.genai import types
-    client   = genai.Client(api_key=os.getenv('GEMINI_API_KEY'))
-    response = client.models.generate_content(
-        model=model, contents=_prompt(sentence),
-        config=types.GenerateContentConfig(temperature=0))
-    return _parse_response(response.text)
-
-
-def _call_openai(sentence: str, model: str = 'gpt-4o-mini') -> dict:
-    import os, openai
-    client   = openai.OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
-    response = client.chat.completions.create(
-        model=model,
-        messages=[{'role': 'user', 'content': _prompt(sentence)}],
-        temperature=0, max_tokens=512,
-        response_format={'type': 'json_object'})
-    return _parse_response(response.choices[0].message.content)
-
-
-def _call_anthropic(sentence: str,
-                    model: str = 'claude-haiku-4-5-20251001') -> dict:
-    import os, anthropic
-    client   = anthropic.Anthropic(api_key=os.getenv('ANTHROPIC_API_KEY'))
-    response = client.messages.create(
-        model=model, max_tokens=512,
-        messages=[{'role': 'user', 'content': _prompt(sentence)}])
-    return _parse_response(response.content[0].text)
-
-
-# ── Cache ─────────────────────────────────────────────────────────
-
-def _cache_key(sentence: str) -> str:
-    return hashlib.sha256(sentence.lower().strip().encode()).hexdigest()[:16]
-
-
-def _load_cache(db, sentence: str):
-    if not db: return None
     try:
-        key = _cache_key(sentence)
-        res = db.query(
-            'MATCH (p:ParseCache {key:$k}) RETURN p.tokens AS t, '
-            'p.clause_type AS ct LIMIT 1',
-            {'k': key})
-        if res and res[0].get('t'):
-            tokens = json.loads(res[0]['t'])
-            ct     = res[0].get('ct', 'simple')
-            return {'clause_type': ct, 'tokens': tokens}
-    except Exception:
-        pass
-    return None
-
-
-def _save_cache(db, sentence: str, result: dict):
-    if not db: return
-    try:
-        key = _cache_key(sentence)
-        db.query(
-            'MERGE (p:ParseCache {key:$k}) '
-            'SET p.tokens=$t, p.clause_type=$ct, p.sentence=$s',
-            {'k': key,
-             't': json.dumps(result['tokens'], ensure_ascii=False),
-             'ct': result.get('clause_type', 'simple'),
-             's': sentence})
-    except Exception:
-        pass
-
+        response = requests.post(
+            'http://localhost:11434/api/generate',
+            json=payload, timeout=60)
+        return _parse_response(response.json().get('response', ''))
+    except (requests.exceptions.ReadTimeout,
+            requests.exceptions.ConnectTimeout,
+            requests.exceptions.ConnectionError):
+        _parser_circuit_open_until = _time.time() + _PARSER_RETRY_GAP
+        print(f"⚠️  Ollama morphologique indisponible (réessai dans {_PARSER_RETRY_GAP}s)")
+        return {}
 
 # ── Main parser class ─────────────────────────────────────────────
 
@@ -309,13 +256,9 @@ class MorphologicalParser:
         return self._call(sentence)
 
     def _call(self, sentence: str) -> dict:
-        """Call the configured LLM backend."""
-        try:
-            if self.backend == 'ollama':
-                return _call_ollama(sentence, self.model or 'qwen2.5:3b')
-            elif self.backend == 'gemini':
-                return _call_gemini(sentence, self.model or 'gemini-1.5-flash-8b')
-    
-        except Exception as e:
-            print(f'⚠️  LLM parse failed: {e}')
+        """Ollama uniquement — pas de fallback Gemini."""
+        if self.backend == 'ollama':
+            result = _call_ollama(sentence, self.model or 'qwen2.5:3b')
+            if result:
+                return result
         return {'clause_type': 'simple', 'tokens': []}

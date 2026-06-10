@@ -40,12 +40,9 @@ from pipeline.tokenizer import tokenize
 from pipeline.frame_parser import FrameParser
 from kg.retriever import KGRetriever
 from embeddings.word2vec_encoder import encode as _embed
-from rules.r1_r60_engine import RuleEngine
-from config.settings import LLM_BACKEND, LLM_MODEL
+from rules import build_tree, tree_to_bambara, RuleEngine
+from config.settings import LLM_BACKEND, LLM_MODEL, GEMINI_API_KEY, GEMINI_MODEL
 import os
-from google import genai
-from google.genai import types
-from rules.r1_r60_engine import build_tree
 from embeddings.word2vec_encoder import _get_model
 
 MIN_SCORE      = 0.12
@@ -67,39 +64,71 @@ class TranslationEngine:
         self.rule_engine       = RuleEngine(db)
         self._current_sentence = ''
         self.model = _get_model()
+        self._warmup_llm()
+
+    def _warmup_llm(self):
+        """Premier appel léger pour charger le modèle en mémoire dès le démarrage.
+        Retente une fois si le premier appel dépasse le timeout (modèle à froid)."""
+        if LLM_BACKEND != 'ollama':
+            return
+        import requests as _req
+        model = LLM_MODEL or 'qwen2.5:3b'
+        payload = {'model': model, 'prompt': 'OUI', 'stream': False,
+                   'options': {'num_predict': 1}}
+        for attempt, wait in enumerate([90, 120], start=1):
+            try:
+                r = _req.post("http://localhost:11434/api/generate",
+                              json=payload, timeout=wait)
+                r.raise_for_status()
+                print(f"✅  LLM Ollama prêt ({model})")
+                return
+            except _req.exceptions.ConnectionError:
+                print("⚠️  Ollama non joignable — vérifier que 'ollama serve' tourne")
+                return
+            except _req.exceptions.Timeout:
+                if attempt == 1:
+                    print(f"⚠️  Ollama lent au démarrage (>{wait}s), nouvelle tentative...")
+                else:
+                    print(f"⚠️  Ollama timeout ({wait}s) — fonctionnement sans LLM")
+            except Exception as e:
+                print(f"⚠️  LLM Ollama erreur : {type(e).__name__}: {e}")
+                return
 
     # ------------------------------------------------------------------
     # LLM CALLS
     # ------------------------------------------------------------------
 
-    def _call_llm(self, prompt: str, max_tokens: int = 10) -> str:
-        """Generic LLM call — returns raw text response."""
-        backend = LLM_BACKEND
-        model   = LLM_MODEL
+    _llm_circuit_open_until: float = 0.0  # epoch time; 0 = circuit closed
+    _LLM_TIMEOUT   = 90   # hard ceiling per Ollama call (seconds)
+    _LLM_RETRY_GAP = 0    # retry immédiatement après chaque échec
 
-        if backend == 'ollama':
+    def _call_llm(self, prompt: str, max_tokens: int = 10, timeout: int = 8) -> str:  # noqa: ARG002
+        """Generic LLM call — Ollama (qwen) uniquement."""
+        import time as _time
+        ollama_ok = _time.time() >= TranslationEngine._llm_circuit_open_until
+
+        if ollama_ok and LLM_BACKEND == 'ollama':
             payload = {
-                "model":   model or 'qwen2.5:3b',
-                "prompt":  prompt,
-                "stream":  False,
-                "options": {"temperature": 0,
-                            "num_predict": max_tokens},
+                'model': LLM_MODEL or 'qwen2.5:3b',
+                'prompt': prompt,
+                'stream': False,
+                'options': {'temperature': 0, 'num_predict': max_tokens}
             }
-            r = requests.post(
-                "http://localhost:11434/api/generate",
-                json=payload, timeout=30)
-            return r.json()["response"].strip()
-
-        elif backend == 'gemini':
-            client   = genai.Client(api_key=os.getenv('GEMINI_API_KEY'))
-            response = client.models.generate_content(
-                model=model or 'gemini-1.5-flash-8b',
-                contents=prompt,
-                config=types.GenerateContentConfig(temperature=0),
-            )
-            return response.text.strip()
+            try:
+                r = requests.post(
+                    "http://localhost:11434/api/generate",
+                    json=payload,
+                    timeout=TranslationEngine._LLM_TIMEOUT)
+                return r.json()["response"].strip()
+            except (requests.exceptions.ReadTimeout,
+                    requests.exceptions.ConnectTimeout,
+                    requests.exceptions.ConnectionError) as _e:
+                TranslationEngine._llm_circuit_open_until = (
+                    _time.time() + TranslationEngine._LLM_RETRY_GAP)
+                print(f"⚠️  Ollama _call_llm échoué : {type(_e).__name__} — model={LLM_MODEL}")
 
         return ''
+
 
     def _call_llm_index(self, prompt: str):
         """Call LLM expecting a number — returns 0-based index or None."""
@@ -148,7 +177,7 @@ class TranslationEngine:
         # Score this low means the model found nothing semantically related;
         # any synonym it retrieves will be equally random. Emit placeholder.
         if all_embed and top_score < _EMBED_DEAD_ZONE:
-            print(f"     📭 [{tok_lemma}] — embed dead zone "
+            print(f"     [{tok_lemma}] — embed dead zone "
                   f"(score={top_score:.2f} < {_EMBED_DEAD_ZONE}), "
                   f"skipping synonym fallback")
             return False
@@ -164,6 +193,72 @@ class TranslationEngine:
         return False
 
     # ------------------------------------------------------------------
+    # ------------------------------------------------------------------
+    # SENS_FR RE-RANKING (déterministe, sans LLM)
+    # ------------------------------------------------------------------
+
+    def _rerank_by_sens_fr(self, source_lemma: str, candidates: list) -> list:
+        """
+        Re-classe les candidats en vérifiant si le lemme source apparaît
+        dans le sens_fr du candidat (KG). Deux passes :
+
+        1. String check (gratuit) :
+           - Lemme comme MOT dans sens_fr → boost fort (+0.35)
+           - Lemme comme sous-chaîne     → boost modéré (+0.15)
+           - Pas de match                → pas de boost
+
+        2. Embedding check (seulement si top-1 sans match string, embed-only) :
+           - cosine_sim(encode(lemme), encode(sens_fr)) * 0.20 → boost fin
+
+        Correspond directement à la métrique Embedding P@1 du paper.
+        """
+        import numpy as np
+
+        lemma_lower = source_lemma.lower().strip()
+        if not lemma_lower or not candidates:
+            return candidates
+
+        # ── Passe 1 : string match sens_fr ────────────────────────────
+        for c in candidates:
+            raw = c.get('fr', '')
+            sens = raw.lower().replace(',', ' ').replace('.', ' ').replace(';', ' ')
+            words = set(sens.split())
+            if lemma_lower in words:
+                c['_sens_boost'] = 0.35      # mot entier → fort signal
+            elif lemma_lower in raw.lower():
+                c['_sens_boost'] = 0.15      # sous-chaîne
+            else:
+                c['_sens_boost'] = 0.0
+
+        # ── Passe 2 : embedding sens_fr (seulement si top sans match) ─
+        # cosine(lemme, glose) est CIRCULAIRE dans cet espace : il sert
+        # uniquement à départager l'ordre des candidats embed, JAMAIS à
+        # gonfler la confiance (final_score). Stocké à part → le seuil de
+        # rerank/synonyme ne se laisse pas berner par un faux ami à 0.97.
+        top = candidates[0]
+        if top.get('_sens_boost', 0) == 0 and top.get('match') == 'embed':
+            try:
+                src_vec = self.model.encode(lemma_lower)
+                src_norm = np.linalg.norm(src_vec)
+                for c in candidates[:5]:
+                    if c.get('match') == 'embed' and c.get('fr'):
+                        sv = self.model.encode(c['fr'])
+                        sim = float(np.dot(src_vec, sv) /
+                                    (src_norm * np.linalg.norm(sv) + 1e-8))
+                        c['_embed_rank_boost'] = sim * 0.20
+            except Exception:
+                pass
+
+        # ── Application des boosts et re-tri ──────────────────────────
+        # Seul le boost string (passe 1) entre dans final_score (confiance).
+        # Le boost cosinus (passe 2) n'agit que sur la clé de tri.
+        for c in candidates:
+            c['final_score'] = c['final_score'] + c.get('_sens_boost', 0)
+
+        return sorted(
+            candidates,
+            key=lambda x: -(x['final_score'] + x.get('_embed_rank_boost', 0)))
+
     # LLM CONTEXTUAL RERANKING
     # ------------------------------------------------------------------
 
@@ -185,7 +280,16 @@ class TranslationEngine:
 
         top       = candidates[0]
         top_score = top['final_score']
-        if top_score >= 0.80:
+        all_embed = all(c.get('match') == 'embed' for c in candidates)
+        # Un score élevé ne court-circuite le rerank que pour un match EXACT.
+        # Un top 'embed' à score élevé est souvent un faux ami (espace
+        # dégénéré : "monté" → fɔ/dire à 0.97) → toujours passer par le LLM.
+        if top_score >= 0.80 and not all_embed:
+            return candidates
+        # Exception : embed très haute confiance (score bien au-dessus du max
+        # cosinus 1.0 grâce aux bonus frame+gloss) → le LLM ne peut pas faire mieux.
+        # Le seuil 1.05 ne se déclenche pas pour les faux amis à 0.97.
+        if all_embed and top_score >= 1.05:
             return candidates
 
 
@@ -197,9 +301,6 @@ class TranslationEngine:
             len(c['fr'].strip().rstrip('.').split()) < top_fr_words
             for c in candidates[1:]
         )
-        all_embed      = all(c.get('match') == 'embed' for c in candidates)
-        low_confidence = top_score < 0.75
-
         second_exact_score = exact_matches[1]['final_score'] \
                              if len(exact_matches) >= 2 else 0
 
@@ -219,14 +320,14 @@ class TranslationEngine:
 
         should_rerank = (
             (len(exact_matches) >= 2 and len(close) >= 2 and has_simpler)
-            or (all_embed and low_confidence)
+            or all_embed   # tout embed → score peu fiable, toujours reranker
             or is_context_sensitive
         )
 
         if not should_rerank:
             return candidates
 
-        if all_embed and low_confidence:
+        if all_embed:
             rerank_pool = candidates
         elif is_context_sensitive:
             rerank_pool = [c for c in candidates
@@ -273,6 +374,76 @@ class TranslationEngine:
         except Exception as e:
             print(f"     ⚠️  LLM rerank failed: {e}")
 
+        return candidates
+
+    # ------------------------------------------------------------------
+    # SEMANTIC VALIDATION OF KG CANDIDATES
+    # ------------------------------------------------------------------
+
+    def _validate_candidate_semantics(self, token_fr: str,
+                                      candidates: list,
+                                      top_k: int = 5) -> list:
+        """
+        Pour chaque candidat, LLM valide si son sens français
+        correspond sémantiquement au token français.
+
+        Approche par scoring (pas rejet binaire):
+        - Match textuel parfait → +0.25 boost
+        - Match sémantique valide → +0.15 boost
+        - Invalide → -0.15 penalité (garde quand même le candidat)
+
+        Cela casse la circularité embedding en utilisant LLM.
+        """
+        if not candidates or not token_fr:
+            return candidates
+
+        token_lower = token_fr.lower().strip()
+
+        for c in candidates[:top_k]:
+            gloss_fr = c.get('fr', '').lower().rstrip('.').strip()
+            if not gloss_fr:
+                c['_semantic_score'] = 0.0
+                continue
+
+            # Vérif textuelle: si la glose contient le token
+            if token_lower in gloss_fr or gloss_fr.startswith(token_lower):
+                c['_semantic_valid'] = True
+                c['_semantic_score'] = 0.25
+                print(f"     ✅ Match textuel: '{gloss_fr}' ≈ '{token_lower}' → {c['bm']}")
+                continue
+
+            # Vérif sémantique LLM
+            prompt = (
+                f'Les expressions françaises \"{gloss_fr}\" et \"{token_lower}\" '
+                f'ont-elles à peu près la même signification?\n'
+                f'Réponds uniquement par OUI ou NON.'
+            )
+
+            try:
+                resp = self._call_llm(prompt, max_tokens=3).strip().upper()
+                is_valid = resp.startswith('O')  # OUI en français
+
+                if is_valid:
+                    c['_semantic_valid'] = True
+                    c['_semantic_score'] = 0.15
+                    print(f"     ✅ LLM valide: '{gloss_fr}' ≈ '{token_lower}' → {c['bm']}")
+                else:
+                    c['_semantic_valid'] = False
+                    c['_semantic_score'] = -0.15
+                    print(f"     ⚠️  LLM: '{gloss_fr}' ≠ '{token_lower}' → {c['bm']} (pénalisé)")
+
+            except Exception as e:
+                print(f"     ⚠️  Validation sémantique échouée: {e}")
+                c['_semantic_valid'] = None
+                c['_semantic_score'] = -0.05
+
+        # Appliquer les scores sémantiques
+        for c in candidates[:top_k]:
+            semantic_boost = c.get('_semantic_score', 0.0)
+            c['final_score'] = c.get('final_score', 0) + semantic_boost
+
+        # Re-trier par final_score
+        candidates.sort(key=lambda x: x.get('final_score', 0), reverse=True)
         return candidates
 
     # ------------------------------------------------------------------
@@ -425,24 +596,280 @@ class TranslationEngine:
 
         return None
 
-    # ------------------------------------------------------------------
-    # SEMANTIC CLASS DETECTION (LLM + KG cache)
-    # ------------------------------------------------------------------
+    def _detect_possession_type(self, lemma: str, semantic_class: str = '') -> str:
+        """
+        Classify noun for 'avoir' construction.
+        Returns: AGE / MATERIAL / ABSTRACT / PAIN
+        """
+        if not lemma:
+            return 'ABSTRACT'
+
+        # Classification via semantic_class KG si disponible
+        _age_classes = {'time', 'duration', 'age'}
+        _material_classes = {'object', 'tool', 'vehicle', 'building',
+                            'money', 'food_item', 'clothing', 'furniture'}
+        _abstract_classes = {'feeling', 'emotion', 'biological_state',
+                            'sensation', 'mental_state', 'physiological'}
+        _pain_classes = {'pain', 'illness', 'disease', 'symptom'}
+
+        if semantic_class in _age_classes:
+            return 'AGE'
+        if semantic_class in _material_classes:
+            return 'MATERIAL'
+        if semantic_class in _abstract_classes:
+            return 'ABSTRACT'
+        if semantic_class in _pain_classes:
+            return 'PAIN'
+
+        # Fallback LLM
+        prompt = (
+            f"Le nom français '{lemma}' dans la construction 'avoir + {lemma}' "
+            f"appartient à quelle catégorie ?\n"
+            f"AGE : notion de temps, d'âge, d'années (âge, ans, siècle)\n"
+            f"MATERIAL : objet physique concret possédable (maison, voiture, téléphone, argent, clé)\n"
+            f"ABSTRACT : état interne biologique ou psychologique non palpable "
+            f"(faim, soif, peur, honte, chance, envie, idée, confiance)\n"
+            f"PAIN : douleur physique ou maladie (mal, douleur, fièvre, migraine)\n"
+            f"Réponds UNIQUEMENT par : AGE, MATERIAL, ABSTRACT ou PAIN"
+        )
+
+        for attempt in range(3):
+            try:
+                result = self._call_llm(prompt, max_tokens=5).strip().upper()
+                if result in ('AGE', 'MATERIAL', 'ABSTRACT', 'PAIN'):
+                    return result
+            except Exception:
+                continue
+
+        # Fallback timeout → ABSTRACT (plus sûr)
+        return 'ABSTRACT'
+
+    def _detect_statif_adj(self, lemma: str) -> str:
+        prompt = (
+            f'The French adjective "{lemma}" used predicatively — which Bambara construction?\n'
+            f'QUALITE: permanent quality, physical property, or RELATIONAL property '
+            f'that describes the subject. '
+            f'Examples: grand, beau, fort, rapide, rouge, intelligent, '
+            f'égal, semblable, différent, pareil, équivalent. '
+            f'Bambara: subject + ka + adjective.\n'
+            f'STATIF: temporary emotional or epistemic state the subject has entered. '
+            f'Examples: fatigué, content, triste, prêt, malade, inquiet, libre, occupé, '
+            f'sûr, certain, convaincu, conscient. '
+            f'Bambara: adjective + -len/-nen dòn.\n'
+            f'VALEUR: abstract truth-value presented as a FACT/NOUN (you would say '
+            f'"c\'est la X"), NOT an adjective describing the subject. '
+            f'Examples: vrai, faux, réel. '
+            f'Bambara: noun dòn (presentative).\n'
+            f'PARTICIPE: state resulting from a past action done to the subject. '
+            f'Examples: blessé, fermé, cassé, ouvert, cuit. '
+            f'Bambara: verb + -ra/-la/-na.\n'
+            f'Reply with ONLY one word: QUALITE, STATIF, VALEUR, or PARTICIPE.'
+        )
+
+        for _attempt in range(3):
+            try:
+                raw = self._call_llm(prompt, max_tokens=5).strip().upper().split()[0]
+                print(f"     🔍 LLM classify? '{raw}'")
+                result = raw if raw in ('STATIF', 'PARTICIPE', 'QUALITE', 'VALEUR') else 'QUALITE'
+                return result
+            except Exception as e:
+                print(f"     🔍 attempt {_attempt+1} failed: {e}")
+
+        return 'QUALITE'
+
+    def _classify_adj_state(self, tok, all_embed=False):
+        """Classe un ADJ prédicatif en STATIF/PARTICIPE/VALEUR/QUALITE et pose
+        le flag correspondant (QUALITE → aucun flag : qualitative par défaut).
+
+        Même logique que les branches inline, mais appelable aussi sur les
+        chemins où bm est déjà fourni par le KG : sans ça, l'early-return
+        sautait la classification (ex: 'capable' → sénkola → jamais classé).
+        """
+        if tok.get('pos') != 'ADJ':
+            return
+        # Déjà classé en amont → ne pas relancer le LLM
+        if (tok.get('is_statif') or tok.get('is_participe_passe')
+                or tok.get('is_valeur')):
+            return
+        _clause_toks  = getattr(self, '_current_clause_tokens', [])
+        _passive_subj = any(t.get('dep') == 'nsubj:pass' for t in _clause_toks)
+        _has_obl_arg  = (tok.get('dep') == 'ROOT' and any(
+            t.get('dep') == 'obl:arg'
+            and t.get('head_index') == tok.get('orig_index')
+            for t in _clause_toks))
+        if _has_obl_arg:
+            _result = 'STATIF'
+        else:
+            _result = self._detect_statif_adj(tok.get('lemma', ''))
+            if str(_result).upper() == 'QUALITE' and _passive_subj and tok.get('dep') == 'ROOT':
+                _result = 'PARTICIPE'
+        _result_norm = str(_result).upper() if _result else ''
+        if _result_norm == 'STATIF' or _result is True:
+            tok['is_statif'] = True
+            if all_embed:
+                tok['bm'] = f"[{tok.get('lemma')}]"
+        elif _result_norm == 'PARTICIPE':
+            tok['is_participe_passe'] = True
+        elif _result_norm == 'VALEUR':
+            tok['is_valeur'] = True
+
+    def _detect_reflexive_type(self, lemma: str) -> str:
+        """Classifie le type de construction réflexive du verbe.
+        Retourne RECIPROCAL, REFLEXIVE, PASSIVE ou IDIOMATIC."""
+        prompt = (
+            f'Verb: "{lemma}". Used with reflexive "se".\n'
+            f'RECIPROCAL: two or more participants perform the action on each other '
+            f'(meet, fight, kiss, marry, see each other).\n'
+            f'REFLEXIVE: the action is intentionally directed back to the subject as an object; '
+            f'the subject consciously acts on themselves '
+            f'(hurt oneself, blame oneself, judge oneself, examine oneself, punish oneself).\n'
+            f'PASSIVE: "se" has no semantic role; the subject undergoes the action '
+            f'or the construction is impersonal/passive '
+            f'(be sold, be called, be done, happen, be used).\n'
+            f'IDIOMATIC: includes body-care/grooming actions (wash, dress, shave, comb, '
+            f'bathe, dry oneself), AND verbs that require "se" to express a state, change '
+            f'of state, emotion, cognition, movement, or fixed meaning '
+            f'(realize, remember, get angry, hurry, leave, wonder, concentrate, '
+            f'make a mistake, get up, lie down, sit down, get dressed, get bored).\n'
+            f'Return one word only: RECIPROCAL, REFLEXIVE, PASSIVE, or IDIOMATIC.'
+        )
+        for _attempt in range(3):
+            try:
+                raw = self._call_llm(prompt, max_tokens=5).strip().upper()
+                parts = raw.split()
+                if not parts:
+                    raise ValueError('empty response')
+                raw = parts[0]
+                print(f"     🔍 reflexive_type? '{raw}'")
+                result = raw if raw in ('RECIPROCAL', 'REFLEXIVE', 'PASSIVE', 'IDIOMATIC') else 'IDIOMATIC'
+                return result
+            except Exception as e:
+                print(f"     🔍 attempt {_attempt+1} failed: {e}")
+        return 'IDIOMATIC'
 
     def _load_semantic_classes(self) -> str:
-        if not hasattr(self, '_semantic_class_cache'):
-            try:
-                res = self.db.query("""
-                    MATCH (c:SemanticClass)
-                    RETURN c.name AS name, c.description AS description
-                    ORDER BY c.name
-                """)
-                self._semantic_class_cache = res if res else []
-            except Exception:
-                self._semantic_class_cache = []
-        return self._semantic_class_cache
+        try:
+            res = self.db.query("""
+                MATCH (c:SemanticClass)
+                RETURN c.name AS name, c.description AS description
+                ORDER BY c.name
+            """)
+            return res if res else []
+        except Exception:
+            return []
 
+    def _detect_relational_noun(self, lemma: str, bm: str) -> bool:
+        """
+        Détermine si un nom est INALIENABLE en bambara → pas de 'ka'.
+        Principe linguistique : possession inalienable = relation constitutive et
+        indissociable entre possesseur et possédé. Possession aliénable = le possédé
+        existe indépendamment du possesseur et peut en être séparé → 'ka'.
+        Retourne True  → inalienable → pas de 'ka'
+        Retourne False → aliénable   → 'ka' requis
+        Fallback : True (pas de 'ka') — plus sûr grammaticalement.
+        """
+        if not lemma or not bm:
+            return True
+
+        prompt = (
+            f"En bambara, RÈGLE ABSOLUE : deux entités de même nature ne prennent JAMAIS 'ka'.\n"
+            f"Les relations de parenté, de famille, et les relations sociales entre personnes "
+            f"sont toujours INALIENABLES (sans 'ka') : père, mère, frère, sœur, fils, fille, "
+            f"oncle, tante, cousin, grand-père, grand-mère, mari, femme, enfant, ami, ennemi, "
+            f"voisin, collègue, patron, etc.\n"
+            f"Les parties du corps sont aussi INALIENABLES (sans 'ka') : tête, bras, jambe, main, etc.\n"
+            f"Seuls les objets physiques SÉPARABLES et TRANSFÉRABLES prennent 'ka' (possession ALIÉNABLE) : "
+            f"maison, voiture, livre, vêtement, argent, champ, outil, etc.\n"
+            f"Le mot français '{lemma}' représente-t-il une relation INALIENABLE (OUI) "
+            f"ou un objet ALIÉNABLE (NON) ?\n"
+            f"Réponds UNIQUEMENT par : OUI ou NON"
+        )
+        for _ in range(2):
+            result_str = self._call_llm(prompt, max_tokens=5).strip().upper()
+            if 'OUI' in result_str:
+                print(f"  🔗 [RELATIONAL] '{lemma}' ({bm}) → INALIENABLE (sans 'ka')")
+                return True
+            if 'NON' in result_str:
+                print(f"  📦 [RELATIONAL] '{lemma}' ({bm}) → ALIÉNABLE (avec 'ka')")
+                return False
+
+        # LLM indisponible → pas de 'ka' par défaut (plus sûr grammaticalement)
+        print(f"  ❓ [RELATIONAL] '{lemma}' ({bm}) → LLM indisponible, pas de 'ka' par défaut")
+        return True
+
+    def _detect_intransitive_type(self, lemma: str, semantic_class: str = '') -> str:
+
+        # ── LLM ──────────────────────────────────────────────────────────────
+        # On demande l'usage COURANT (pas la possibilité grammaticale) : 'travailler'
+        # peut grammaticalement avoir un COD (travailler le bois) mais s'emploie
+        # habituellement sans objet → ABSOLU. Les verbes cités sont de simples
+        # exemples illustratifs, pas une liste exhaustive.
+        prompt = (
+            f"Le verbe français '{lemma}', dans son usage le plus COURANT, "
+            f"s'emploie-t-il avec un objet direct ?\n"
+            f"ACTION = habituellement AVEC un objet direct, "
+            f"par exemple : manger, voir, prendre, lire, boire…\n"
+            f"ABSOLU = habituellement SANS objet, intransitif, "
+            f"par exemple : dormir, travailler, partir, courir, parler…\n"
+            f"Réponds UNIQUEMENT par : ACTION ou ABSOLU"
+        )
+        _result = None
+        for attempt in range(3):
+            try:
+                _raw = self._call_llm(prompt, max_tokens=5).strip().upper()
+                print(f"  🔬 [TRANSITIVITY raw] attempt {attempt+1}: {_raw!r}")
+                if 'ACTION' in _raw:
+                    _result = 'ACTION'; break
+                if 'ABSOLU' in _raw:
+                    _result = 'ABSOLU'; break
+            except Exception:
+                continue
+
+        verdict = _result
+        print(f"  🔍 [TRANSITIVITY] LLM verdict for '{lemma}' (class={semantic_class}) → {verdict}  [raw: {_raw!r}]")
+        return verdict
+    
+    
     def _detect_semantic_class(self, lemma: str, bm: str) -> str:
+        """Détecte la classe sémantique d'un verbe.
+
+        Utilise d'abord une liste hardcoded de verbes intransitifs/autonomes connus,
+        puis le KG, puis le LLM comme fallback.
+        """
+        # ── Verbes intransitifs/autonomes connus → motion ou copula ──────────────
+        _autonome_verbs = {
+            'venir': 'motion',
+            'aller': 'motion',
+            'partir': 'motion',
+            'arriver': 'motion',
+            'entrer': 'motion',
+            'sortir': 'motion',
+            'monter': 'motion',
+            'descendre': 'motion',
+            'rester': 'posture',
+            'demeurer': 'posture',
+            'être': 'copula',
+            'sembler': 'copula',
+            'paraître': 'perception',
+            'disparaître': 'motion',
+            'courir': 'motion',
+            'marcher': 'motion',
+            'sauter': 'motion',
+            'tomber': 'motion',
+            'se lever': 'posture',
+            'dormir': 'posture',
+            'vivre': 'biological',
+            'mourir': 'biological',
+            'naître': 'biological',
+        }
+
+        lemma_lower = lemma.lower().strip()
+        if lemma_lower in _autonome_verbs:
+            cls = _autonome_verbs[lemma_lower]
+            print(f"     🏷️  semantic_class('{lemma}') = {cls}  [hardcoded]")
+            return cls
+
+        # ── Chercher dans le KG ──────────────────────────────────────────────────
         try:
             res = self.db.query("""
                 MATCH (s:Sense {bm: $bm})
@@ -450,61 +877,58 @@ class TranslationEngine:
                 RETURN s.semantic_class AS cls LIMIT 1
             """, {'bm': bm})
             if res and res[0].get('cls'):
-                return res[0]['cls']
+                cls = res[0]['cls'].strip().lower()
+                if cls and ' ' not in cls:
+                    print(f"     🏷️  semantic_class('{lemma}') = {cls}  [from KG]")
+                    return cls
         except Exception:
             pass
 
-        classes = self._load_semantic_classes()
-        if not classes:
-            return 'other'
-
-        class_lines = '\n'.join(
-            f"- {c['name']}: {c['description']}"
-            for c in classes
-        )
-        valid_names = {c['name'] for c in classes}
-
+        # ── LLM comme fallback ───────────────────────────────────────────────────
         prompt = (
-            f'Classify this French verb into ONE of these semantic classes.\n'
-            f'Verb: "{lemma}"\n'
-            f'Classes:\n{class_lines}\n'
-            f'Reply with ONLY the class name, nothing else.'
+            f'Quelle est la nature sémantique du verbe français "{lemma}" ?\n'
+            f'motion=déplacement dans l\'espace, biological=processus vital du corps, '
+            f'posture=changement ou maintien de position corporelle, '
+            f'spontaneous=réaction émotionnelle ou réflexe involontaire, '
+            f'perception=activité sensorielle ou cognitive, '
+            f'meteorological=phénomène atmosphérique, '
+            f'consumption=ingestion de nourriture ou boisson, '
+            f'preparation=transformation culinaire ou matérielle, '
+            f'action=action physique intentionnelle sur un objet ou autrui, '
+            f'technique=travail spécialisé de fabrication ou réparation, '
+            f'craft=création artistique ou artisanale manuelle, '
+            f'communication=expression verbale ou transmission d\'information, '
+            f'copula=lien attributif entre sujet et état ou identité, '
+            f'having=possession ou appartenance, '
+            f'other=aucune catégorie ne convient.\n'
+            f'Réponds UNIQUEMENT par le nom de la catégorie.'
         )
 
         try:
-            cls = self._call_llm(prompt, max_tokens=5).strip().lower()
-            if cls not in valid_names:
-                cls = 'other'
-            try:
-                self.db.query("""
-                    MATCH (s:Sense {bm: $bm})
-                    SET s.semantic_class = $cls
-                """, {'bm': bm, 'cls': cls})
-            except Exception:
-                pass
-            print(f"     🏷️  semantic_class('{lemma}') = {cls}")
+            import re as _re
+            cls_raw = self._call_llm(prompt, max_tokens=15).strip().lower()
+            words   = _re.findall(r'[a-z]+', cls_raw)
+            cls     = words[0] if words else 'other'
+            print(f"     🏷️  semantic_class('{lemma}') = {cls}  [LLM: {cls_raw!r}]")
             return cls
         except Exception as e:
             print(f"     ⚠️  semantic class detection failed: {e}")
             return 'other'
-
+        
     # ------------------------------------------------------------------
     # TOKEN TRANSLATION
     # ------------------------------------------------------------------
 
-    def _get_kg_label(self, spacy_pos: str) -> str | None:
-        if not hasattr(self, '_pos_label_cache'):
-            try:
-                res = self.db.query("""
-                    MATCH (m:PosMapping)
-                    RETURN m.spacy AS spacy, m.kg_label AS kg_label
-                """)
-                self._pos_label_cache = {
-                    r['spacy']: r['kg_label'] for r in res
-                } if res else {}
-            except Exception:
-                self._pos_label_cache = {}
-        return self._pos_label_cache.get(spacy_pos)
+    def _get_kg_label(self, spacy_pos: str):
+        try:
+            res = self.db.query("""
+                MATCH (m:PosMapping)
+                RETURN m.spacy AS spacy, m.kg_label AS kg_label
+            """)
+            mapping = {r['spacy']: r['kg_label'] for r in res} if res else {}
+        except Exception:
+            mapping = {}
+        return mapping.get(spacy_pos)
 
     def _translate_token(self, tok: dict, frame: str,
                          context_lemmas: list):
@@ -514,14 +938,43 @@ class TranslationEngine:
         pos     = tok['pos']
 
         if tok.get('bm'):
+            if pos == 'NOUN' and not tok['bm'].startswith('[') and 'is_relational' not in tok:
+                tok['is_relational'] = self._detect_relational_noun(tok['lemma'], tok['bm'])
+            elif pos == 'ADJ':
+                self._classify_adj_state(tok)
             return tok, []
 
         if pos == 'PUNCT':
+            return tok, []
+        # ── NÉGATION : ne pas assigner de bm aux tokens de négation ──────────
+        # ne/n'/pas/jamais/plus/rien → role='negation' ou dans neg_surfaces KG
+        # Ces tokens doivent rester bm='' pour ne pas parasiter les obliques
+        _surf_neg = str(surface).lower().rstrip("'").rstrip('\u2019').rstrip('\u2018')
+        _neg_surfs = self.rule_engine.grammar.get('neg_surfaces', set())
+        if tok.get('role') == 'negation' or _surf_neg in _neg_surfs:
+            tok['bm'] = ''
             return tok, []
 
         if pos == 'PROPN':
             tok['bm'] = tok.get('lemma') or surface
             return tok, []
+
+        # ── PRÉ-CONTRÔLE SYNTAXIQUE : rôle nominal vs adjectif ───────────────
+        # Pour les ADJ ROOT dans une construction copulative avec expletif (c'est):
+        #   - ADJ avec det enfant (c'est le vrai)  → rôle nominal → is_nominal_adj=True
+        #   - ADJ sans det                         → rôle adjectif (qualité ou valeur)
+        if pos == 'ADJ' and tok.get('dep') == 'ROOT':
+            _ctoks_pre = getattr(self, '_current_clause_tokens', [])
+            _has_expl_pre = any(t.get('role') == 'expletive' for t in _ctoks_pre)
+            if _has_expl_pre:
+                _has_det_on_adj = any(
+                    t.get('dep') == 'det'
+                    and t.get('head_index') == tok.get('orig_index')
+                    and t.get('role') not in ('expletive',)
+                    for t in _ctoks_pre
+                )
+                if _has_det_on_adj:
+                    tok['is_nominal_adj'] = True
 
         kg_label = self._get_kg_label(pos)
 
@@ -540,13 +993,25 @@ class TranslationEngine:
                 """, {'surface': surface, 'lemma': lemma})
                 if res and res[0].get('bm'):
                     tok['bm'] = res[0]['bm']
+                    if pos == 'NOUN' and not tok['bm'].startswith('['):
+                        tok['is_relational'] = self._detect_relational_noun(tok['lemma'], tok['bm'])
+                    elif pos == 'ADJ':
+                        self._classify_adj_state(tok)
                     return tok, []
             except Exception as e:
                 print(f"     ⚠️  KG label query failed ({kg_label}): {e}")
 
         structural_labels = {'Preposition', 'Article', 'Auxiliary'}
         if kg_label in structural_labels:
-            return tok, []
+            # SÉCURISATION DES MOTS DE LIAISON SYNTAXIQUE (ZÉRO HARDCODE)
+            # Si le mot est une préposition mais qu'il possède un rôle structurel fort
+            # configuré par le KG, on lui interdit de quitter la fonction prématurément.
+            # Il doit descendre jusqu'à la méthode retriever.retrieve pour charger sa glose !
+            _ROLES_A_TRADUIRE = {'purposive', 'purpose', 'comitative', 'conjunction', 'interrogative'}
+            
+            if tok.get('role') not in _ROLES_A_TRADUIRE:
+                return tok, []
+            # S'il est dans la liste, on ignore le return et on le laisse continuer !
 
         if tok.get('role') == 'auxiliary':
             return tok, []
@@ -587,8 +1052,33 @@ class TranslationEngine:
             spacy_pos=tok['pos'],
             top_k=TOP_K,
             lang=lang,
+            context_tokens=context_lemmas,
             is_verbal_noun=tok.get('is_verbal_noun', False),
         )
+
+        # ── RE-RANKING SENS_FR (déterministe, avant LLM) ─────────────
+        candidates = self._rerank_by_sens_fr(lemma, candidates)
+
+        # ── SEMANTIC VALIDATION: LLM checks if candidate gloss matches token ──
+        # This breaks the embedding circularity by using semantic reasoning
+        # instead of cosine similarity in compressed vector space.
+        candidates = self._validate_candidate_semantics(lemma, candidates, top_k=10)
+
+        # ── AFFICHAGE DU TOP 5/6 DES CANDIDATS SENSE DU KG (DIAGNOSTIC VISUEL) ──
+        print(f"\n     🔎 [TRANSLATION ENGINE] Jeton: '{surface}' | Lemme: '{lemma}' | POS: {pos}")
+        if not candidates:
+            print("        📭 Aucun candidat disponible dans la liste du moteur.")
+        else:
+            # On affiche les 5 ou 6 premiers candidats présents dans la pile finale de décision [S4]
+            for idx, cand in enumerate(candidates[:6]):
+                match_type = cand.get('match', 'unknown').upper()
+                score = cand.get('final_score', 0.0)
+                bm_glose = cand.get('bm', '[vide]')
+                fr_sens = cand.get('fr', '[vide]')
+                via_syn = f" (via synonyme: '{cand['via_synonym']}')" if 'via_synonym' in cand else ""
+                
+                print(f"        Rang #{idx+1} [{match_type}] Score: {score:.3f} | Bambara: '{bm_glose}' → Sens FR: \"{fr_sens}\"{via_syn}")
+        print("     " + "="*65)
 
         candidates = self._rerank_with_llm(
             lemma, candidates, tok_pos=tok['pos'],
@@ -614,13 +1104,63 @@ class TranslationEngine:
                 if top_fallback and top_fallback['final_score'] >= 0.90:
                     # Assign bm directly and return — don't fall through to
                     # the all_embed guards below which would re-reject it.
-                    print(f"     ↩️  No synonym matched — using top embed '{top_fallback['bm']}' (score={top_fallback['final_score']:.3f})")
+                    print(f" ↩️  No synonym matched — using top embed '{top_fallback['bm']}' (score={top_fallback['final_score']:.3f})")
                     tok['bm'] = top_fallback['bm']
-                    return tok, candidates
+                    # return tok, candidates
+                # APRÈS
                 else:
                     print(f"     📭 [{tok['lemma']}] — no valid translation found")
                     tok['bm'] = f"[{tok['lemma']}]"
+                    # Fallback NOUN pour les ADJ prédicatifs (professions/rôles)
+                    # ex: "je suis étudiant" → spaCy=ADJ, mais KG a kàlandenba (NOUN)
+                    if tok.get('pos') == 'ADJ' and tok.get('dep') == 'ROOT':
+                        _cop_context = any(
+                            t.get('dep') == 'cop'
+                            for t in getattr(self, '_current_clause_tokens', []))
+                        if _cop_context:
+                            # Classifier d'abord : STATIF/PARTICIPE/QUALITE
+                            # Le NOUN fallback est réservé aux prédicats nominaux (professions)
+                            self._classify_adj_state(tok)
+                            if not tok.get('is_participe_passe') and not tok.get('is_statif'):
+                                _noun_cands = self.retriever.retrieve(
+                                    lemma, frame, spacy_pos='NOUN',
+                                    top_k=TOP_K, lang=lang)
+                                _noun_cands = self._rerank_by_sens_fr(lemma, _noun_cands)
+                                if _noun_cands and _noun_cands[0]['final_score'] >= 0.50:
+                                    _best_n = _noun_cands[0]
+                                    tok['bm'] = _best_n['bm']
+                                    tok['_adj_is_nominal_pred'] = True
+                                    print(f"     🔄 [NOUN fallback] '{lemma}' → '{_best_n['bm']}' ({_best_n['fr']})")
+                                    print(f"DEBUG après détection: tok flags = is_statif={tok.get('is_statif')}, is_participe_passe={tok.get('is_participe_passe')}")
+                                    return tok, _noun_cands
+                    # Détecter statif/participe AVANT le return
+                    if tok['pos'] == 'ADJ':
+                        _clause_toks2 = getattr(self, '_current_clause_tokens', [])
+                        _passive_subj = any(t.get('dep') == 'nsubj:pass' for t in _clause_toks2)
+                        _has_obl_arg2 = (tok.get('dep') == 'ROOT' and any(
+                            t.get('dep') == 'obl:arg' and t.get('head_index') == tok.get('orig_index')
+                            for t in _clause_toks2))
+                        if _has_obl_arg2:
+                            _r = 'STATIF'
+                        else:
+                            _r = self._detect_statif_adj(tok['lemma'])
+                            if str(_r).upper() == 'QUALITE' and _passive_subj and tok.get('dep') == 'ROOT':
+                                _r = 'PARTICIPE'
+                        _rn = str(_r).upper() if _r else ''
+                        if _rn == 'STATIF' or _r is True:
+                            tok['is_statif'] = True
+                        elif _rn == 'PARTICIPE':
+                            tok['is_participe_passe'] = True
+                        elif _rn == 'VALEUR':
+                            tok['is_valeur'] = True
+                    print(f"DEBUG après détection: tok flags = is_statif={tok.get('is_statif')}, is_participe_passe={tok.get('is_participe_passe')}")
                     return tok, candidates
+
+                    # Détecter statif/participe avant de retourner
+
+                    print(f"DEBUG après détection: tok flags = is_statif={tok.get('is_statif')}, is_participe_passe={tok.get('is_participe_passe')}")
+                    return tok, candidates
+                    # Ne pas retourner ici — continuer pour détecter is_statif
 
         top_score = candidates[0]['final_score'] if candidates else 0
 
@@ -640,10 +1180,163 @@ class TranslationEngine:
         best      = candidates[0]
         tok['bm'] = best['bm'] if best['final_score'] >= MIN_SCORE \
                     else f"[{tok['lemma']}]"
+        tok['_match_type']  = best.get('match', 'unknown')   # 'exact' | 'embed'
+        tok['_top_score']   = best.get('final_score', 0.0)
+        # Stocker le sens FR du meilleur candidat pour détecter les subsomptions
+        # dans les chaînes génitives (ex: venue→jɔ̀kun sens_fr="raison de la venue")
+        if best['final_score'] >= MIN_SCORE:
+            tok['sens_fr'] = best.get('fr', '')
 
         if tok['pos'] == 'VERB' and tok.get('bm'):
             tok['semantic_class'] = self._detect_semantic_class(
                 tok['lemma'], tok['bm'])
+            _sc = tok.get('semantic_class', '')
+
+            _morph_str = str(tok.get('morph', ''))
+            _is_part_pass = ('VerbForm=Part' in _morph_str
+                             and 'Voice=Pass' in _morph_str)
+            if _is_part_pass:
+                if _sc in ('posture', 'biological', 'spontaneous', 'consumption'):
+                    _is_statif = True
+                else:
+                    try:
+                        _is_statif = self._detect_statif_adj(tok['lemma'])
+                    except Exception:
+                        _is_statif = False
+                if _is_statif:
+                    tok['is_statif'] = True
+                    tok['pos'] = 'ADJ'
+                    print(f"     🏷️  participe_statif('{tok['lemma']}') = True")
+
+            # Signal lexical KG : nom support dédié → action_noun + kɛ
+            try:
+                _res = self.db.query(
+                    "MATCH (s:Sense {bm: $bm}) "
+                    "RETURN s.action_noun AS an LIMIT 1",
+                    {'bm': tok['bm']})
+                _an = _res[0].get('an') if _res and _res[0] else None
+            except Exception:
+                _an = None
+            if _an:
+                tok['intransitive_type'] = 'support'
+                tok['action_noun'] = _an
+
+            # Catégorie B1 : intransitif absolu → verbe nu
+            elif _sc in ('motion', 'biological', 'posture', 'spontaneous',
+                       'perception', 'meteorological'):
+                tok['intransitive_type'] = 'absolute'
+
+            # Catégorie B2 : nom support dédié → action_noun + kɛ
+            elif _sc in ('consumption', 'preparation'):
+                tok['intransitive_type'] = 'support'
+                # Récupérer le nom d'action depuis le KG
+                try:
+                    _res = self.db.query(
+                        "MATCH (s:Sense {bm: $bm}) "
+                        "RETURN s.action_noun AS an LIMIT 1",
+                        {'bm': tok['bm']})
+                    _an = _res[0].get('an') if _res and _res[0] else None
+                except Exception:
+                    _an = None
+                if _an:
+                    tok['action_noun'] = _an
+
+            # Catégorie B3 : nominalisation -li/-ni → V+li + kɛ
+            elif _sc in ('action', 'technique', 'craft', 'communication'):
+                tok['intransitive_type'] = 'nominalized'
+
+        if tok['pos'] == 'NOUN' and tok.get('bm') and not tok['bm'].startswith('['):
+            tok['is_relational'] = self._detect_relational_noun(tok['lemma'], tok['bm'])
+
+        # Détection du type réflexif quand le verbe a un pronom réflexif dans la clause
+        if tok['pos'] == 'VERB' and tok.get('dep') == 'ROOT':
+            _ctoks_v = getattr(self, '_current_clause_tokens', [])
+            _nsubj_v       = next((t for t in _ctoks_v
+                                   if t.get('dep') in ('nsubj', 'nsubj:pass')), None)
+            _nsubj_morph_v = str(_nsubj_v.get('morph', '')) if _nsubj_v else ''
+            _nsubj_surf_v  = str(_nsubj_v.get('surface', '')).lower() if _nsubj_v else ''
+            _nsubj_pos_v   = _nsubj_v.get('pos', '') if _nsubj_v else ''
+            _is_plural_subj = (
+                'Number=Plur' in _nsubj_morph_v
+                or (_nsubj_v and _nsubj_v.get('is_plural'))
+                or _nsubj_surf_v == 'on')
+            _is_dem_noun = ('PronType=Dem' in _nsubj_morph_v
+                            or _nsubj_pos_v == 'NOUN')
+
+            # Règle syntaxique forte : même surface sujet+réflexif (nous nous, ils ils)
+            # → toujours réciproque si pluriel, sans appel LLM
+            _same_surf_refl = next((
+                t for t in _ctoks_v
+                if t.get('dep') in ('expl:comp', 'obj')
+                and t.get('pos') == 'PRON'
+                and _nsubj_surf_v
+                and str(t.get('surface', '')).lower() == _nsubj_surf_v
+            ), None)
+
+            _has_refl_pron = (
+                _same_surf_refl is not None
+                or any(
+                    t.get('dep') in ('expl:comp', 'obj', 'iobj')
+                    and t.get('pos') == 'PRON'
+                    and ('Reflex=Yes' in str(t.get('morph', ''))
+                         or t.get('dep') == 'iobj')
+                    for t in _ctoks_v
+                )
+            )
+
+            if _has_refl_pron:
+                # NOUN singulier / Dem → passif réflexif
+                # NOUN pluriel → traité comme les autres pluriels (LLM ou même-surface)
+                if _is_dem_noun and not _is_plural_subj:
+                    tok['is_refl_passive'] = True
+                elif _same_surf_refl and _is_plural_subj:
+                    # nous nous, ils ils → réciproque certain, pas de LLM
+                    tok['is_reciprocal'] = True
+                elif _is_plural_subj:
+                    # se/me/Reflex=Yes + pluriel : LLM décide RECIPROCAL vs REFLEXIVE
+                    _rtype = self._detect_reflexive_type(tok['lemma'])
+                    if _rtype == 'RECIPROCAL':
+                        tok['is_reciprocal'] = True
+                    elif _rtype == 'PASSIVE':
+                        tok['is_refl_passive'] = True
+                    elif _rtype == 'IDIOMATIC':
+                        tok['is_refl_idiomatic'] = True
+                else:
+                    # Singulier (expl:comp ou obj) : LLM décide IDIOMATIC vs REFLEXIVE vs PASSIVE
+                    _refl_sing = next((t for t in _ctoks_v
+                                       if t.get('dep') in ('expl:comp', 'obj')
+                                       and t.get('pos') == 'PRON'), None)
+                    if _refl_sing:
+                        _rtype = self._detect_reflexive_type(tok['lemma'])
+                        if _rtype == 'PASSIVE':
+                            tok['is_refl_passive'] = True
+                        elif _rtype == 'IDIOMATIC':
+                            tok['is_refl_idiomatic'] = True
+
+        if tok['pos'] == 'ADJ' and tok.get('bm'):
+            _clause_toks = getattr(self, '_current_clause_tokens', [])
+            _passive_subj = any(t.get('dep') == 'nsubj:pass' for t in _clause_toks)
+            _has_obl_arg  = (tok.get('dep') == 'ROOT' and any(
+                t.get('dep') == 'obl:arg' and t.get('head_index') == tok.get('orig_index')
+                for t in _clause_toks))
+            if _has_obl_arg:
+                # ADJ avec complément (sûr de, content de, capable de) → état épistémique
+                _result = 'STATIF'
+            else:
+                _result = self._detect_statif_adj(lemma)
+                if str(_result).upper() == 'QUALITE' and _passive_subj and tok.get('dep') == 'ROOT':
+                    _result = 'PARTICIPE'
+
+            _result_norm = str(_result).upper() if _result else ''
+            if _result_norm == 'STATIF' or _result is True:
+                tok['is_statif'] = True
+                if all_embed:
+                    tok['bm'] = f"[{lemma}]"
+            elif _result_norm == 'PARTICIPE':
+                tok['is_participe_passe'] = True
+            elif _result_norm == 'VALEUR':
+                tok['is_valeur'] = True
+            # QUALITE → rien, le moteur décide (qualitative par défaut)
 
         return tok, candidates
 
@@ -661,7 +1354,7 @@ class TranslationEngine:
     # SINGLE CLAUSE TRANSLATION
     # ------------------------------------------------------------------
 
-    def _translate_clause(self, clause: str, frame: str) -> str:
+    def _translate_clause(self, clause: str, frame: str, lang: str = 'fr') -> str:
         self._current_sentence = clause
 
         clause_vector = self.model.encode(clause)
@@ -674,8 +1367,15 @@ class TranslationEngine:
                 print(f"     → Result: '{global_match['bm']}'")
                 return global_match['bm']
 
+        # tokens = tokenize(clause, db=self.db,
+        #                   backend=LLM_BACKEND, model=LLM_MODEL)
+        
         tokens = tokenize(clause, db=self.db,
                           backend=LLM_BACKEND, model=LLM_MODEL)
+        # Forcer la langue détectée depuis la phrase principale
+        for tok in tokens:
+            tok['lang'] = lang
+
         if not tokens:
             return ''
 
@@ -692,50 +1392,91 @@ class TranslationEngine:
                 in_quotes = False
 
         concepts = []
+        self._current_clause_tokens = tokens
 
-        for tok in tokens:
+        for tok_idx, tok in enumerate(tokens):
             surf = str(tok.get('surface', '')).strip().lower()
             pos = tok.get('pos', '')
 
+
             # 1. NETTOYAGE GÉNÉRIQUE DE PONCTUATION ET CARACTÈRES ORPHELINS (ZÉRO HARDCODE)
-            # Si le jeton est classé en ponctuation, ou s'il s'agit d'un caractère isolé non-alphanumérique 
+            # Si le jeton est classé en ponctuation, ou s'il s'agit d'un caractère isolé non-alphanumérique
             # (comme une apostrophe droite, courbe, un tiret), on le vide et on passe immédiatement au suivant.
             if pos in ('PUNCT', 'SYM') or (len(surf) <= 1 and not surf.isalnum()):
                 tok['bm'] = ''
                 continue
 
             # 2. HARMONISATION GÉNÉRIQUE DES PRONOMS SUJETS SINGULIERS
-            # Si spaCy confirme qu'il s'agit d'un pronom sujet de la première personne (nsubj)
-            # et que sa longueur est réduite (élision), on lui attribue de force sa glose de référence.
-            if pos == 'PRON' and tok.get('dep') == 'nsubj' and len(surf) == 1:
+            if pos == 'PRON' and surf == 'j':
                 tok['bm'] = 'n'
                 tok['role'] = 'pronoun'
-                continue # ON COUPE-CIRCUITE : Empêche _translate_token d'écraser la valeur 'n'
+                continue
 
-            # Exécution de la traduction unifiée du jeton si valide (votre ligne existante)
-            tok, candidates = self._translate_token(tok, frame, [])
+            if pos == 'PRON' and surf in ("c'", 'ce', 'cela', 'ça') and tok.get('role') in ('expletive', 'pronoun'):
+                tok['bm'] = 'o'
+                continue
 
 
-        # CORRECTION INTERFACE : Transmission obligatoire de la grammaire chargée pour synchroniser le TAM (bɛ)
-        tree = build_tree(tokens, db=self.db, grammar=self.rule_engine.grammar)
+            # Build context from adjacent tokens for better embedding retrieval
+            # Filter out punctuation and function words that don't add semantic value
+            context_lemmas = []
+            for offset in [-1, 1]:  # previous and next
+                idx = tok_idx + offset
+                if 0 <= idx < len(tokens):
+                    neighbor = tokens[idx]
+                    lem = neighbor.get('lemma', '').strip()
+                    pos = neighbor.get('pos', '')
+                    # Skip if: punctuation, empty, or too common/structural
+                    if lem and pos not in ('PUNCT', 'SYM') and len(lem) > 1:
+                        context_lemmas.append(lem)
+            context_lemmas = [l.lower() for l in context_lemmas if l]  # lowercase
 
-        print("\n  📦 GROUPES SYNTAXIQUES (CLUSTERS) :")
-        m = tree.get('main', {})
-        for slot, value in m.items():
-            if value and isinstance(value, str) and value.strip():
-                print(f"     [ {slot:5s} ] → {value}")
-            elif isinstance(value, dict):
-                head   = value.get('head', '')
-                marker = value.get('marker', '')
-                if head:
-                    print(f"     [ {slot:5s} ] → {head} {marker}")
-            elif slot == 'CCOMP' and value:
-                print(f"     [ CCOMP ] → {value}")
+            # Exécution de la traduction unifiée du jeton si valide
 
-        _ct = tree.get('clause_type', '?')
-        print(f"\n     🏷️  clause_type = {_ct}")
+            # APRÈS — appelé APRÈS _translate_token (semantic_class rempli)
+            tok, candidates = self._translate_token(tok, frame, context_lemmas)
 
-        bambara = self.rule_engine.apply(tokens, frame)
+            # Détection de transitivité aussi sur les verbes advcl/conj (clauses
+            # purposives : 'pour cuisiner et manger') pour que _purp_verb_bm choisisse
+            # la forme correcte (transitif sans COD → V+li kɛ ; intransitif → V nu).
+            if tok.get('pos') == 'VERB' and (tok.get('is_root')
+                                             or tok.get('dep') in ('xcomp', 'advcl', 'conj')):
+                if tok.get('action_noun'):
+                    tok['intransitive_type'] = 'support'
+                else:
+                    tok['intransitive_type'] = self._detect_intransitive_type(
+                        tok.get('lemma', ''), tok.get('semantic_class', ''))
+            
+            # Dans la boucle for tok in tokens, après _translate_token :
+            if (tok.get('dep') == 'obj'
+                    and any(t.get('lemma', '').lower() == 'avoir'
+                            and (t.get('is_root') or t.get('dep') == 'ROOT')
+                            for t in tokens)):
+                _ptype = self._detect_possession_type(
+                    tok.get('lemma', ''), tok.get('semantic_class', ''))
+                tok['possession_type'] = _ptype
+
+        _has_purposive_acl = any(
+            t.get('pos') == 'VERB'
+            and t.get('role') == 'content'
+            and t.get('dep') == 'acl'
+            and any(
+                tt.get('head_index') == t.get('orig_index')
+                and tt.get('role') == 'purposive'
+                for tt in tokens
+            )
+            for t in tokens
+        )
+        _has_conjunction = any(
+            t.get('role') == 'conjunction' for t in tokens
+        )
+
+        if _has_purposive_acl and _has_conjunction:
+            from pipeline.proposition_parser import translate_propositions
+            bambara = translate_propositions(tokens)
+        else:
+            bambara = self.rule_engine.apply(tokens, frame)
+
         return bambara
 
 
@@ -772,7 +1513,9 @@ class TranslationEngine:
                 print(f"{'─'*40}")
 
             self._current_sentence = clause
-            bm = self._translate_clause(clause, frame)
+            # bm = self._translate_clause(clause, frame)
+            _main_lang = all_tokens[0].get('lang', 'fr') if all_tokens else 'fr'
+            bm = self._translate_clause(clause, frame, lang=_main_lang)
 
             print(f"  ✂️  Clause {i+1} -> '{bm}'")
 
@@ -784,8 +1527,38 @@ class TranslationEngine:
         print(f"\n🇲🇱 BAMBARA : {bambara_output}")
         print("=" * 75)
 
+        # Snapshot du dernier tree pour l'évaluation
+        _tree = getattr(self.rule_engine, '_last_tree', {}) or {}
+        _main = _tree.get('main', {})
+        _tree_meta = {
+            'clause_type': _tree.get('clause_type', ''),
+            'tense':       _tree.get('tense', ''),
+            'neg':         _tree.get('neg', False),
+            'tam':         _tree.get('tam', ''),
+            'S':           _main.get('S', ''),
+            'V':           _main.get('V', ''),
+            'O':           _main.get('O', ''),
+            'n_obls':      len(_main.get('OBL_ALL', [])),
+        }
+
+        # Snapshot des tokens (tagging) pour l'évaluation du parsing
+        _tokens_meta = [
+            {
+                'surface':    t.get('surface', ''),
+                'lemma':      t.get('lemma', ''),
+                'pos':        t.get('pos', ''),
+                'dep':        t.get('dep', ''),
+                'role':       t.get('role', ''),
+                'head_index': t.get('head_index', -1),
+                'orig_index': t.get('orig_index', -1),
+            }
+            for t in all_tokens
+        ]
+
         return {
             'bambara':  bambara_output,
             'frame':    frame,
             'concepts': all_concepts,
+            'tree':     _tree_meta,
+            'tokens':   _tokens_meta,
         }
