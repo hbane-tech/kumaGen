@@ -240,14 +240,14 @@ def _fix_pos_errors(tokens, grammar):
                 t['pos'] = 'NOUN'
         # ADJ ROOT avec cop mais sans dépendants nominaux et sans trait participial
         # → probablement un nom de profession (médecin, professeur...)
-        # if (t.get('pos') == 'ADJ' and t.get('dep') == 'ROOT'
-        #         and any(x.get('dep') == 'cop' for x in tokens)):
-        #     _morph_str = str(t.get('morph', ''))
-        #     _has_part_morph = any(x in _morph_str for x in (
-        #         'VerbForm=Part', 'Tense=Past', 'Degree=', 'Gender=Masc', 'Gender=Fem'))
-        #     _has_nsubj = any(x.get('dep') in ('nsubj', 'nsubj:pass') for x in tokens)
-        #     if not _has_part_morph and _has_nsubj:
-        #         t['pos'] = 'NOUN'
+        if (t.get('pos') == 'ADJ' and t.get('dep') == 'ROOT'
+                and any(x.get('dep') == 'cop' for x in tokens)):
+            _morph_str = str(t.get('morph', ''))
+            _has_part_morph = any(x in _morph_str for x in (
+                'VerbForm=Part', 'Tense=Past', 'Degree='))
+            _has_nsubj = any(x.get('dep') in ('nsubj', 'nsubj:pass') for x in tokens)
+            if not _has_part_morph and _has_nsubj:
+                t['pos'] = 'NOUN'
 
         if t.get('pos') == 'NOUN' and t.get('dep') == 'amod':
             _has_own_amod = any(
