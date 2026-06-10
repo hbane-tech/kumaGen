@@ -447,10 +447,14 @@ class TranslationEngine:
         # Appliquer les scores sémantiques
         for c in candidates[:top_k]:
             semantic_boost = c.get('_semantic_score', 0)
-            final = c.get('final_score', 0) + semantic_boost
+            before_cap = c.get('final_score', 0)
+            final = before_cap + semantic_boost
 
             # Cap final score at 100 pts
             c['final_score'] = round(min(final, 100.0), 1)
+            # DEBUG
+            if semantic_boost != 0 or before_cap > 85:
+                print(f"     [DEBUG] {c.get('bm', '?')}: {before_cap:.1f} + {semantic_boost} = {final:.1f} → {c['final_score']}")
 
         # Re-trier par final_score
         candidates.sort(key=lambda x: x.get('final_score', 0), reverse=True)
