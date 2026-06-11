@@ -217,11 +217,11 @@ class KGRetriever:
         ORDER BY
           CASE
             WHEN toLower(s.fr) = toLower($token) THEN 0
-            WHEN toLower(s.fr) = toLower($token) + '.' THEN 1
-            WHEN toLower(trim(split(s.fr, ',')[0])) = toLower($token) THEN 2
+            WHEN toLower(s.fr) = toLower($token + '.') THEN 1
+            WHEN toLower(trim(s.fr)) STARTS WITH toLower($token) THEN 2
             ELSE 3
-          END,
-          length(s.fr) ASC
+          END ASC,
+          size(s.fr) ASC
         LIMIT 40
         """, {
             "token":       norm,
