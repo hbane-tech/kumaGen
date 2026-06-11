@@ -113,6 +113,10 @@ def run(T, tree, m, processed_indices, G_kg, root_tok,
             # Statif passé (j'étais assis) → statif_past
             if root_tok.get('is_statif') and not _is_motion_verb:
                 statif.run(T, tree, m, processed_indices, G_kg, root_tok, aux_tense_tok)
+            # REFLEXIF ABSOLU : ne pas vider le TAM (S TAM S yɛrɛ V)
+            elif tree.get('clause_type') == 'refl_absolute':
+                # Reflexive clauses keep the TAM — handled by renderer with refl_tam
+                pass
             else:
                 # VERB passif résultatif (le riz est cuit, sorti, parti) → résultatif
                 root_tok['is_participe_passe'] = True

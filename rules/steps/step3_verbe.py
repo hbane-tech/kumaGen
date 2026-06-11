@@ -552,7 +552,13 @@ def run(T, tree, m, processed_indices, G_kg, NX_G,
             tree['refl_pron'] = _rsubj.get('bm')
         else:
             tree['refl_pron'] = 'a'
-        print(f"DEBUG [REFL_ABSOLUTE DONE] tree['refl_verb']={tree.get('refl_verb')}, tree['refl_pron']={tree.get('refl_pron')}, tree['refl_yere']={tree.get('refl_yere')}")
+
+        # Resolve TAM for reflexive clauses (ne pas laisser TAM vide)
+        tree['tense'] = root_tok.get('tense', 'pres')
+        tree['neg'] = tree.get('neg', False) or root_tok.get('is_neg', False)
+        tree['tam'] = _resolve_tam(tree['tense'], tree['neg'], G_kg)
+
+        print(f"DEBUG [REFL_ABSOLUTE DONE] tree['refl_verb']={tree.get('refl_verb')}, tree['refl_pron']={tree.get('refl_pron')}, tree['refl_yere']={tree.get('refl_yere')}, tree['tam']={tree.get('tam')}")
 
     # ── CLITIQUES PRONOMINAUX IOBJ SANS TRADUCTION ───────────────────────────
     # PRON dep='iobj' sans bm valide = clitique adverbial (en, y…) partie du
