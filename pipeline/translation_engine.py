@@ -1099,6 +1099,10 @@ class TranslationEngine:
         # Enrich token with grammatical context (LLM analysis)
         if all_tokens:
             self._enrich_token_context(tok, all_tokens)
+            if tok.get('context_type'):
+                print(f"     [CONTEXT] '{lemma}' → context_type={tok['context_type']}")
+            else:
+                print(f"     [CONTEXT] '{lemma}' → NONE (LLM may have failed)")
 
         candidates = self.retriever.retrieve(
             kg_search_lemma, frame,
