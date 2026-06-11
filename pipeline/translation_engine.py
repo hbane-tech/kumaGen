@@ -140,6 +140,63 @@ class TranslationEngine:
     # SYNONYM NEED GUARD
     # ------------------------------------------------------------------
 
+    def _enrich_token_context(self, tok: dict, all_tokens: list) -> None:
+        """
+        Use LLM to analyze grammatical context and enrich token with context tags.
+        Modifies tok in-place by adding 'context_type' field.
+
+        Examples:
+        - "fille" in "la fille de Moussa" → context_type='genitive_object'
+        - "médecin" in "Il est médecin" → context_type='predicate'
+        - "chat" in "le chat noir" → context_type='modified_noun'
+        """
+        lemma = tok.get('lemma', '').lower().strip()
+        if not lemma:
+            return
+
+        # Build sentence for context
+        sentence = " ".join(t.get('surface', '') for t in all_tokens).strip()
+        if not sentence:
+            return
+
+        # Find adjacent tokens for context clues
+        tok_idx = next((i for i, t in enumerate(all_tokens) if t.get('orig_index') == tok.get('orig_index')), None)
+        if tok_idx is None:
+            return
+
+        adjacent = []
+        if tok_idx > 0:
+            adjacent.append(all_tokens[tok_idx - 1].get('surface', ''))
+        if tok_idx < len(all_tokens) - 1:
+            adjacent.append(all_tokens[tok_idx + 1].get('surface', ''))
+        adjacent_str = " ".join(adjacent).strip()
+
+        # LLM analyzes grammatical role
+        prompt = (
+            f'Dans la phrase: "{sentence}"\n'
+            f'Le mot "{lemma}" (entouré par: {adjacent_str}) a quel rôle grammatical?\n'
+            f'Réponds UNIQUEMENT par UNE de ces catégories:\n'
+            f'- genitive_object: complément de nom (X de Y)\n'
+            f'- possessive: relation de possession\n'
+            f'- predicate: attribut du sujet (Il est X)\n'
+            f'- modified_noun: nom avec adjectif/modificateur\n'
+            f'- agent: acteur d\'une action\n'
+            f'- patient: objet d\'une action\n'
+            f'- other: autre\n'
+            f'Catégorie:'
+        )
+
+        try:
+            resp = self._call_llm(prompt, max_tokens=3).strip().lower()
+            # Extract category
+            for cat in ['genitive_object', 'possessive', 'predicate', 'modified_noun', 'agent', 'patient', 'other']:
+                if cat in resp:
+                    tok['context_type'] = cat
+                    print(f"     [CONTEXT] '{lemma}' → context_type={cat}")
+                    return
+        except Exception as e:
+            print(f"     [CONTEXT ERROR] {lemma}: {e}")
+
     def _needs_synonym(self, tok_lemma: str, candidates: list,
                        all_embed: bool) -> bool:
         """
@@ -912,7 +969,7 @@ class TranslationEngine:
         return mapping.get(spacy_pos)
 
     def _translate_token(self, tok: dict, frame: str,
-                         context_lemmas: list):
+                         context_lemmas: list, all_tokens: list = None):
         surface = tok['surface']
         lemma   = tok['lemma']
         lang    = tok.get('lang', 'fr')
@@ -1038,6 +1095,10 @@ class TranslationEngine:
             if infinitive and infinitive != lemma:
                 kg_search_lemma = infinitive
                 print(f"     🔄 Verbe normalisé: '{lemma}' → '{kg_search_lemma}'")
+
+        # Enrich token with grammatical context (LLM analysis)
+        if all_tokens:
+            self._enrich_token_context(tok, all_tokens)
 
         candidates = self.retriever.retrieve(
             kg_search_lemma, frame,
@@ -1393,7 +1454,7 @@ class TranslationEngine:
             # Exécution de la traduction unifiée du jeton si valide
 
             # APRÈS — appelé APRÈS _translate_token (semantic_class rempli)
-            tok, candidates = self._translate_token(tok, frame, context_lemmas)
+            tok, candidates = self._translate_token(tok, frame, context_lemmas, tokens)
 
             # Détection de transitivité aussi sur les verbes advcl/conj (clauses
             # purposives : 'pour cuisiner et manger') pour que _purp_verb_bm choisisse
