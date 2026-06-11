@@ -77,6 +77,38 @@ def _conciseness_bonus(fr_raw: str) -> int:
     return 1 if len(fr.split()) == 1 else 0
 
 
+def _score_with_context(gloss: str, context_type: str) -> int:
+    """
+    Score whether gloss matches the grammatical context using keyword matching.
+    Returns 0-10 pts bonus if strong match, 0 otherwise.
+
+    Examples:
+    - context_type='possessive' + gloss='fille, nièce' → +10 (familial relation)
+    - context_type='possessive' + gloss='femme' → 0 (generic, not relation)
+    """
+    gloss_lower = gloss.lower()
+
+    # Keywords that indicate specific grammatical roles
+    context_keywords = {
+        'possessive': ['nièce', 'parent', 'fils', 'fille', 'frère', 'soeur', 'ami', 'relation', 'proche'],
+        'genitive_object': ['de', 'relation', 'possession', 'appartenance', 'parent'],
+        'agent': ['qui', 'agir', 'faire', 'acteur', 'responsable'],
+        'predicate': ['profession', 'qualité', 'état', 'condition', 'médecin', 'professeur', 'avocat'],
+        'modified_noun': ['adjectif', 'modificateur', 'qualificatif', 'descriptif'],
+        'patient': ['objet', 'patient', 'affecté', 'cible'],
+    }
+
+    keywords = context_keywords.get(context_type, [])
+    if not keywords:
+        return 0
+
+    # Check if gloss contains any context keywords
+    matches = sum(1 for kw in keywords if kw in gloss_lower)
+    if matches > 0:
+        return 10  # +10 pts for context match
+    return 0
+
+
 def _gloss_match_score(fr_raw: str, token: str) -> float:
     """
     Score gloss match on 0-100 scale. Ultra-simple hierarchy.
@@ -116,18 +148,25 @@ def _gloss_match_score(fr_raw: str, token: str) -> float:
 
 def _rerank(candidates: list, _token: str, spacy_pos: str,
             context_tokens: list = None,
-            semantic_groups: list = None) -> list:
-    """Rerank candidates on 0-100 point scale. Ultra-simple: +2 POS, +1 concise max."""
+            semantic_groups: list = None,
+            context_type: str = None) -> list:
+    """Rerank candidates on 0-100 point scale. Ultra-simple: +2 POS, +1 concise, +context bonus."""
     for c in candidates:
         b_pos = _pos_bonus(spacy_pos, c.get('pos', ''))
         b_concise = _conciseness_bonus(c['fr'])
-        final = c['score'] + b_pos + b_concise
+
+        # Context-aware scoring
+        b_context = 0
+        if context_type:
+            b_context = _score_with_context(c['fr'], context_type)
+
+        final = c['score'] + b_pos + b_concise + b_context
 
         # Cap at 100 pts
         final = min(final, 100.0)
 
         c['final_score'] = round(final, 1)
-        c['bonuses'] = {'pos': b_pos, 'concise': b_concise}
+        c['bonuses'] = {'pos': b_pos, 'concise': b_concise, 'context': b_context}
 
     candidates.sort(key=lambda x: x['final_score'], reverse=True)
     return candidates
@@ -187,7 +226,7 @@ class KGRetriever:
         )
 
         combined = exact + embed
-        combined = _rerank(combined, norm, eff_pos or '')
+        combined = _rerank(combined, norm, eff_pos or '', context_type=context_type)
         return combined[:top_k]
 
     def _exact_match(self, norm: str, frame: str,
