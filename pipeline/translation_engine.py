@@ -197,6 +197,54 @@ class TranslationEngine:
         except Exception as e:
             print(f"     [CONTEXT ERROR] {lemma}: {e}")
 
+    def _boost_scores_with_context(self, candidates: list,
+                                   context_type: str) -> list:
+        """
+        Use LLM to validate if candidates match the grammatical context.
+        Adds +10 pts boost if LLM confirms match, 0 pts otherwise.
+
+        Example:
+        - context_type='possessive' + gloss='fille, nièce' → LLM: YES → +10 pts
+        - context_type='possessive' + gloss='femme' → LLM: NO → +0 pts
+        """
+        if not context_type or not candidates:
+            return candidates
+
+        for c in candidates[:5]:  # Only check top 5 for speed
+            gloss = c.get('fr', '').lower().rstrip('.').strip()
+            if not gloss:
+                continue
+
+            context_desc = {
+                'possessive': 'a possessive/familial relationship (parent, child, sibling, relative, friend)',
+                'genitive_object': 'a genitive relation of belonging (X de Y)',
+                'agent': 'the agent/actor performing an action',
+                'predicate': 'a profession, role, or predicate after "to be"',
+                'modified_noun': 'a noun modified by an adjective',
+                'patient': 'the object/patient receiving an action',
+                'other': 'a general noun',
+            }.get(context_type, 'a general noun')
+
+            prompt = (
+                f'Does the French word "{gloss}" represent {context_desc}?\n'
+                f'Reply with YES or NO only.'
+            )
+
+            try:
+                resp = self._call_llm(prompt, max_tokens=3).strip().upper()
+                is_match = resp.startswith('Y')
+                if is_match:
+                    c['final_score'] = c.get('final_score', 0) + 10
+                    print(f"     [CONTEXT BOOST] '{gloss}' → {context_type}: +10 pts")
+                else:
+                    print(f"     [CONTEXT SKIP] '{gloss}' → {context_type}: no match")
+            except Exception as e:
+                print(f"     ⚠️  Context boost failed for '{gloss}': {e}")
+
+        # Re-sort by final_score after context boosts
+        candidates.sort(key=lambda x: x['final_score'], reverse=True)
+        return candidates
+
     def _needs_synonym(self, tok_lemma: str, candidates: list,
                        all_embed: bool) -> bool:
         """
@@ -1114,8 +1162,13 @@ class TranslationEngine:
             lang=lang,
             context_tokens=context_lemmas,
             is_verbal_noun=tok.get('is_verbal_noun', False),
-            context_type=tok.get('context_type'),
         )
+
+        # ── CONTEXT-AWARE BOOSTING: LLM validates grammatical match ──
+        # If token has a context_type, boost scores for matching candidates
+        if tok.get('context_type') and candidates:
+            candidates = self._boost_scores_with_context(
+                candidates, tok['context_type'])
 
         # ── SEMANTIC VALIDATION: Filter out false positives ──
         # LLM checks if candidate gloss actually matches the token semantically

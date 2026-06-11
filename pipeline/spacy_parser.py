@@ -238,16 +238,19 @@ def _fix_pos_errors(tokens, grammar):
             )
             if _has_nominal_deps:
                 t['pos'] = 'NOUN'
-        # ADJ ROOT avec cop mais sans dépendants nominaux et sans trait participial
-        # → probablement un nom de profession (médecin, professeur...)
-        if (t.get('pos') == 'ADJ' and t.get('dep') == 'ROOT'
-                and any(x.get('dep') == 'cop' for x in tokens)):
-            _morph_str = str(t.get('morph', ''))
-            _has_part_morph = any(x in _morph_str for x in (
-                'VerbForm=Part', 'Tense=Past', 'Degree='))
-            _has_nsubj = any(x.get('dep') in ('nsubj', 'nsubj:pass') for x in tokens)
-            if not _has_part_morph and _has_nsubj:
-                t['pos'] = 'NOUN'
+        # DISABLED: Profession noun detection was too broad
+        # Would reclassify ALL ADJ+ROOT+cop to NOUN, including generic adjectives like 'belle'
+        # Need proper semantic analysis first — keep adjectives as ADJ for now
+        # if (t.get('pos') == 'ADJ' and t.get('dep') == 'ROOT'
+        #         and any(x.get('dep') == 'cop' for x in tokens)):
+        #     _morph_str = str(t.get('morph', ''))
+        #     _has_part_morph = any(x in _morph_str for x in (
+        #         'VerbForm=Part', 'Tense=Past', 'Degree='))
+        #     _has_nsubj = any(x.get('dep') in ('nsubj', 'nsubj:pass') for x in tokens)
+        #     if not _has_part_morph and _has_nsubj:
+        #         _is_profession = _is_profession_word(surf, t.get('lemma'))
+        #         if _is_profession:
+        #             t['pos'] = 'NOUN'
 
         if t.get('pos') == 'NOUN' and t.get('dep') == 'amod':
             _has_own_amod = any(
