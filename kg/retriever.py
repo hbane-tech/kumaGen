@@ -225,6 +225,9 @@ class KGRetriever:
 
         for r in results:
             base = _gloss_match_score(r['fr'], norm)  # 0-100 pts
+            # DEBUG: Show all exact match attempts
+            if base > 0:
+                print(f"     [EXACT MATCH] '{r['fr']}' (bm={r['bm']}) → score={base}")
             if base == 0.0:
                 continue
             if r['bm'] in seen_bm:
