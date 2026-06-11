@@ -220,6 +220,11 @@ class KGRetriever:
             "allowed_pos": allowed_pos,
         })
 
+        # DEBUG: Show all KG results before scoring
+        print(f"     [RETRIEVE] Query returned {len(results)} results for token='{norm}':")
+        for r in results[:10]:  # Show first 10
+            print(f"       - fr='{r['fr']}' | bm='{r['bm']}'")
+
         candidates = []
         seen_bm    = set()
 
@@ -227,7 +232,7 @@ class KGRetriever:
             base = _gloss_match_score(r['fr'], norm)  # 0-100 pts
             # DEBUG: Show all exact match attempts
             if base > 0:
-                print(f"     [EXACT MATCH] '{r['fr']}' (bm={r['bm']}) → score={base}")
+                print(f"     [GLOSS SCORE] '{r['fr']}' → {base} pts (bm={r['bm']})")
             if base == 0.0:
                 continue
             if r['bm'] in seen_bm:
