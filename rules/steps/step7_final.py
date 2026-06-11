@@ -162,16 +162,19 @@ def run(T, tree, m, processed_indices, G_kg, NX_G, root_tok,
         # intransitive_type (verdict LLM ACTION/ABSOLU qui oscille pour
         # travailler). « Intransitive verb of ACTION don't take li kɛ » :
         #   présent/imparfait : S TAM V la  (n bɛ báara la ; n tùn bɛ báara la)
-        #   passé/futur        : S TAM V kɛ  (n ye báara kɛ — garder le TAM)
+        #   passé/futur        : S TAM V kɛ  (n ye báara kɛ ; n ma báara kɛ)
         # (≠ manger=consumption → li kɛ ; ≠ dormir/parler ∈ INTRANS_SC → V nu)
+        # Négatif présent EXCLU ici (laissé au traitement existant) ; négatif
+        # passé/futur AUTORISÉ → garde le 'kɛ' (je n'ai pas travaillé = n ma báara kɛ).
         if (_sc == 'action'
                 and _v_root and not root_tok.get('is_statif')
-                and not tree.get('neg', False)):
+                and (not tree.get('neg', False) or not _is_pres)):
             if _is_pres:
                 m['V'] = j(_v_root, 'la')
             else:
-                # Passé/futur : nom d'action + kɛ, on garde le TAM (yé), pas de
-                # résultatif V+ra (is_transitive=True bloque le bloc F6).
+                # Passé/futur (positif ET négatif) : nom d'action + kɛ, on garde
+                # le TAM (yé/ma), pas de résultatif V+ra (is_transitive=True
+                # bloque le bloc F6).
                 m['O'] = _v_root
                 m['V'] = 'kɛ'
                 tree['is_transitive'] = True

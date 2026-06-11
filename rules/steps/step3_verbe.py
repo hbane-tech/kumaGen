@@ -527,8 +527,14 @@ def run(T, tree, m, processed_indices, G_kg, NX_G,
             if _nsubj_is_dem_or_noun or (root_tok.get('is_refl_passive') and not _effective_plural):
                 # Passif réflexif (sujet Dem/NOUN singulier) → verbe nu
                 root_tok['is_refl_passive'] = True
-            elif _effective_plural and (_same_surf or root_tok.get('is_reciprocal')) and tree.get('clause_type') != 'content_question':
-                # Réciproque : même surface (nous nous) OU LLM dit RECIPROCAL → ɲɔgɔn
+            elif _effective_plural and tree.get('clause_type') != 'content_question':
+                # Sujet PLURIEL + réfléchi 'se' → RÉCIPROQUE (ɲɔgɔn), comme la
+                # branche obj/iobj qui rend plural→réciproque inconditionnellement.
+                # On NE dépend PLUS de _same_surf ni de is_reciprocal (verdict LLM
+                # reflexive_type qui oscille : 'se battre' était classé IDIOMATIC
+                # au lieu de RECIPROCAL → 'u bɛ u gòsi' au lieu de 'u bɛ ɲɔgɔn gòsi').
+                # Les sujets Dem/NOUN singuliers (la porte se ferme) sont déjà
+                # exclus plus haut (passif réflexif).
                 if not root_tok.get('is_plural'):
                     root_tok['is_plural'] = True
                 tree['clause_type'] = 'reciprocal'
