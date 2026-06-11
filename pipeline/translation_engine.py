@@ -975,6 +975,9 @@ class TranslationEngine:
         lang    = tok.get('lang', 'fr')
         pos     = tok['pos']
 
+        # DEBUG: Track which tokens are processed
+        print(f"     [TRANSLATE_TOKEN] surface='{surface}' lemma='{lemma}' pos={pos} dep={tok.get('dep')}")
+
         if tok.get('bm'):
             if pos == 'NOUN' and not tok['bm'].startswith('[') and 'is_relational' not in tok:
                 tok['is_relational'] = self._detect_relational_noun(tok['lemma'], tok['bm'])
