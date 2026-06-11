@@ -168,4 +168,8 @@ def render_qualitative(tree, m, S, O, V, TAM, neg, tn, obl_strings, _ccomp_str, 
 
 
 def render_locative_existential(S, neg, obl_strings):
+    # Sans sujet (fragment locatif "sous le poids de la neige") → pas de TAM :
+    # il n'y a pas de prédication existentielle, juste un groupe postpositionnel.
+    if not S or not str(S).strip():
+        return j(*obl_strings)
     return j(S, 'tɛ' if neg else 'bɛ', *obl_strings)

@@ -112,8 +112,11 @@ def tree_to_bambara(tree, G=None, grammar=None):
         obl_strings.append(full_chunk)
 
     # ── F6 : past intransitif ─────────────────────────────────────────────────
+    # refl_absolute exclu (comme reciprocal) : il gère sa propre forme
+    # S TAM S yɛrɛ V et garde son TAM (yé/ma) ; ne pas le convertir en V+ra.
     _o_is_xcomp = m.get('O_IS_XCOMP', False)
-    if tn == 'past' and not tree.get('is_transitive', True) and not _o_is_xcomp and ct != 'reciprocal':
+    if (tn == 'past' and not tree.get('is_transitive', True) and not _o_is_xcomp
+            and ct not in ('reciprocal', 'refl_absolute')):
         if neg:
             TAM = 'ma'
         else:

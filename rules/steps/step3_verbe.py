@@ -809,8 +809,21 @@ def run(T, tree, m, processed_indices, G_kg, NX_G,
         _loc_marker = _loc_case_root.get('bm_marker', 'la') if _loc_case_root else 'la'
         if not _loc_marker:
             _loc_marker = 'la'
+        # Construire la chaîne génitive pour le HEAD si le nom locatif a un nmod
+        # (sous le poids de la neige → nɛzi gírinya kɔrɔ : possesseur en tête).
+        # Sinon le nmod resterait orphelin et deviendrait un oblique séparé.
+        _has_nmod_on_loc = any(x.get('dep') == 'nmod'
+                               and x.get('head_index') == root_tok['orig_index']
+                               for x in T)
+        if _has_nmod_on_loc:
+            from rules.steps.step4_objet.objet_standard import _build_genitive_chain
+            from rules.steps.step5_obliques.comitative import _collect_genitive_tokens
+            _loc_head = _build_genitive_chain(root_tok, T, G_kg)
+            processed_indices.update(_collect_genitive_tokens(root_tok, T))
+        else:
+            _loc_head = root_tok.get('bm') or f"[{root_tok.get('lemma')}]"
         m['OBL_ALL'].append({
-            'HEAD': root_tok.get('bm') or f"[{root_tok.get('lemma')}]",
+            'HEAD': _loc_head,
             'MARKER': _loc_marker, 'local_clause_type': 'locative',
             'COMPOUND': '', 'MOD': '', 'DEM_PREF': '', 'DEM_SUFF': '',
             'DEP_TYPE': 'case', 'COMPOUND_IS_QUANTIFIER': False,
