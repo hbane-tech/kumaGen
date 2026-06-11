@@ -40,6 +40,10 @@ def tree_to_bambara(tree, G=None, grammar=None):
     tn    = tree.get('tense', 'pres')
 
     tam_val = tree.get('tam', '')
+    # REFLEXIF ABSOLU: preserve TAM from step3 even if lost in step6
+    if tree.get('clause_type') == 'refl_absolute' and (not tam_val or tam_val.strip() == ''):
+        # Recover TAM based on tense for reflexive clauses
+        tam_val = _resolve_tam(tn, tree.get('neg', False), G)
     if not tam_val or tam_val.strip() == '':
         tam_val = 'bɛ'
     TAM = tam_val
