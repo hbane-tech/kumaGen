@@ -69,6 +69,22 @@ def render_verb_serial(tree, m, S, O, V, V_ACT, TAM, obl_strings, G):
     _xcomp_needs_li = (_xcomp_tok
                        and _xcomp_tok.get('intransitive_type') in ('ACTION', 'nominalized', 'support')
                        and _xcomp_tok.get('semantic_class', '') not in INTRANS_SC)
+
+    # ── Sérielle de MOUVEMENT : V1 de mouvement (partir, aller, venir) + V2 ──
+    # → S V1 [O] V2, SANS 'ka'. V1 garde sa forme autonome : au passé positif,
+    # forme résultative (il est parti chercher X → a fáɲira X láɲini), sinon
+    # TAM + V1 (mais toujours sans 'ka'). ≠ autres sérielles (qui gardent 'ka').
+    _root_v1 = next((t for t in _tokens_ref if t.get('is_root')), None)
+    if _root_v1 and _root_v1.get('semantic_class') == 'motion':
+        _v1 = V
+        _v1_past = (tree.get('tense') == 'past' or _root_v1.get('tense') == 'past')
+        if (_v1_past and not tree.get('neg')
+                and _v1 and not _v1.endswith(('ra', 'na', 'la'))):
+            _v1 += ('na' if _v1.endswith('n')
+                    else 'la' if _v1[-1] in ('o', 'u', 'ɔ') else 'ra')
+            return j(S, _v1, O, _com_str, V_ACT, *_other_obls)
+        return j(S, TAM, _v1, O, _com_str, V_ACT, *_other_obls)
+
     if O:
         return j(S, TAM, V, 'ka', O, _com_str, V_ACT, *_other_obls)
     elif _xcomp_needs_li:
