@@ -260,6 +260,29 @@ def _fix_pos_errors(tokens, grammar):
             if not _has_own_amod:
                 t['pos'] = 'ADJ'
 
+        # Adjectif substantivé SUJET : "ce vieux voit" → spaCy attache 'vieux'
+        # (ADJ) en amod sur le VERBE et n'assigne AUCUN nsubj. Un ADJ amod dont
+        # la tête est un VERBE, sans nsubj dans la clause et placé AVANT le verbe,
+        # est un adjectif substantivé sujet (le/ce vieux = le vieil homme) → NOM
+        # nsubj. (amod régit normalement un NOM ; amod-sur-verbe = anomalie.)
+        if t.get('pos') == 'ADJ' and t.get('dep') == 'amod':
+            _adj_head = next((x for x in tokens
+                              if x.get('orig_index') == t.get('head_index')), None)
+            _clause_has_nsubj = any(x.get('dep') in ('nsubj', 'nsubj:pass')
+                                    for x in tokens)
+            if (_adj_head and _adj_head.get('pos') in ('VERB', 'AUX')
+                    and not _clause_has_nsubj
+                    and t['orig_index'] < _adj_head['orig_index']):
+                t['pos'] = 'NOUN'
+                t['dep'] = 'nsubj'
+                # Réattacher le déterminant (ce/le/la) co-attaché au verbe → au
+                # nom sujet, pour que 'ce vieux' forme un groupe nominal.
+                for _d in tokens:
+                    if (_d.get('dep') == 'det'
+                            and _d.get('head_index') == _adj_head['orig_index']
+                            and _d['orig_index'] < t['orig_index']):
+                        _d['head_index'] = t['orig_index']
+
         if t.get('pos') == 'AUX' and surf in adp:
             t['pos'] = 'ADP'
         if t.get('pos') == 'AUX' and surf in cconj:

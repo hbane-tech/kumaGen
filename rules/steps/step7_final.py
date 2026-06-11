@@ -147,7 +147,11 @@ def run(T, tree, m, processed_indices, G_kg, NX_G, root_tok,
             and not m.get('O')
             and not m.get('V_ACTION')
             and not m.get('CCOMP')
-            and tree.get('clause_type') == 'simple'
+            # Verbe transitif sans COD → V+li kɛ, dans toutes les clauses
+            # déclaratives (principale + subordonnées quand/si/lorsque). Les
+            # types réfléchi/réciproque/passif/relatif/infinitif ont leur propre
+            # COD ou gestion du verbe → clause_type distinct, non concernés ici.
+            and tree.get('clause_type') in ('simple', 'temporal', 'conditional', 'complex')
             and not root_tok.get('is_participe_passe')
             and not root_tok.get('is_passive')
             and not root_tok.get('is_refl_passive')):
@@ -161,14 +165,14 @@ def run(T, tree, m, processed_indices, G_kg, NX_G, root_tok,
         # On se base sur semantic_class=='action' (signal FIABLE) et NON sur
         # intransitive_type (verdict LLM ACTION/ABSOLU qui oscille pour
         # travailler). « Intransitive verb of ACTION don't take li kɛ » :
-        #   présent/imparfait : S TAM V la  (n bɛ báara la ; n tùn bɛ báara la)
-        #   passé/futur        : S TAM V kɛ  (n ye báara kɛ ; n ma báara kɛ)
+        #   présent/imparfait (pos ET nég) : S TAM V la
+        #     (n bɛ báara la ; n tùn bɛ báara la ; n tɛ báara la)
+        #   passé/futur (pos ET nég)        : S TAM V kɛ
+        #     (n ye báara kɛ ; n ma báara kɛ)
+        # Règle purement temporelle (la polarité est portée par le TAM).
         # (≠ manger=consumption → li kɛ ; ≠ dormir/parler ∈ INTRANS_SC → V nu)
-        # Négatif présent EXCLU ici (laissé au traitement existant) ; négatif
-        # passé/futur AUTORISÉ → garde le 'kɛ' (je n'ai pas travaillé = n ma báara kɛ).
         if (_sc == 'action'
-                and _v_root and not root_tok.get('is_statif')
-                and (not tree.get('neg', False) or not _is_pres)):
+                and _v_root and not root_tok.get('is_statif')):
             if _is_pres:
                 m['V'] = j(_v_root, 'la')
             else:
@@ -189,14 +193,15 @@ def run(T, tree, m, processed_indices, G_kg, NX_G, root_tok,
             else:
                 _nominalized = _v_root
 
-            if _is_pres or tree.get('neg', False):
-                # Présent/hab et passé négatif : S TAM V+li kɛ
-                # (V+li la = progressif — réservé à être-en-train-de)
-                m['O'] = _nominalized
-                m['V'] = 'kɛ'
-            else:
-                # Passé positif sans objet : forme résultative V+na/-ra
-                tree['is_transitive'] = False
+            # Transitif sans COD → TOUJOURS S TAM V+li kɛ (présent, passé, négatif).
+            # Le résultatif V+ra/na est réservé au PASSIF (le riz a été mangé →
+            # ìri dúnna), traité ailleurs (is_passive, exclu de ce bloc).
+            # Avec COD (j'ai mangé le riz → n yé ìri dún) : m['O'] est posé →
+            # ce bloc est sauté, le verbe reste nu (chemin objet standard).
+            # is_transitive=True garde le TAM (yé/ma) et bloque le résultatif F6.
+            m['O'] = _nominalized
+            m['V'] = 'kɛ'
+            tree['is_transitive'] = True
         elif (not _is_pres and m.get('V') and not root_tok.get('is_statif')
               and (_intrans_type == 'ABSOLU'
                    or (_sc in INTRANS_SC and _intrans_type != 'ACTION'))
