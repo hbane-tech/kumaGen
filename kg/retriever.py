@@ -214,6 +214,14 @@ class KGRetriever:
         {pos_filter}
         RETURN s.bm AS bm, s.fr AS fr, s.en AS en,
                s.frame AS frame, s.pos AS pos
+        ORDER BY
+          CASE
+            WHEN toLower(s.fr) = toLower($token) THEN 0
+            WHEN toLower(s.fr) = toLower($token) + '.' THEN 1
+            WHEN toLower(trim(split(s.fr, ',')[0])) = toLower($token) THEN 2
+            ELSE 3
+          END,
+          length(s.fr) ASC
         LIMIT 40
         """, {
             "token":       norm,
