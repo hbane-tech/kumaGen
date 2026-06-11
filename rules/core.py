@@ -28,9 +28,13 @@ _GENITIVE_FALLBACK = 'ka'
 # Un verbe dans l'une de ces classes n'utilise PAS la forme V+li kɛ sans COD.
 INTRANS_SC = frozenset({
     'motion', 'biological', 'posture', 'spontaneous', 'meteorological',
-    'perception', 'saying', 'sound', 'communication', 'emission',
+    'saying', 'sound', 'communication', 'emission',
     'copula', 'having',
 })
+# NB: 'perception' RETIRÉ — voir/entendre/sentir sont TRANSITIFS :
+#   sans objet  → V+li kɛ   (il voit = a bɛ yéli kɛ)
+#   avec objet  → V nu       (il l'a vu = a yé a yé)
+#   passif      → V+ra       (il a été vu = a yéra)
 
 _TAM_HARDCODED = {
     ('pres',  False): 'bɛ',     ('pres',  True):  'tɛ',
@@ -70,12 +74,24 @@ def _resolve_tam(tense: str, neg: bool, grammar: dict) -> str:
     return _TAM_HARDCODED.get((tense, neg), '')
 
 
-def _is_copula(tok) -> bool:
+def _is_copula(tok, all_tokens=None) -> bool:
     if not tok:
         return False
-    return (tok.get('semantic_class') == 'copula'
-            or tok.get('dep') == 'cop'
-            or tok.get('role') == 'copula')
+    # Garde STRUCTUREL : un verbe qui a un objet direct (dep='obj') n'est PAS
+    # une copule — c'est un transitif (possession 'avoir', etc.). Le LLM classe
+    # parfois 'avoir' comme semantic_class='copula' (non-déterminisme) ; sans ce
+    # garde, 'il a une voiture' (avoir + obj) était routé vers l'équatif
+    # (a yé wátiri yé) au lieu de la possession (wátiri bɛ a bolo).
+    # On ne neutralise QUE la classe LLM (sc) : un vrai marqueur syntaxique de
+    # copule (dep='cop' / role='copula') reste prioritaire.
+    _struct_cop = (tok.get('dep') == 'cop' or tok.get('role') == 'copula')
+    if not _struct_cop and tok.get('semantic_class') == 'copula' and all_tokens:
+        _has_dobj = any(x.get('dep') == 'obj'
+                        and x.get('head_index') == tok.get('orig_index')
+                        for x in all_tokens)
+        if _has_dobj:
+            return False
+    return (tok.get('semantic_class') == 'copula' or _struct_cop)
 
 
 # Lemmes francais du verbe avoir (garde double)
@@ -83,13 +99,15 @@ _AVOIR_LEMMAS = {'avoir'}
 
 
 def _is_avoir(tok) -> bool:
-    # Verifie semantic_class='having' ET lemme='avoir'
-    # Evite que boire/recruter... mal classes declenchent la possession
+    # Lemme='avoir' (garde-fou principal : exclut boire/recruter… dont le
+    # lemme n'est pas 'avoir') ET semantic_class ∈ {having, copula}.
+    # 'copula' accepté car le LLM classe 'avoir' tantôt having tantôt copula
+    # (non-déterminisme) ; le lemme='avoir' suffit à éviter les faux positifs.
     if not tok:
         return False
     _lemma = str(tok.get('lemma', '')).lower()
     _sc    = tok.get('semantic_class', '')
-    return _sc == 'having' and _lemma in _AVOIR_LEMMAS
+    return _sc in ('having', 'copula') and _lemma in _AVOIR_LEMMAS
 
 
 # ── CHUNK BORNÉ ───────────────────────────────────────────────────────────────

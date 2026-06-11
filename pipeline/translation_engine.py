@@ -902,16 +902,16 @@ class TranslationEngine:
 
     def _detect_intransitive_type(self, lemma: str, semantic_class: str = '') -> str:
 
-        # ── PRIORITÉ CLASSE SÉMANTIQUE : classes autonomes → ABSOLU ───────────
-        # Les classes sémantiques autonomes (spontaneous, motion, posture…) sont
-        # intrinsèquement intransitives : leur sens central ne porte pas sur un
-        # objet direct, même si la grammaire le permet ('perdre ses clés').
-        # On respecte cette classe AVANT d'interroger le LLM (qui répondrait
-        # ACTION sur la simple possibilité grammaticale d'un COD).
-        # Aligné sur _AUTONOMOUS_SC (advcl.py) et la logique B1 (intransitif absolu).
-        _AUTONOMOUS_SC = {'motion', 'biological', 'posture', 'spontaneous',
-                          'perception', 'meteorological'}
-        if semantic_class in _AUTONOMOUS_SC:
+        # ── PRIORITÉ CLASSE SÉMANTIQUE : classes intransitives → ABSOLU ───────
+        # Classes intrinsèquement intransitives (leur sens central ne porte pas
+        # sur un objet direct, même si la grammaire le permet 'perdre ses clés').
+        # On respecte cette classe AVANT d'interroger le LLM.
+        # NB: 'perception' EXCLU — voir/entendre/sentir sont TRANSITIFS
+        #   (voir = a bɛ yéli kɛ ; il l'a vu = a yé a yé). Laisser le LLM
+        #   décider pour ces verbes (il répondra ACTION).
+        _INTRANSITIVE_SC = {'motion', 'biological', 'posture', 'spontaneous',
+                            'meteorological'}
+        if semantic_class in _INTRANSITIVE_SC:
             print(f"  🔍 [TRANSITIVITY] '{lemma}' class={semantic_class} "
                   f"→ ABSOLU (classe autonome, LLM ignoré)")
             return 'ABSOLU'
@@ -1045,6 +1045,12 @@ class TranslationEngine:
                 tok['is_relational'] = self._detect_relational_noun(tok['lemma'], tok['bm'])
             elif pos == 'ADJ':
                 self._classify_adj_state(tok)
+            elif pos == 'VERB' and 'semantic_class' not in tok:
+                # bm pré-assigné (parseur/KG) : détecter quand même la classe
+                # sémantique pour que la transitivité (li kɛ / la / nu) soit juste.
+                # Sans ça, venir (bm='nà' pré-assigné) sortait sans classe →
+                # transitivité LLM=ACTION → 'nàli kɛ' au lieu de 'nà'.
+                tok['semantic_class'] = self._detect_semantic_class(tok['lemma'])
             return tok, []
 
         if pos == 'PUNCT':
@@ -1317,8 +1323,11 @@ class TranslationEngine:
                 tok['action_noun'] = _an
 
             # Catégorie B1 : intransitif absolu → verbe nu
+            # NB: 'perception' EXCLU — voir/entendre/sentir sont TRANSITIFS
+            #   (il l'a vu = a yé a yé ; il voit = a bɛ yéli kɛ). Sans objet
+            #   ils suivent le chemin ACTION (V+li kɛ), pas l'intransitif absolu.
             elif _sc in ('motion', 'biological', 'posture', 'spontaneous',
-                       'perception', 'meteorological'):
+                       'meteorological'):
                 tok['intransitive_type'] = 'absolute'
 
             # Catégorie B2 : nom support dédié → action_noun + kɛ

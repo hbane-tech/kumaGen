@@ -26,7 +26,7 @@ def run(T, tree, m, processed_indices, G_kg, NX_G,
     # ── ÉTAPE 2 : VERBE ROOT ─────────────────────────────────────────────────
     if root_tok and root_tok.get('pos') in ('VERB', 'AUX'):
         _root_is_copula = (
-            _is_copula(root_tok)
+            _is_copula(root_tok, T)
             or (_is_avoir(root_tok)
                 and root_tok.get('dep') in ('aux', 'aux:tense', 'aux:pass', 'cop'))
             or any(x.get('dep') == 'case'
@@ -458,7 +458,15 @@ def run(T, tree, m, processed_indices, G_kg, NX_G,
                           and x.get('pos') == 'PRON'
                           and x.get('head_index') == root_tok.get('orig_index')
                           and _subj_pers
-                          and f'Person={_subj_pers}' in str(x.get('morph', ''))), None)
+                          and f'Person={_subj_pers}' in str(x.get('morph', ''))
+                          # 3e personne : le/la/l'/les NE sont PAS réfléchis
+                          # (seul 'se/s'' l'est → Reflex=Yes). 1re/2e personne :
+                          # me/te/nous/vous coréférents au sujet = réfléchis.
+                          # Sans ce garde, 'il l'a vu' (il=3, l'=3) était happé à
+                          # tort comme réfléchi → 'a yé a yɛrɛ yé' au lieu de
+                          # 'a yé a yé'.
+                          and (_subj_pers in ('1', '2')
+                               or 'Reflex=Yes' in str(x.get('morph', '')))), None)
         print(f"DEBUG [REFLEXIVE FALLBACK] _refl_tok after fallback: {_refl_tok.get('surface') if _refl_tok else None}")
     _refl_abs_classes = {'posture', 'motion', 'biological', 'spontaneous'}
     _nsubj_tok = next((x for x in T if x.get('dep') in ('nsubj', 'nsubj:pass')), None)

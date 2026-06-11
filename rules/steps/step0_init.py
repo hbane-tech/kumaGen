@@ -79,7 +79,7 @@ def run(T, G_kg):
     # ── COPULE AVEC ADVCL : fallback pour "être + en train de + V" non capturé ──
     # Si root_tok est une copule (est/être) avec advcl/xcomp enfant VERB,
     # utiliser ce verbe comme root_tok (ex: "il est en train de se laver")
-    if root_tok and _is_copula(root_tok):
+    if root_tok and _is_copula(root_tok, T):
         _advcl_verb = next((t for t in T
                            if t.get('pos') == 'VERB'
                            and t.get('dep') in ('advcl', 'xcomp')
@@ -89,7 +89,7 @@ def run(T, G_kg):
     # Fallback : si root_tok est None, chercher copule avec enfant VERB acl/xcomp
     elif not root_tok:
         _copula_tok = next((t for t in T
-                           if _is_copula(t) and t.get('dep') in ('ROOT', 'cop')), None)
+                           if _is_copula(t, T) and t.get('dep') in ('ROOT', 'cop')), None)
         if _copula_tok:
             _advcl_verb = next((t for t in T
                                if t.get('pos') == 'VERB'

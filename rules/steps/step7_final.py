@@ -157,8 +157,26 @@ def run(T, tree, m, processed_indices, G_kg, NX_G, root_tok,
         # Classes sémantiques vraiment autonomes (ne prennent pas de -li)
         _sc = root_tok.get('semantic_class', '')
 
+        # Verbe d'ACTIVITÉ intransitif (travailler=báara) : nom d'action.
+        # On se base sur semantic_class=='action' (signal FIABLE) et NON sur
+        # intransitive_type (verdict LLM ACTION/ABSOLU qui oscille pour
+        # travailler). « Intransitive verb of ACTION don't take li kɛ » :
+        #   présent/imparfait : S TAM V la  (n bɛ báara la ; n tùn bɛ báara la)
+        #   passé/futur        : S TAM V kɛ  (n ye báara kɛ — garder le TAM)
+        # (≠ manger=consumption → li kɛ ; ≠ dormir/parler ∈ INTRANS_SC → V nu)
+        if (_sc == 'action'
+                and _v_root and not root_tok.get('is_statif')
+                and not tree.get('neg', False)):
+            if _is_pres:
+                m['V'] = j(_v_root, 'la')
+            else:
+                # Passé/futur : nom d'action + kɛ, on garde le TAM (yé), pas de
+                # résultatif V+ra (is_transitive=True bloque le bloc F6).
+                m['O'] = _v_root
+                m['V'] = 'kɛ'
+                tree['is_transitive'] = True
         # 'other' = LLM a échoué à classifier → ne pas supposer nominalisable
-        if (_intrans_type in ('nominalized', 'ACTION', 'support')
+        elif (_intrans_type in ('nominalized', 'ACTION', 'support')
                 and _sc not in INTRANS_SC and _sc != 'other' and _v_root):
             _action_noun = root_tok.get('action_noun')
             if _action_noun:
