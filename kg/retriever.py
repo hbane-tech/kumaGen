@@ -64,97 +64,33 @@ def _pos_matches(spacy_pos: str, kg_pos: str) -> bool:
 # Reranking signals
 # ------------------------------------------------------------------
 
-def _fr_exactness_bonus(fr_raw: str, token: str) -> int:
-    """Exactness bonus on 0-100 point scale."""
-    fr = clean_gloss(fr_raw or '').lower().strip()
-    t  = token.lower().strip()
-    if not fr or not t:
-        return 0
-    if fr == t:
-        return 8
-    if re.match(r'^' + re.escape(t) + r'\s*,', fr):
-        return 5
-    if fr.startswith(t + ' '):
-        return 4
-    if fr.startswith(t):
-        return 3
-    return 0
-
-
 def _pos_bonus(spacy_pos: str, kg_pos: str) -> int:
-    """POS match bonus on 0-100 point scale."""
+    """POS match bonus — +2 pts if matches, 0 otherwise."""
     if not spacy_pos:
         return 0
-    return 5 if _pos_matches(spacy_pos, kg_pos) else 0
+    return 2 if _pos_matches(spacy_pos, kg_pos) else 0
 
 
 def _conciseness_bonus(fr_raw: str) -> int:
-    """Conciseness bonus on 0-100 point scale."""
-    fr    = clean_gloss(fr_raw or '').strip()
-    words = len(fr.split())
-    if words == 1: return 4
-    if words == 2: return 2
-    if words <= 4: return 1
-    return 0
-
-
-def _context_bonus(fr_raw: str, context_tokens: list,
-                   semantic_groups: list = None) -> int:
-    """
-    Context bonus on 0-100 point scale.
-    Bonus when candidate gloss matches context tokens.
-    Includes semantic group expansion loaded from KG SemanticGroup nodes.
-    """
-    if not context_tokens or not fr_raw:
-        return 0
-    fr = clean_gloss(fr_raw).lower()
-
-    # Direct token match — use simple CONTAINS for accented words
-    direct = sum(
-        1 for t in context_tokens
-        if t.lower() in fr
-    )
-
-    # Semantic group expansion
-    semantic = 0
-    for group in (semantic_groups or []):
-        ctx_hit   = any(t.lower() in group for t in context_tokens)
-        gloss_hit = any(w in fr for w in group)
-        if ctx_hit and gloss_hit:
-            semantic += 1
-
-    total = direct + semantic
-    if total >= 2: return 10
-    if total == 1: return 4
-    return 0
+    """Conciseness bonus — +1 pt if single word, 0 otherwise."""
+    fr = clean_gloss(fr_raw or '').strip()
+    return 1 if len(fr.split()) == 1 else 0
 
 
 def _gloss_match_score(fr_raw: str, token: str) -> float:
     """
-    Score gloss match on 0-100 scale.
-    Simple, explicit points system (no capping tricks).
+    Score gloss match on 0-100 scale. Ultra-simple hierarchy.
 
     100 — perfect exact match ("ami" == "ami")
-    98  — exact + period ("ami.")
-    95  — simple extension ("ami prêt")
-    70  — composite light ("ami, camarade" with 1-2 words after comma)
-    60  — composite heavy ("ami, bien-aimé" with 3+ words after comma)
+    70  — composite match ("ami, bien-aimé" / "ami intime")
     50  — substring match with word boundary
     0   — no match
     """
     if not fr_raw or not token:
         return 0.0
 
-    fr_raw_lower = fr_raw.lower().strip()
-    t_lower = token.lower().strip()
-
-    # Check exact match with period BEFORE cleaning (so "ami." != "ami")
-    if fr_raw_lower == t_lower + '.':
-        return 98.0
-
-    # Now clean for other comparisons
     fr = clean_gloss(fr_raw or '').lower().strip()
-    t  = t_lower
+    t = token.lower().strip()
 
     if not fr or not t:
         return 0.0
@@ -163,58 +99,36 @@ def _gloss_match_score(fr_raw: str, token: str) -> float:
     if fr == t:
         return 100.0
 
-    # Simple extension (token + space, no comma after)
-    if fr.startswith(t + ' ') or fr.startswith(t + '.'):
-        after_token = fr[len(t):].lstrip('.').strip()
-        if after_token and not after_token.startswith(','):
-            return 95.0
-
-    # Composite: first segment == token
+    # Composite: first segment or extension
+    # "ami intime", "ami, bien-aimé", "ami, camarade" all score 70
     first_segment = fr.split(',')[0].strip()
-    if first_segment == t or first_segment == t + '.':
-        after_comma = fr.split(',', 1)[1].strip() if ',' in fr else ''
-        if after_comma:
-            # Composite with content after comma
-            # 70 pts if light (1-2 words), 60 pts if heavy (3+ words)
-            word_count = len(after_comma.split())
-            return 70.0 if word_count <= 2 else 60.0
-        else:
-            # No comma, just first segment matches
-            return 95.0
+    if first_segment == t or fr.startswith(t + ' ') or fr.startswith(t + '.'):
+        return 70.0
 
     # Substring match with word boundary
     import re as _re
     pattern = r'(^|[ ,;(])' + _re.escape(t) + r'($|[ .,;)])'
     if _re.search(pattern, fr):
-        idx = fr.find(t)
-        words_before = len(fr[:idx].split()) if idx > 0 else 0
-        if words_before < 4:
-            return 50.0
+        return 50.0
 
     return 0.0
 
 
-def _rerank(candidates: list, token: str, spacy_pos: str,
+def _rerank(candidates: list, _token: str, spacy_pos: str,
             context_tokens: list = None,
             semantic_groups: list = None) -> list:
-    """Rerank candidates on 0-100 point scale."""
+    """Rerank candidates on 0-100 point scale. Ultra-simple: +2 POS, +1 concise max."""
     for c in candidates:
-        # Boosts on 0-100 scale
-        b1 = _fr_exactness_bonus(c['fr'], token)
-        b2 = _pos_bonus(spacy_pos, c.get('pos', ''))
-        b3 = _conciseness_bonus(c['fr'])
-        # Context bonus removed — scoring based on semantic meaning only
-        # Context was causing wrong words to score higher due to
-        # coincidental neighboring word matches
-        b5 = 15 if c.get('match') == 'exact' else 0
-        final = c['score'] + b1 + b2 + b3 + b5
+        b_pos = _pos_bonus(spacy_pos, c.get('pos', ''))
+        b_concise = _conciseness_bonus(c['fr'])
+        final = c['score'] + b_pos + b_concise
 
-        # Cap at 100 pts (exact matches will be 100 or very close)
+        # Cap at 100 pts
         final = min(final, 100.0)
 
         c['final_score'] = round(final, 1)
-        c['bonuses'] = {'exact': b1, 'pos': b2, 'concise': b3,
-                        'context': 0, 'match': b5}
+        c['bonuses'] = {'pos': b_pos, 'concise': b_concise}
+
     candidates.sort(key=lambda x: x['final_score'], reverse=True)
     return candidates
 
@@ -329,18 +243,14 @@ class KGRetriever:
 
         return candidates
 
-    def _embedding_match_with_context(self, norm: str, frame: str,
+    def _embedding_match_with_context(self, norm: str, _frame: str,
                                      exclude_bm: set,
                                      context_tokens: list = None,
                                      lang: str = 'fr',
                                      spacy_pos: str = None):
         """
-        Enhanced embedding matching on 0-100 point scale.
-        Uses surrounding context to build a richer query representation.
-
-        Important: Embedding scores are capped at 85 pts so that exact matches
-        (which score 100 pts) are ALWAYS preferred. This prevents good embedding
-        results from overshadowing perfect exact matches.
+        Embedding matching on 0-100 point scale.
+        STRICTLY capped at 40 pts so gloss matches (100/70/50) always win.
 
         If context_tokens available: encode(token + context) for better signal
         Fallback to simple token encoding if no context.
@@ -350,12 +260,10 @@ class KGRetriever:
 
         # Build query with context if available
         if context_tokens and len(context_tokens) >= 2:
-            # Combine token + context for richer semantic representation
             context_str = " ".join(context_tokens[:5])
             query_text = f"{norm} {context_str}".strip()
             query_vec = encode(query_text)
         else:
-            # Fallback to simple token
             query_vec = encode(norm)
 
         if np.linalg.norm(query_vec) == 0:
@@ -366,8 +274,7 @@ class KGRetriever:
         WHERE s.embedding IS NOT NULL
         {pos_filter}
         RETURN s.bm AS bm, s.fr AS fr, s.en AS en,
-               s.frame AS frame, s.pos AS pos,
-               s.embedding AS emb
+               s.pos AS pos, s.embedding AS emb
         """, {"allowed_pos": allowed_pos})
 
         candidates = []
@@ -377,19 +284,13 @@ class KGRetriever:
             stored_vec = np.array(r['emb'], dtype=np.float32)
             if not same_embedding_space(query_vec, stored_vec):
                 continue
-            # Cosine similarity is 0-1, convert to 0-100 pts
+            # Cosine similarity (0-1) → scale to 0-40 pts
             cosine_sim = cosine(query_vec, stored_vec)
-            score = cosine_sim * 100.0
-            # Apply frame multiplier
-            frame_mult = self._get_frame_multiplier(r['frame'], frame)
-            score = score * frame_mult
-            # ⚠️  CRITICAL: Cap embedding scores at 85 pts so exact matches (100 pts)
-            # are ALWAYS preferred over embedding results, even very good ones.
-            score = min(score, 85.0)
+            score = cosine_sim * 40.0
 
             candidates.append({
                 'bm': r['bm'], 'fr': r['fr'], 'en': r['en'],
-                'frame': r['frame'], 'pos': r['pos'],
+                'pos': r['pos'],
                 'score': round(score, 1), 'match': 'embed',
             })
 

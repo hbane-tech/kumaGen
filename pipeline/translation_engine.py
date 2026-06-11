@@ -392,19 +392,12 @@ class TranslationEngine:
                                       candidates: list,
                                       top_k: int = 5) -> list:
         """
-        Pour chaque candidat, LLM valide si son sens français
-        correspond sémantiquement au token français (0-100 point scale).
+        Filter out false positives using LLM semantic validation.
 
-        Approche par scoring (pas rejet binaire):
-        - Match textuel parfait → NO BOOST (already captured in score)
-        - Match sémantique valide → +2 pts (light confirmation)
-        - Invalide → -10 pts penalité (filters false positives)
-
-        IMPORTANT: Validation sémantique est pour FILTRER les mauvais candidats,
-        pas pour renforcer les bons. Les boosts sont minimal pour maintenir
-        la hiérarchie (exact > composite > embedding).
-
-        Cela casse la circularité embedding en utilisant LLM.
+        Ultra-simple: Only penalize candidates that are semantically invalid.
+        - Text match or embedding ≥50 pts: validate with LLM
+        - Valid: keep as-is
+        - Invalid: penalize -30 pts (drop below 50 pts)
         """
         if not candidates or not token_fr:
             return candidates
@@ -412,57 +405,48 @@ class TranslationEngine:
         token_lower = token_fr.lower().strip()
 
         for c in candidates[:top_k]:
-            gloss_fr = c.get('fr', '').lower().rstrip('.').strip()
-            if not gloss_fr:
-                c['_semantic_score'] = 0
+            score = c.get('score', 0)
+
+            # Perfect exact (100 pts) — trust it, no validation needed
+            if score >= 100:
                 continue
 
-            # Vérif textuelle: si la glose contient le token
-            if token_lower in gloss_fr or gloss_fr.startswith(token_lower):
-                c['_semantic_valid'] = True
-                c['_semantic_score'] = 0  # No boost — already in score
-                print(f"     ✅ Match textuel: '{gloss_fr}' ≈ '{token_lower}' → {c['bm']}")
-                continue
+            # Composite/substring (50+ pts) — validate with LLM
+            if score >= 50:
+                gloss_fr = c.get('fr', '').lower().rstrip('.').strip()
 
-            # Vérif sémantique LLM
-            prompt = (
-                f'Les expressions françaises \"{gloss_fr}\" et \"{token_lower}\" '
-                f'ont-elles à peu près la même signification?\n'
-                f'Réponds uniquement par OUI ou NON.'
-            )
+                # Text contains token — trust it
+                if token_lower in gloss_fr or gloss_fr.startswith(token_lower):
+                    print(f"     ✅ Match textuel: '{gloss_fr}' ≈ '{token_lower}' → {c['bm']}")
+                    continue
 
-            try:
-                resp = self._call_llm(prompt, max_tokens=3).strip().upper()
-                is_valid = resp.startswith('O')  # OUI en français
+                # Ask LLM: is gloss semantically valid for token?
+                prompt = (
+                    f'Les expressions françaises \"{gloss_fr}\" et \"{token_lower}\" '
+                    f'ont-elles à peu près la même signification?\n'
+                    f'Réponds uniquement par OUI ou NON.'
+                )
 
-                if is_valid:
-                    c['_semantic_valid'] = True
-                    c['_semantic_score'] = 2  # Light boost only
-                    print(f"     ✅ LLM valide: '{gloss_fr}' ≈ '{token_lower}' → {c['bm']}")
-                else:
-                    c['_semantic_valid'] = False
-                    c['_semantic_score'] = -10  # Strong penalty for false positives
-                    print(f"     ⚠️  LLM: '{gloss_fr}' ≠ '{token_lower}' → {c['bm']} (pénalisé)")
+                try:
+                    resp = self._call_llm(prompt, max_tokens=3).strip().upper()
+                    is_valid = resp.startswith('O')
 
-            except Exception as e:
-                print(f"     ⚠️  Validation sémantique échouée: {e}")
-                c['_semantic_valid'] = None
-                c['_semantic_score'] = -5
+                    if is_valid:
+                        print(f"     ✅ LLM valide: '{gloss_fr}' ≈ '{token_lower}' → {c['bm']}")
+                    else:
+                        # Penalize false positives heavily
+                        c['score'] = max(0, score - 30)
+                        c['final_score'] = c['score']
+                        print(f"     ⚠️  LLM invalide: '{gloss_fr}' ≠ '{token_lower}' → {c['bm']} (-30 pts)")
 
-        # Appliquer les scores sémantiques
-        for c in candidates[:top_k]:
-            semantic_boost = c.get('_semantic_score', 0)
-            before_cap = c.get('final_score', 0)
-            final = before_cap + semantic_boost
+                except Exception as e:
+                    print(f"     ⚠️  LLM validation failed: {e}")
+                    # Conservative: penalize on LLM failure
+                    c['score'] = max(0, score - 15)
+                    c['final_score'] = c['score']
 
-            # Cap final score at 100 pts
-            c['final_score'] = round(min(final, 100.0), 1)
-            # DEBUG
-            if semantic_boost != 0 or before_cap > 85:
-                print(f"     [DEBUG] {c.get('bm', '?')}: {before_cap:.1f} + {semantic_boost} = {final:.1f} → {c['final_score']}")
-
-        # Re-trier par final_score
-        candidates.sort(key=lambda x: x.get('final_score', 0), reverse=True)
+        # Re-sort by score
+        candidates.sort(key=lambda x: x.get('final_score', x.get('score', 0)), reverse=True)
         return candidates
 
     # ------------------------------------------------------------------
@@ -1064,12 +1048,8 @@ class TranslationEngine:
             is_verbal_noun=tok.get('is_verbal_noun', False),
         )
 
-        # ── RE-RANKING SENS_FR (déterministe, avant LLM) ─────────────
-        candidates = self._rerank_by_sens_fr(lemma, candidates)
-
-        # ── SEMANTIC VALIDATION: LLM checks if candidate gloss matches token ──
-        # This breaks the embedding circularity by using semantic reasoning
-        # instead of cosine similarity in compressed vector space.
+        # ── SEMANTIC VALIDATION: Filter out false positives ──
+        # LLM checks if candidate gloss actually matches the token semantically
         candidates = self._validate_candidate_semantics(lemma, candidates, top_k=10)
 
         # ── AFFICHAGE DU TOP 5/6 DES CANDIDATS SENSE DU KG (DIAGNOSTIC VISUEL) ──
