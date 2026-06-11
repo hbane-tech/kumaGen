@@ -1545,6 +1545,12 @@ class TranslationEngine:
             # la forme correcte (transitif sans COD → V+li kɛ ; intransitif → V nu).
             if tok.get('pos') == 'VERB' and (tok.get('is_root')
                                              or tok.get('dep') in ('xcomp', 'advcl', 'conj')):
+                # Garantir que la classe sémantique est détectée par le LLM pour
+                # TOUT verbe, quelle que soit l'origine du bm (KG label, retrieve…).
+                # Sans ça, 'venir' (bm='nà' via KG label) sortait sans classe →
+                # transitivité ACTION → 'nàli kɛ' au lieu de 'nà' (motion).
+                if not tok.get('semantic_class'):
+                    tok['semantic_class'] = self._detect_semantic_class(tok.get('lemma', ''))
                 if tok.get('action_noun'):
                     tok['intransitive_type'] = 'support'
                 else:
