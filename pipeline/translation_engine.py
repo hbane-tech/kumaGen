@@ -902,6 +902,20 @@ class TranslationEngine:
 
     def _detect_intransitive_type(self, lemma: str, semantic_class: str = '') -> str:
 
+        # ── PRIORITÉ CLASSE SÉMANTIQUE : classes autonomes → ABSOLU ───────────
+        # Les classes sémantiques autonomes (spontaneous, motion, posture…) sont
+        # intrinsèquement intransitives : leur sens central ne porte pas sur un
+        # objet direct, même si la grammaire le permet ('perdre ses clés').
+        # On respecte cette classe AVANT d'interroger le LLM (qui répondrait
+        # ACTION sur la simple possibilité grammaticale d'un COD).
+        # Aligné sur _AUTONOMOUS_SC (advcl.py) et la logique B1 (intransitif absolu).
+        _AUTONOMOUS_SC = {'motion', 'biological', 'posture', 'spontaneous',
+                          'perception', 'meteorological'}
+        if semantic_class in _AUTONOMOUS_SC:
+            print(f"  🔍 [TRANSITIVITY] '{lemma}' class={semantic_class} "
+                  f"→ ABSOLU (classe autonome, LLM ignoré)")
+            return 'ABSOLU'
+
         # ── LLM ──────────────────────────────────────────────────────────────
         # On demande l'usage COURANT (pas la possibilité grammaticale) : 'travailler'
         # peut grammaticalement avoir un COD (travailler le bois) mais s'emploie
