@@ -466,10 +466,21 @@ def run(T, tree, m, processed_indices, G_kg, NX_G,
         (_nsubj_tok and ('Number=Plur' in str(_nsubj_tok.get('morph', ''))
                          or _nsubj_tok.get('is_plural')))
         or (root_tok and root_tok.get('is_plural')))
+    # Signal réciproque fort : sujet pluriel + (même surface "nous nous" OU is_reciprocal).
+    # Ce signal prime sur la classe sémantique (aimer/spontaneous ne doit pas
+    # bloquer "nous nous aimons" → réciproque ɲɔgɔn).
+    _nsubj_surf_early = str(_nsubj_tok.get('surface', '')).lower() if _nsubj_tok else ''
+    _refl_surf_early  = str(_refl_tok.get('surface', '')).lower() if _refl_tok else ''
+    _recip_signal = bool(
+        _subj_is_plural
+        and ((root_tok and root_tok.get('is_reciprocal'))
+             or (_nsubj_surf_early and _refl_surf_early == _nsubj_surf_early)))
     # expl:comp présent → toujours traiter (quelle que soit la classe sémantique)
+    # Signal réciproque fort → traiter aussi (réciproque > classe autonome)
     _sc_ok = (not root_tok
               or root_tok.get('semantic_class', '') not in _refl_abs_classes
-              or (_refl_tok and _refl_tok.get('dep') == 'expl:comp'))
+              or (_refl_tok and _refl_tok.get('dep') == 'expl:comp')
+              or _recip_signal)
     # Passé composé avec participe passé (on s'est battu) : autoriser VerbForm=Part
     _has_aux_tense = any(x.get('dep') == 'aux:tense' for x in T)
     # Nomination / voix moyenne : un verbe réfléchi SUIVI d'un NOM PROPRE
