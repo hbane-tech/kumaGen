@@ -6,6 +6,22 @@ Ne touche pas à ÊTRE — géré dans step6_copule.py.
 from rules.core import j, _is_avoir
 
 
+def _resolve_poss_type(obj_tok):
+    """Type de possession pour le marqueur (material→bóló vs abstract→fɛ).
+
+    Basé UNIQUEMENT sur le possession_type posé sur le token objet par
+    _detect_possession_type (LLM) : AGE / MATERIAL / ABSTRACT / PAIN.
+    Aucune liste de mots codée en dur. Marche pour les NOMS (qui n'ont pas de
+    semantic_class). Défaut (non détecté) → abstract (marqueur fɛ).
+    """
+    _pt = str(obj_tok.get('possession_type', '')).upper()
+    if _pt == 'MATERIAL':
+        return 'material'
+    if _pt == 'AGE':
+        return 'AGE'
+    return 'abstract'  # ABSTRACT, PAIN, ou non détecté → fɛ
+
+
 def run(T, tree, m, processed_indices, G_kg, root_tok):
     """
     Modifie tree/m/processed_indices en place si avoir détecté.
@@ -68,10 +84,7 @@ def run(T, tree, m, processed_indices, G_kg, root_tok):
                            and x.get('pos') == 'PRON'
                            and x.get('bm')), None)
         if _obj_poss and _subj_poss:
-            _obj_sc   = _obj_poss.get('semantic_class', '')
-            _poss_type = ('material'
-                          if _obj_sc in ('object', 'money', 'vehicle', 'tool', 'food')
-                          else 'abstract')
+            _poss_type = _resolve_poss_type(_obj_poss)
             tree['clause_type']    = 'noun_phrase_have'
             tree['possession_type'] = _poss_type
             _obj_bm = _obj_poss.get('bm')
@@ -165,10 +178,7 @@ def run(T, tree, m, processed_indices, G_kg, root_tok):
                        if x.get('dep') in ('nsubj', 'nsubj:pass')
                        and x.get('bm')), None)
         if _obj2 and _subj2:
-            _obj_sc2   = _obj2.get('semantic_class', '')
-            _poss_type2 = ('material'
-                           if _obj_sc2 in ('object', 'money', 'vehicle', 'tool', 'food')
-                           else 'abstract')
+            _poss_type2 = _resolve_poss_type(_obj2)
             tree['clause_type']     = 'noun_phrase_have'
             tree['possession_type'] = _poss_type2
             _obj_bm2 = _obj2.get('bm')
