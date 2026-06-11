@@ -1107,6 +1107,7 @@ class TranslationEngine:
             lang=lang,
             context_tokens=context_lemmas,
             is_verbal_noun=tok.get('is_verbal_noun', False),
+            context_type=tok.get('context_type'),
         )
 
         # ── SEMANTIC VALIDATION: Filter out false positives ──

@@ -166,7 +166,7 @@ class KGRetriever:
     def retrieve(self, token: str, frame: str,
                  spacy_pos: str = None, top_k: int = 10,
                  lang: str = 'fr', context_tokens: list = None,
-                 is_verbal_noun: bool = False):
+                 is_verbal_noun: bool = False, context_type: str = None):
         norm = normalize_token(token)
         if not norm:
             return []
