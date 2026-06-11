@@ -182,6 +182,25 @@ def resolve_auxiliary_lemmas(tokens, db):
         #     {'lang': lang_curr, 'surface': surf_lower}
         # )
 
+        # Clitique objet le/l'/la/les rattaché à un verbe (il l'a dit → a yé a
+        # fɔ́ ; il les voit → … u …) : c'est un PRONOM objet, pas un article.
+        # Désambiguïsation SYNTAXIQUE (dep=obj/iobj) car le/les sont ambigus
+        # (article 'le chat' = det vs pronom 'il le voit' = obj). On préfère le
+        # nœud Pronoun{role:'object_pronoun'} (bm le/l'/la→a, les→u) au nœud
+        # Article. Les déterminants (dep=det) tombent dans la requête générale.
+        if (t.get('pos') in ('PRON', 'DET')
+                and t.get('dep') in ('obj', 'iobj')):
+            _objp = db.query(
+                "MATCH (n:Pronoun {role:'object_pronoun', lang:$lang}) "
+                "WHERE toLower(n.surface) = $surface "
+                "RETURN n.bm AS bm LIMIT 1",
+                {'lang': lang_curr, 'surface': surf_lower})
+            if _objp and _objp[0].get('bm'):
+                t['bm']   = _objp[0]['bm']
+                t['role'] = 'object_pronoun'
+                t['pos']  = 'PRON'
+                continue
+
         res = db.query(
             "MATCH (n) WHERE n.lang = $lang "
             "AND (n.surface = $surface OR n.lemma = $lemma) "
