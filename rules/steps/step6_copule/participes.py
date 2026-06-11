@@ -42,7 +42,10 @@ def run_resultatif(T, tree, m, processed_indices, G_kg, root_tok, _has_expletive
             or any(x.get('role') == 'expletive' for x in T))
         _subj_is_pron = any(x.get('dep') in ('nsubj', 'nsubj:pass')
                             and x.get('pos') == 'PRON' for x in T)
-        if _has_cop_or_expletive or _subj_is_pron:
+        # REFLEXIF ABSOLU : skip resultative handling (keep TAM)
+        _is_refl_absolute = tree.get('clause_type') == 'refl_absolute'
+
+        if (_has_cop_or_expletive or _subj_is_pron) and not _is_refl_absolute:
             # Résultatif : S TAM(vide) V+ra/la/na
             tree['clause_type']  = 'simple'
             tree['is_transitive'] = False
