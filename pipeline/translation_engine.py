@@ -1448,11 +1448,62 @@ class TranslationEngine:
     # CLAUSE SPLITTING
     # ------------------------------------------------------------------
 
-    def _split_clauses(self, sentence: str) -> list:
-        import re
-        parts = re.split(r',|(?<=[a-zA-ZÀ-ÿ])\.(?=\s+[A-ZÀ-Ÿ]|\s*$)', sentence)
-        parts = [p.strip().strip('.') for p in parts]
-        return [p for p in parts if p and len(p.split()) > 1]
+    def _split_clauses(self, sentence: str, tokens: list = None) -> list:
+        """
+        Split sentence into clauses using spaCy dependencies (automatic detection).
+        Fallback to comma/period splitting if tokens not provided.
+
+        Clause boundaries detected via:
+        - acl:relcl (relative clause)
+        - advcl (adverbial clause: temporal, causal, conditional)
+        - ccomp/xcomp (complement clauses)
+        """
+        if not tokens:
+            # Fallback: split by commas and periods
+            import re
+            parts = re.split(r',|(?<=[a-zA-ZÀ-ÿ])\.(?=\s+[A-ZÀ-Ÿ]|\s*$)', sentence)
+            parts = [p.strip().strip('.') for p in parts]
+            return [p for p in parts if p and len(p.split()) > 1]
+
+        # Auto-detect clause boundaries from spaCy deps
+        clause_dep_types = {'acl:relcl', 'advcl', 'ccomp', 'xcomp'}
+        clause_starts = []
+
+        for tok in tokens:
+            if tok.get('dep') in clause_dep_types:
+                clause_starts.append(tok)
+
+        if not clause_starts:
+            # No multi-clause deps found → single clause
+            return [sentence.strip()]
+
+        # Sort by position in sentence
+        clause_starts.sort(key=lambda t: t['orig_index'])
+
+        # Split text at clause boundaries (using token surface + position)
+        clauses = []
+        last_char_pos = 0
+
+        for clause_tok in clause_starts:
+            # Find where this clause marker appears in the sentence
+            marker_text = clause_tok.get('surface', '')
+            marker_pos = sentence.find(marker_text, last_char_pos)
+
+            if marker_pos > last_char_pos:
+                # Extract text before this clause marker
+                prev_clause = sentence[last_char_pos:marker_pos].strip()
+                if prev_clause:
+                    clauses.append(prev_clause)
+
+            last_char_pos = marker_pos
+
+        # Add remaining text as final clause
+        if last_char_pos < len(sentence):
+            final_clause = sentence[last_char_pos:].strip()
+            if final_clause:
+                clauses.append(final_clause)
+
+        return clauses if clauses else [sentence.strip()]
 
     # ------------------------------------------------------------------
     # SINGLE CLAUSE TRANSLATION
@@ -1612,7 +1663,8 @@ class TranslationEngine:
         print(f"📊 FRAME : {frame}")
         print("=" * 75)
 
-        clauses      = self._split_clauses(sentence)
+        # Use spaCy dependencies to auto-detect clause boundaries
+        clauses      = self._split_clauses(sentence, tokens=all_tokens)
         all_bambara  = []
         all_concepts = []
 
