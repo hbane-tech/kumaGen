@@ -1,7 +1,6 @@
 """rules/steps/step5_obliques/__init__.py — orchestrateur obliques."""
 from rules.steps.step5_obliques import advcl
 from rules.steps.step5_obliques import relcl_boucle
-from rules.steps.step5_obliques import relcl_orphan
 from rules.steps.step5_obliques import comitative
 from rules.steps.step5_obliques import privatif
 from rules.steps.step5_obliques import wagon
@@ -127,8 +126,3 @@ def run(T, tree, m, processed_indices, G_kg, NX_G, root_tok):
                          'simple', _marker_val, dep_case)
 
         # advmod sans role temporal ni case → attribut/qualificatif → ignorer ici
-
-    # ── PASS FINAL : acl:relcl orphelines (relatives non traitées par la boucle) ──
-    # Fallback pour structures complexes comme reflexif + relative sur objet direct.
-    # Évite les regressions en n'ajoutant que des relatives non encore traitées.
-    relcl_orphan.handle_orphan_relcl(T, m, processed_indices, G_kg, NX_G)
