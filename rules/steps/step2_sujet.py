@@ -356,7 +356,7 @@ def run(T, tree, m, processed_indices, G_kg, NX_G, root_tok,
                 for _sa in _s_amods:
                     _sa_bm = _sa.get('bm') or f"[{_sa.get('lemma')}]"
                     if _sa.get('pos') == 'ADJ':
-                        _sa_bm = adj_man(_sa_bm)
+                        _sa_bm = adj_man(_sa_bm, is_classifying=_sa.get('is_classifying_adj', False))
                     subj_bm = j(subj_bm, _sa_bm)
                     processed_indices.add(_sa['orig_index'])
                 _s_amod_indices = {a['orig_index'] for a in _s_amods} | {subj_tok['orig_index']}

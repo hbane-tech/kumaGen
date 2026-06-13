@@ -22,6 +22,7 @@ import json
 import datetime
 import argparse
 import os
+import re
 from collections import defaultdict
 
 
@@ -102,6 +103,85 @@ _TAM_MARKERS = [
     'bɛ kà', 'tɛ kà', 'bɛ na', 'tɛ na',
     'yé', 'ma', 'bɛ', 'tɛ', 'dòn', 'ka', 'kàna',
 ]
+
+# ── UD Parse Health ───────────────────────────────────────────────────────────
+
+_SPACY_NLP = None
+
+def _get_nlp():
+    global _SPACY_NLP
+    if _SPACY_NLP is None:
+        try:
+            import spacy
+            _SPACY_NLP = spacy.load('fr_dep_news_trf')
+        except Exception:
+            pass
+    return _SPACY_NLP
+
+
+def ud_health(sentence: str) -> dict:
+    """5 checks structurels sur le parse spaCy français.
+    Score 0–5 : nombre de checks réussis.
+
+    1. single_root   — exactement un token ROOT
+    2. root_pos_ok   — ROOT est VERB / AUX / NOUN / PROPN
+    3. has_subject   — au moins un nsubj / expl / nsubj:pass
+    4. connected     — pas de cycle trivial (tout token hors ROOT a head ≠ lui-même)
+    5. no_dep_dep    — aucun token avec dep='dep' (relation non résolue)
+    """
+    nlp = _get_nlp()
+    if nlp is None:
+        return {'ud_score': None, 'ud_pct': None}
+    doc    = nlp(sentence)
+    roots  = [t for t in doc if t.dep_ == 'ROOT']
+    checks = {
+        'single_root':  len(roots) == 1,
+        'root_pos_ok':  bool(roots) and roots[0].pos_ in ('VERB', 'AUX', 'NOUN', 'PROPN', 'ADJ'),
+        'has_subject':  any(t.dep_ in ('nsubj', 'expl', 'nsubj:pass', 'expl:subj') for t in doc),
+        'connected':    all(t.head.i != t.i or t.dep_ == 'ROOT' for t in doc),
+        'no_dep_dep':   not any(t.dep_ == 'dep' for t in doc),
+    }
+    score = sum(checks.values())
+    return {**checks, 'ud_score': score, 'ud_pct': round(score / 5 * 100, 1)}
+
+
+# ── Bambara word-order (S-TAM-V) ─────────────────────────────────────────────
+
+_TAM_RE = re.compile(
+    r'\b(tùn yé|tùn ma|tùn bɛ|tùn tɛ|bɛ kà|tɛ kà|bɛ na|tɛ na'
+    r'|yé|ma|bɛ|tɛ|dòn|kàna)\b'
+)
+
+def bambara_word_order_ok(bambara: str) -> bool:
+    """Vérifie S-TAM-V : le TAM doit être précédé d'un sujet ET suivi d'un verbe."""
+    tokens = bambara.strip().split()
+    if not tokens:
+        return False
+    m = _TAM_RE.search(bambara)
+    if not m:
+        return True   # pas de TAM → phrase nominale, neutre
+    tam_pos   = len(bambara[:m.start()].split())   # position (0-based) du premier token du TAM
+    tam_width = len(m.group().split())
+    return tam_pos > 0 and (tam_pos + tam_width) < len(tokens)
+
+
+# ── Métriques corpus (chrF, chrF++, BLEU) ────────────────────────────────────
+
+def corpus_metrics(hyps: list, refs: list) -> dict:
+    """Calcule chrF, chrF++ et BLEU (car-level) au niveau corpus."""
+    try:
+        from sacrebleu.metrics import CHRF, BLEU
+        chrf_obj   = CHRF(word_order=0)
+        chrfpp_obj = CHRF(word_order=2)
+        bleu_obj   = BLEU(tokenize='char')
+        return {
+            'chrf_corpus':   round(chrf_obj.corpus_score(hyps, [refs]).score, 2),
+            'chrfpp_corpus': round(chrfpp_obj.corpus_score(hyps, [refs]).score, 2),
+            'bleu_corpus':   round(bleu_obj.corpus_score(hyps, [refs]).score, 2),
+        }
+    except Exception as e:
+        return {'chrf_corpus': None, 'chrfpp_corpus': None, 'bleu_corpus': None}
+
 
 def extract_tam_from_ref(reference: str) -> str:
     """Extrait le marqueur TAM depuis une traduction Bambara de référence."""
@@ -193,17 +273,16 @@ def kg_hit_rate(tokens) -> float:
 
 
 def chrf_score(hypothesis: str, reference: str) -> float:
-    """chrF character n-gram F-score (sacrebleu)."""
+    """chrF sentence-level score (sacrebleu ≥ 2.x)."""
     try:
-        import sacrebleu
-        return sacrebleu.corpus_chrf([hypothesis], [[reference]]).score
-    except ImportError:
-        # Fallback : chrF simplifié si sacrebleu absent
+        from sacrebleu.metrics import CHRF
+        return CHRF(word_order=0).sentence_score(hypothesis, [reference]).score
+    except Exception:
         h = set(hypothesis[i:i+3] for i in range(len(hypothesis)-2))
         r = set(reference[i:i+3] for i in range(len(reference)-2))
         if not h or not r:
             return 100.0 if hypothesis.strip() == reference.strip() else 0.0
-        p = len(h & r) / len(h)
+        p   = len(h & r) / len(h)
         rec = len(h & r) / len(r)
         return 2 * p * rec / (p + rec + 1e-8) * 100
 
@@ -263,22 +342,61 @@ def print_report(results: list, verbose: bool = False):
     # Kendall τ entre chrF et EXM rankings
     tau_chrf_exm = kendall_tau(chrf_scores, [float(e) for e in exm_scores])
 
+    # Corpus-level chrF / chrF++ / BLEU
+    hyps_all = [r['output']    for r in results]
+    refs_all = [r['reference'] for r in results]
+    corp = corpus_metrics(hyps_all, refs_all)
+
+    # UD parse health
+    ud_scores = [r['ud_score'] for r in results if r.get('ud_score') is not None]
+    ud_checks = ['ud_single_root', 'ud_root_pos_ok', 'ud_has_subject',
+                 'ud_connected', 'ud_no_dep_dep']
+    ud_labels = ['ROOT unique', 'ROOT pos valide', 'Sujet présent',
+                 'Arbre connexe', 'Pas de dep=dep']
+    ud_check_rates = {}
+    for chk in ud_checks:
+        vals = [r[chk] for r in results if r.get(chk) is not None]
+        ud_check_rates[chk] = sum(vals) / len(vals) * 100 if vals else None
+
+    # Bambara word order
+    wo_list = [r['word_order_ok'] for r in results if r.get('word_order_ok') is not None]
+    wo_rate = sum(wo_list) / len(wo_list) * 100 if wo_list else None
+
     print(f"\n{'═'*70}")
     print(f"  KUMA-MT — RAPPORT D'ÉVALUATION   ({total} phrases)")
     print(f"{'═'*70}")
+
     print(f"\n  ── Surface ────────────────────────────────────────")
-    print(f"  EXM   Exact Match Rate     : {exm_rate:6.1f}%")
-    print(f"  chrF  Character F-score    : {chrf_avg:6.1f}")
-    print(f"  τ     Kendall (chrF↔EXM)  : {tau_chrf_exm:+.3f}")
+    print(f"  EXM    Exact Match Rate     : {exm_rate:6.1f}%")
+    print(f"  chrF   Sentence avg        : {chrf_avg:6.1f}")
+    if corp['chrf_corpus']   is not None: print(f"  chrF   Corpus              : {corp['chrf_corpus']:6.2f}")
+    if corp['chrfpp_corpus'] is not None: print(f"  chrF++ Corpus (word-order) : {corp['chrfpp_corpus']:6.2f}")
+    if corp['bleu_corpus']   is not None: print(f"  BLEU   Corpus (char)       : {corp['bleu_corpus']:6.2f}")
+    print(f"  τ      Kendall (chrF↔EXM) : {tau_chrf_exm:+.3f}")
+
     print(f"\n  ── Sémantique ─────────────────────────────────────")
     if p1_avg  is not None: print(f"  P@1   Embedding Precision  : {p1_avg:6.1f}%")
     if kgh_avg is not None: print(f"  KGH   KG Hit Rate          : {kgh_avg:6.1f}%")
+
     print(f"\n  ── Structure (tree) ───────────────────────────────")
     if cta_global is not None: print(f"  CTA   Clause Type Accuracy : {cta_global:6.1f}%")
     if tam_acc    is not None: print(f"  TAM   TAM Marker Accuracy  : {tam_acc:6.1f}%")
     if neg_acc    is not None: print(f"  NEG   Negation Accuracy    : {neg_acc:6.1f}%")
     if sfr_s_avg  is not None: print(f"  SFR-S Slot Sujet Fill Rate : {sfr_s_avg:6.1f}%")
     if sfr_v_avg  is not None: print(f"  SFR-V Slot Verbe Fill Rate : {sfr_v_avg:6.1f}%")
+    if wo_rate    is not None: print(f"  WO    Word Order (S-TAM-V) : {wo_rate:6.1f}%")
+
+    print(f"\n  ── UD Parse Health (FR parse) ─────────────────────")
+    if ud_scores:
+        ud_avg = sum(ud_scores) / len(ud_scores) / 5 * 100
+        print(f"  UD Score moyen             : {ud_avg:6.1f}%  (sur 5 checks)")
+        for chk, lbl in zip(ud_checks, ud_labels):
+            pct = ud_check_rates.get(chk)
+            if pct is not None:
+                bar = '█' * int(pct / 5) + '░' * (20 - int(pct / 5))
+                print(f"  {lbl:<22} : {bar}  {pct:.1f}%")
+    else:
+        print("  (spaCy non disponible)")
 
     # Breakdown par catégorie générale (clause_type_group)
     type_groups = defaultdict(lambda: {'n': 0, 'exm': 0, 'chrf': []})
@@ -389,6 +507,12 @@ def run_evaluation(filter_cat: str = None, verbose: bool = False,
                   f"tam={tree_meta.get('tam','?')} neg={tree_meta.get('neg','?')} "
                   f"S={bool(tree_meta.get('S'))} V={bool(tree_meta.get('V'))}")
 
+        # UD parse health
+        udh = ud_health(phrase)
+
+        # Bambara word order
+        wo_ok = bambara_word_order_ok(output)
+
         results.append({
             'source':          phrase,
             'reference':       expected,
@@ -408,6 +532,15 @@ def run_evaluation(filter_cat: str = None, verbose: bool = False,
             'ref_tam':         tm['ref_tam'],
             'tree_tam':        tm['tree_tam'],
             'tree_clause':     tree_meta.get('clause_type', ''),
+            # UD parse health
+            'ud_score':          udh.get('ud_score'),
+            'ud_single_root':    udh.get('single_root'),
+            'ud_root_pos_ok':    udh.get('root_pos_ok'),
+            'ud_has_subject':    udh.get('has_subject'),
+            'ud_connected':      udh.get('connected'),
+            'ud_no_dep_dep':     udh.get('no_dep_dep'),
+            # word order
+            'word_order_ok':   wo_ok,
         })
 
     print()  # saut de ligne après le curseur
@@ -422,7 +555,9 @@ def run_evaluation(filter_cat: str = None, verbose: bool = False,
                 'source','reference','output','category',
                 'exm','chrf','p1','kgh',
                 'clause_type_ok','tam_ok','neg_ok','slot_S','slot_V','slot_O',
-                'ref_tam','tree_tam','tree_clause'])
+                'ref_tam','tree_tam','tree_clause',
+                'ud_score','ud_single_root','ud_root_pos_ok','ud_has_subject',
+                'ud_connected','ud_no_dep_dep','word_order_ok'])
             writer.writeheader()
             writer.writerows(results)
         print(f"  CSV exporté : {path}")
@@ -437,11 +572,19 @@ def run_evaluation(filter_cat: str = None, verbose: bool = False,
         _sfrS = [r['slot_S']         for r in results if r.get('slot_S') is not None]
         _sfrV = [r['slot_V']         for r in results if r.get('slot_V') is not None]
 
+        _corp = corpus_metrics(
+            [r['output'] for r in results],
+            [r['reference'] for r in results])
+        _ud   = [r['ud_score'] for r in results if r.get('ud_score') is not None]
+        _wo   = [r['word_order_ok'] for r in results if r.get('word_order_ok') is not None]
         summary = {
             'timestamp':    ts,
             'n_phrases':    len(results),
             'EXM':          round(sum(r['exm'] for r in results) / len(results) * 100, 2),
-            'chrF':         round(sum(r['chrf'] for r in results) / len(results), 2),
+            'chrF_sentence_avg': round(sum(r['chrf'] for r in results) / len(results), 2),
+            'chrF_corpus':  _corp.get('chrf_corpus'),
+            'chrFpp_corpus': _corp.get('chrfpp_corpus'),
+            'BLEU_corpus':  _corp.get('bleu_corpus'),
             'P@1':          _avg([r['p1']  for r in results if r['p1']  is not None]),
             'KGH':          _avg([r['kgh'] for r in results if r['kgh'] is not None]),
             'tau_chrF_EXM': round(kendall_tau(
@@ -452,6 +595,8 @@ def run_evaluation(filter_cat: str = None, verbose: bool = False,
             'NEG':   _avg(_neg),
             'SFR_S': _avg(_sfrS),
             'SFR_V': _avg(_sfrV),
+            'UD_score_avg': round(sum(_ud) / len(_ud) / 5 * 100, 2) if _ud else None,
+            'WO_S_TAM_V':  round(sum(_wo) / len(_wo) * 100, 2) if _wo else None,
         }
         json_path = f'eval_{ts}_summary.json'
         with open(json_path, 'w', encoding='utf-8') as f:

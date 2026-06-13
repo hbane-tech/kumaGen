@@ -10,14 +10,17 @@ def j(*p):
     return ' '.join(str(x) for x in p if x and str(x).strip() and str(x).lower() != 'null')
 
 
-def adj_man(bm: str) -> str:
-    """Forme épithète bambara : ADJ + man. Si le bm est vide/fallback ou se termine
-    déjà par un suffixe nominal (-man, -len, -nen, -nin), on le retourne tel quel."""
+def adj_man(bm: str, is_classifying: bool = False) -> str:
+    """Forme épithète bambara : ADJ + man.
+    Si le bm est vide/fallback ou se termine déjà par un suffixe nominal, retourne tel quel.
+    Si is_classifying=True (adjectif classifiant : nationalité, domaine, type), retourne sans -man."""
     if not bm or bm.startswith('['):
         return bm
     for _suffix in ('man', 'len', 'nen', 'nin', 'ya', 'la'):
         if bm.endswith(_suffix):
             return bm
+    if is_classifying:
+        return bm
     return bm + 'man'
 
 

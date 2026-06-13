@@ -122,7 +122,8 @@ def append(tok_item, T, m, processed_indices, G_kg, NX_G,
             absorbed_amods.add(c_amod['orig_index'])
     clean_amod_toks = [a for a in amod_toks if a['orig_index'] not in absorbed_amods]
     mod_compiled = j(*[
-        adj_man(a.get('bm') or f"[{a.get('lemma')}]") if a.get('pos') == 'ADJ'
+        adj_man(a.get('bm') or f"[{a.get('lemma')}]",
+                is_classifying=a.get('is_classifying_adj', False)) if a.get('pos') == 'ADJ'
         else (a.get('bm') or f"[{a.get('lemma')}]")
         for a in clean_amod_toks + _compound_amods
     ])

@@ -236,7 +236,7 @@ def run(T, tree, m, processed_indices, G_kg, NX_G,
             for _a in _post_amods + _pre_amods:
                 _a_bm = _a.get('bm') or f"[{_a.get('lemma')}]"
                 if _a.get('pos') == 'ADJ':
-                    _a_bm = adj_man(_a_bm)
+                    _a_bm = adj_man(_a_bm, is_classifying=_a.get('is_classifying_adj', False))
                 tete_bm = j(tete_bm, _a_bm)
                 processed_indices.add(_a['orig_index'])
 

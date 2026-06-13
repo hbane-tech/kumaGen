@@ -72,6 +72,26 @@ def render_verb_serial(tree, m, S, O, V, V_ACT, TAM, obl_strings, G):
                        and _xcomp_tok.get('intransitive_type') in ('ACTION', 'nominalized', 'support')
                        and _xcomp_tok.get('semantic_class', '') not in INTRANS_SC)
 
+    # ── Special case: venir de + VERBE (recent past) → S TAM bɔra ka V_ACT ──
+    # Detect: root_verb='venir' + mark='de' + V_ACTION (xcomp verb)
+    _root_tok = next((t for t in _tokens_ref if t.get('is_root')), None)
+    _has_de_mark = any(t.get('dep') == 'mark'
+                       and str(t.get('surface', '')).lower() == 'de'
+                       for t in _tokens_ref)
+    _is_venir_de_verb = (_root_tok
+                         and str(_root_tok.get('lemma', '')).lower() == 'venir'
+                         and _has_de_mark
+                         and V_ACT)
+
+    if _is_venir_de_verb:
+        # "Il vient de partir" → a bɛ bɔra ka táa (with V_ACT transitivty applied)
+        if O:
+            return j(S, TAM, 'bɔra', 'ka', O, _com_str, V_ACT, *_other_obls)
+        elif _xcomp_needs_li:
+            _xv = V_ACT + 'li' if (V_ACT and not V_ACT.endswith('li')) else V_ACT
+            return j(S, TAM, 'bɔra', 'ka', _xv, 'kɛ', _com_str, *_other_obls)
+        return j(S, TAM, 'bɔra', 'ka', V_ACT, _com_str, *_other_obls)
+
     # ── Sérielle de MOUVEMENT : V1 de mouvement (partir, aller, venir) + V2 ──
     # → S V1 [O] V2, SANS 'ka'. V1 garde sa forme autonome : au passé positif,
     # forme résultative (il est parti chercher X → a fáɲira X láɲini), sinon

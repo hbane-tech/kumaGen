@@ -1,7 +1,7 @@
 """
 test_phrases.py
 Suite de tests exhaustive — toutes les phrases testées + matrice être/avoir complète.
-Sources : sessions de débogage 2026-05-20 → 2026-05-21 + documents de référence.
+Sources : sessions de débogage 2026-05-20 → 2026-06-13 + documents de référence.
 
 Format : (phrase_fr, traduction_bambara_attendue, categorie)
 Usage  : python test_phrases.py          # liste
@@ -128,7 +128,7 @@ TEST_CASES = [
     # X. PRÉSENTATIF / IDENTIFICATOIRE
     # ════════════════════════════════════════════════════════════════════
     ("C'est moi",                         "n dòn",                          "identificatory"),
-    ("C'est moi Hawa",                    "n de dòn, Hawa",                 "identificatory_appos"),
+    ("C'est moi Hawa",                    "n de Hawa yé",                   "identificatory_appos"),
     ("Ce n'est pas moi",                  "n tɛ",                           "identificatory_neg"),
     ("c'est Musa",                        "Musa dòn",                       "presentative"),
     ("Ce sont mes frères et sœurs",       "n bálimaw dòn",                  "presentative_plur"),
@@ -156,6 +156,7 @@ TEST_CASES = [
     ("il mange ?",                        "a bɛ dún wà ?",                  "interrogative"),
     ("tu as de l'argent ?",               "wárí bɛ i bóló wà ?",            "interrogative"),
     ("elle est à la maison ?",            "a bɛ so la wà ?",                "interrogative"),
+    ("peut-il manger de la viande ?",     "a bɛ se ka sògo dún wà ?",       "interrogative_modal_xcomp"),
 
     # ════════════════════════════════════════════════════════════════════
     # XIII. QUESTIONS DE CONTENU
@@ -275,6 +276,7 @@ TEST_CASES = [
     # XX. APPARTENANCE / SYNTAGME NOMINAL
     # ════════════════════════════════════════════════════════════════════
     ("ce sac est pour ma fille",          "nin jɔ̀bɔrɔ in yé n mùsoma de ta ye", "ownership"),
+    ("Ce sac est pour moi",              "nin jɔ̀bɔrɔ in yé n ta ye",          "ownership_pron"),
     ("la maison de mon ami",              "n terikɛ ka so",                  "noun_phrase_alienable"),
     ("la participation citoyenne et démocratique",
      "angageman sosiyali ani lademokarasi",
@@ -348,6 +350,122 @@ TEST_CASES = [
     ("les bambara disent que la raison de la venue de quelqu'un est plus importante que soi-même",
      "bambaraw bɛ fɔ ko mɔ̀gɔ dɔ jɔ̀kun ka kólogirinman ka tɛmɛ yɛrɛ kan",
      "reported_comparative"),
+
+    # ════════════════════════════════════════════════════════════════════
+    # XXIV. CORRECTIFS SESSION 2026-06-12
+    # ════════════════════════════════════════════════════════════════════
+
+    # Optatif / subjonctif : que + Mood=Sub → S ka (O) V
+    ("que tu viennes",                     "i ka nà",                         "optatif"),
+    ("que Moussa mange",                   "Moussa ka dún",                   "optatif"),
+    ("que Dieu t'aide",                    "Ala ka i dɛmɛ",                   "optatif_coi"),
+
+    # Venir de + lieu (bɔra) — PROPN sans 'la', NOUN avec 'la'
+    ("Je viens de Bamako",                 "n bɔra Bamako",                   "venir_de_propn"),
+    ("Je viens de l'école",                "n bɔra kàlankɛyɔrɔ la",          "venir_de_noun"),
+
+    # Venir de + verbe (passé récent) → bɔra ka + verbe avec transitivité
+    ("Je viens de manger",                 "n bɔra ka dumuni kɛ",             "venir_de_verbe"),
+    ("Il vient de partir",                 "a bɔra ka táa",                   "venir_de_verbe"),
+
+    # Verbe coordonné avec oblique locatif (oblique avant la clause coordonnée)
+    ("elle alla au village et demande des infos",
+     "a yé wá dùgu la wa a yé ɛnfo ɲɛ́juguya",
+     "conj_avec_locatif"),
+
+    # Verbe sériel + verbe coordonné sur le xcomp
+    ("elle alla trouver et demande des informations",
+     "a táara ɲɛ́sɔ̀rɔ wa a yé kùnnafoniw ɲɛ́juguya",
+     "verb_serial_conj"),
+
+    # Comitatif + verbe de mouvement ABSOLU (pas de 'li kɛ', pas de doublon ni/yé)
+    ("il est venu avec moi",               "a nàra ni n yé",                  "comitative_motion"),
+    ("elle travaille avec lui",            "a bɛ báara ni a yé",              "comitative_travail"),
+
+    # Comitatif + adjectif sur le nom comitatif
+    ("Il est venu avec une dentition complète",
+     "a nàra ni dákolon dafaleninman yé",
+     "comitative_adj"),
+
+    # ════════════════════════════════════════════════════════════════════
+    # XXV. SYNTAGME NOMINAL TEMPOREL — CORRECTIFS 2026-06-13
+    # ════════════════════════════════════════════════════════════════════
+
+    # Préposition temporelle + quantifier + nom → kabini préfixé, nom pluriel, dɔw postposé
+    ("Depuis quelques mois",              "kabini sélidenninkalow dɔw",        "temporal_np_depuis"),
+    ("depuis quelques jours",             "kabini tilew dɔw",                  "temporal_np_depuis"),
+    ("depuis quelques années",            "kabini sanw dɔw",                   "temporal_np_depuis"),
+
+    # ════════════════════════════════════════════════════════════════════
+    # XXVI. SUBORDONNÉE COMPLÉTIVE — ko + clause (ccomp)
+    # ════════════════════════════════════════════════════════════════════
+
+    # Verbe cognitif savoir/dɔn — ko + clause équative
+    ("sais-tu que je suis un enfant ?",   "i bɛ dɔ́n ko n yé dén yé wà ?",    "ccomp_interrogative"),
+    ("je sais que tu es mon ami",         "n bɛ dɔ́n ko i yé n terikɛ yé",     "ccomp_savoir"),
+    ("ils savent que nous sommes ici",    "ùw bɛ dɔ́n ko anw bɛ yàn",          "ccomp_savoir_locatif"),
+
+    # Verbe de parole dire/fɔ — ko + clause
+    ("il dit qu'il mange",                "a bɛ fɔ ko a bɛ dún",               "ccomp_dire"),
+    ("ils disent que la route est longue","ùw bɛ fɔ ko sìra ka télé",           "ccomp_dire_qualitative"),
+    ("elle dit que Musa est parti",       "a fɔra ko Musa fáɲira",              "ccomp_dire_passe"),
+
+    # ════════════════════════════════════════════════════════════════════
+    # XXVII. MODAL — VARIATIONS SUR "POUVOIR / SE KA"
+    # ════════════════════════════════════════════════════════════════════
+
+    ("nous pouvons partir",               "anw bɛ se ka táa",                  "modal_pouvoir"),
+    ("il ne peut pas manger",             "a tɛ se ka dún",                    "modal_pouvoir_neg"),
+    ("elle peut venir",                   "a bɛ se ka nà",                     "modal_pouvoir"),
+    ("tu ne peux pas partir",             "i tɛ se ka táa",                    "modal_pouvoir_neg"),
+
+    # ════════════════════════════════════════════════════════════════════
+    # XXVIII. PASSÉ INTRANSITIF NÉGATIF
+    # ════════════════════════════════════════════════════════════════════
+
+    ("ils ne sont pas arrivés",           "ùw ma se",                          "past_intransitive_neg"),
+    ("il n'est pas tombé",                "a ma bɛn",                          "past_intransitive_neg"),
+    ("elle n'est pas venue",              "a ma nà",                           "past_intransitive_neg"),
+
+    # ════════════════════════════════════════════════════════════════════
+    # XXIX. HABITUDE NÉGATIVE
+    # ════════════════════════════════════════════════════════════════════
+
+    ("elle ne mangeait pas",              "a tùn tɛ dún",                      "habitude_neg"),
+    ("nous ne parlions pas bambara",      "anw tùn tɛ bambara kúma",           "habitude_neg_plur"),
+    ("il n'avait pas mangé",              "a tùn ma dún",                      "passe_anterieur_neg"),
+
+    # ════════════════════════════════════════════════════════════════════
+    # XXX. RÈGLES SPÉCIALISÉES (Rules 1-9)
+    # ════════════════════════════════════════════════════════════════════
+
+    # Rule 1: Conditional + question → ends with 'dun ?' not 'wà ?'
+    ("Si j'ai du courage, saurait-on ?",   "n bɛ gara dun, a mán se dun ?",     "rule1_conditional_question"),
+
+    # Rule 2: Prohibitive + object → 'kàna [object] dùn'
+    ("Ne mange pas le riz",                "kàna iri dùn",                      "rule2_prohibitive_object"),
+    ("ne mange pas !",                     "kàna dúnli kɛ",                     "rule2_prohibitive_no_object"),
+
+    # Rule 3: Temporal + passé simple avoir
+    ("quand il eut ton appel",             "tuma min a yé wéle ɲóro",           "rule3_temporal_avoir"),
+
+    # Rule 4: Temporal + passive passé simple
+    ("Quand cela fut fait",                "tuma min o tùn yògorolen dòn",      "rule4_temporal_passive"),
+
+    # Rule 5: Fixed phrase 'Ainsi donc'
+    ("Ainsi donc",                         "ola sa",                            "rule5_fixed_phrase"),
+
+    # Rule 6: ne...que restrictive
+    ("tu ne serais qu'un pleutre",         "i bɛ yé foyi yé ni sègɛ tɛ",       "rule6_restrictive"),
+
+    # Rule 7: Qu'est-ce que = mún + modal serial
+    ("Qu'est-ce qu'il pourrait t'arriver là-bas ?",  "mún a mán tè wà yàn ?",  "rule7_quest_ce_que"),
+
+    # Rule 8: Complex relative with reflexive
+    ("Il se saisit de son fusil qu'il tint sur ses épaules",  "a mɛ a gabu ka sèbɛ nin a kùn a gara dòn",  "rule8_relative_reflexive"),
+
+    # Rule 9: valoir la peine idiom
+    ("Est-ce que cela vaut la peine de prendre un fusil",  "o bɛ buntu cɛ wà furu sàn kɛ ka se ?",  "rule9_valoir_peine"),
 ]
 
 

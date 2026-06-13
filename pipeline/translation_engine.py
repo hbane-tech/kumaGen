@@ -780,6 +780,28 @@ class TranslationEngine:
 
         return 'QUALITE'
 
+    def _detect_classifying_adj(self, lemma: str) -> bool:
+        """Returns True if the adjective is CLASSIFIANT (no -man), False if QUALIFIANT (needs -man).
+        CLASSIFIANT = nationality, category, domain, type (français, international, médical).
+        QUALIFIANT = quality, property, characteristic (grand, beau, rouge, chaud)."""
+        prompt = (
+            f'The French adjective "{lemma}" is used as an epithet (modifying a noun).\n'
+            f'QUALIFIANT: describes a quality, property or characteristic of the noun — '
+            f'grand, beau, vieux, rouge, rapide, chaud, intelligent, bon, mauvais, simple.\n'
+            f'CLASSIFIANT: indicates a category, nationality, domain or type, NOT a quality — '
+            f'français, international, européen, médical, électronique, national, politique.\n'
+            f'Reply with ONLY one word: QUALIFIANT or CLASSIFIANT.'
+        )
+        for _attempt in range(3):
+            try:
+                raw = self._call_llm(prompt, max_tokens=5).strip().upper().split()[0]
+                print(f"     🔍 adj_classify? '{lemma}' → '{raw}'")
+                if raw in ('QUALIFIANT', 'CLASSIFIANT'):
+                    return raw == 'CLASSIFIANT'
+            except Exception as e:
+                print(f"     🔍 adj_classify attempt {_attempt+1} failed: {e}")
+        return False  # fallback: assume qualifying → add -man
+
     def _classify_adj_state(self, tok, all_embed=False):
         """Classe un ADJ prédicatif en STATIF/PARTICIPE/VALEUR/QUALITE et pose
         le flag correspondant (QUALITE → aucun flag : qualitative par défaut).
@@ -1262,6 +1284,10 @@ class TranslationEngine:
                 tok['is_participe_passe'] = True
             elif _rn == 'VALEUR':
                 tok['is_valeur'] = True
+        # Classification épithète : QUALIFIANT vs CLASSIFIANT (adjectifs attributifs)
+        if tok.get('pos') == 'ADJ' and tok.get('dep') == 'amod':
+            if self._detect_classifying_adj(tok['lemma']):
+                tok['is_classifying_adj'] = True
         print(f"DEBUG après détection: tok flags = is_statif={tok.get('is_statif')}, is_participe_passe={tok.get('is_participe_passe')}")
 
         top_score = candidates[0]['final_score'] if candidates else 0
@@ -1450,73 +1476,157 @@ class TranslationEngine:
 
     def _split_clauses(self, sentence: str, tokens: list = None) -> list:
         """
-        Split sentence into clauses using spaCy dependencies (automatic detection).
-        Fallback to comma/period splitting if tokens not provided.
-
-        Clause boundaries detected via:
-        - acl:relcl (relative clause)
-        - advcl (adverbial clause: temporal, causal, conditional)
-        - ccomp/xcomp (complement clauses)
+        Phase 1 — split at major comma boundaries (anteposed appositive, introductory NP).
+        Phase 2 — within each comma segment, split at dep-based clause boundaries
+                   (acl:relcl, advcl, ccomp, xcomp).
         """
         if not tokens:
-            # Fallback: split by commas and periods
             import re
             parts = re.split(r',|(?<=[a-zA-ZÀ-ÿ])\.(?=\s+[A-ZÀ-Ÿ]|\s*$)', sentence)
             parts = [p.strip().strip('.') for p in parts]
             return [p for p in parts if p and len(p.split()) > 1]
 
-        # Auto-detect clause boundaries from spaCy deps
-        clause_dep_types = {'acl:relcl', 'advcl', 'ccomp', 'xcomp'}
+        _sorted_toks = sorted(tokens, key=lambda x: x['orig_index'])
+
+        # ── Phase 1 : comma split ────────────────────────────────────────────────
+        _split_start_tok = None
+
+        # a) Appositive anteposée : dep=appos vient avant son head
+        for tok in _sorted_toks:
+            if tok.get('dep') == 'appos':
+                _ai = tok.get('orig_index', -1)
+                _hi = tok.get('head_index', -1)
+                if _ai < _hi:
+                    _ht = next((t for t in tokens if t.get('orig_index') == _hi), None)
+                    if _ht:
+                        _pre = [t for t in tokens
+                                if t.get('head_index') == _hi
+                                and t.get('dep') in ('flat', 'flat:name', 'det')
+                                and t['orig_index'] < _hi]
+                        _split_start_tok = min([_ht] + _pre, key=lambda x: x['orig_index'])
+                        break
+
+        # b) Fallback : phrase nominale introductive avant virgule
+        #    premier token NOUN/PROPN + aucun verbe fléchi avant la virgule
+        #    ≠ "sans moi, tu…" (premier token ADP)
+        # Note: le rôle du token virgule est 'content' (pas 'punct') — on filtre
+        # sur pos='PUNCT' ou dep='punct' à la place.
+        if not _split_start_tok:
+            _comma_toks = [t for t in _sorted_toks
+                           if t.get('surface') == ','
+                           and (t.get('pos') == 'PUNCT' or t.get('dep') == 'punct')]
+            for _ct in _comma_toks:
+                _ci     = _ct['orig_index']
+                _before = [t for t in _sorted_toks if t['orig_index'] < _ci]
+                _after  = [t for t in _sorted_toks
+                           if t['orig_index'] > _ci
+                           and t.get('pos') != 'PUNCT'
+                           and t.get('dep') != 'punct'
+                           and t.get('surface') not in (',', '.')]
+                if not _before or not _after:
+                    continue
+                _verb_before = any(
+                    t.get('pos') == 'VERB'
+                    and t.get('dep') not in ('acl', 'acl:relcl', 'amod')
+                    for t in _before
+                )
+                if (not _verb_before
+                        and _before[0].get('pos') in ('NOUN', 'PROPN')
+                        and _after[0].get('pos') in ('NOUN', 'PROPN', 'PRON')
+                        and _after[0].get('dep') in ('nsubj', 'flat', 'flat:name',
+                                                      'ROOT', 'nsubj:pass')):
+                    _split_start_tok = _after[0]
+                    break
+
+        # c) Virgule avant une relative (qui/que/dont) après clause principale complète
+        #    "S V ..., qui/que/dont SUBORD" → split en deux unités de traduction
+        if not _split_start_tok:
+            for _ct in _comma_toks:
+                _ci    = _ct['orig_index']
+                _before = [t for t in _sorted_toks if t['orig_index'] < _ci]
+                _after  = [t for t in _sorted_toks
+                           if t['orig_index'] > _ci
+                           and t.get('pos') != 'PUNCT'
+                           and t.get('dep') != 'punct'
+                           and t.get('surface') not in (',', '.')]
+                if not _before or not _after:
+                    continue
+                _has_root_verb = any(
+                    t.get('pos') == 'VERB'
+                    and t.get('dep') not in ('acl', 'acl:relcl', 'amod')
+                    for t in _before
+                )
+                if _has_root_verb and _after[0].get('role') == 'relative':
+                    _split_start_tok = _after[0]
+                    break
+
+        # Si un comma split est trouvé : séparer texte + tokens, puis appliquer
+        # le dep-split indépendamment dans chaque segment
+        if _split_start_tok:
+            _si       = _split_start_tok.get('orig_index', -1)
+            seg1_toks = [t for t in tokens if t['orig_index'] < _si]
+            seg2_toks = [t for t in tokens if t['orig_index'] >= _si]
+            _surf     = _split_start_tok.get('surface', '')
+            _pos      = sentence.find(_surf)
+            if _pos > 0 and seg1_toks and seg2_toks:
+                seg1_text = sentence[:_pos].strip().rstrip(',').strip()
+                seg2_text = sentence[_pos:].strip()
+                result = []
+                result.extend(self._split_clauses(seg1_text, seg1_toks))
+                result.extend(self._split_clauses(seg2_text, seg2_toks))
+                if result:
+                    return result
+
+        # Pas de comma split : dep-split direct
+        return self._split_at_deps(sentence, tokens)
+
+    def _split_at_deps(self, sentence: str, tokens: list) -> list:
+        """Split a text segment at dep-based clause boundaries (advcl, ccomp, xcomp).
+        acl:relcl (relatives en qui/que/qu') sont gardées comme slots dans la clause principale.
+        advcl purposive (pour+inf) et privative (sans+inf) → slots gérés par advcl.py."""
+        if not sentence.strip():
+            return []
+
+        # xcomp = complément verbal du verbe principal (je veux MANGER) :
+        # géré inline par step0+step3 via xcomp_verb_tok → ne jamais splitter ici.
+        clause_dep_types = {'advcl', 'ccomp'}
         clause_starts = []
 
         for tok in tokens:
-            if tok.get('dep') in clause_dep_types:
-                # For relative clauses (acl:relcl), find the relative marker (qui, que, où, etc.)
-                # which is typically a child token (nsubj, obj) that appears BEFORE the verb
-                if tok.get('dep') == 'acl:relcl':
-                    # Find first child of this relcl verb (the relative pronoun)
-                    # A child has head_index pointing to this token's orig_index
-                    children = [t for t in tokens if t.get('head_index') == tok['orig_index']]
-                    if children:
-                        # Use the first child in sentence order (smallest orig_index)
-                        relative_marker = min(children, key=lambda t: t['orig_index'])
-                    else:
-                        # No children found, use verb itself as fallback
-                        relative_marker = tok
-                    clause_starts.append(relative_marker)
-                else:
-                    # For advcl, ccomp, xcomp, use the verb/marker itself
-                    clause_starts.append(tok)
+            if tok.get('dep') not in clause_dep_types:
+                continue
+            # Purposive/privative advcl (pour+inf, sans+inf) : garder dans la
+            # clause principale pour que step5_obliques/advcl.py les gère comme slot
+            if tok.get('dep') == 'advcl':
+                _mark = next((t for t in tokens
+                              if t.get('dep') == 'mark'
+                              and t.get('head_index') == tok.get('orig_index')
+                              and t.get('role') in ('purposive', 'privative')), None)
+                if _mark:
+                    continue
+            clause_starts.append(tok)
 
         if not clause_starts:
-            # No multi-clause deps found → single clause
             return [sentence.strip()]
 
-        # Sort by position in sentence
         clause_starts.sort(key=lambda t: t['orig_index'])
 
-        # Split text at clause boundaries (using token surface + position)
         clauses = []
         last_char_pos = 0
 
         for clause_tok in clause_starts:
-            # Find where this clause marker appears in the sentence
             marker_text = clause_tok.get('surface', '')
-            marker_pos = sentence.find(marker_text, last_char_pos)
-
+            marker_pos  = sentence.find(marker_text, last_char_pos)
             if marker_pos > last_char_pos:
-                # Extract text before this clause marker
-                prev_clause = sentence[last_char_pos:marker_pos].strip()
-                if prev_clause:
-                    clauses.append(prev_clause)
-
+                prev = sentence[last_char_pos:marker_pos].strip().rstrip(',').strip()
+                if prev:
+                    clauses.append(prev)
             last_char_pos = marker_pos
 
-        # Add remaining text as final clause
         if last_char_pos < len(sentence):
-            final_clause = sentence[last_char_pos:].strip()
-            if final_clause:
-                clauses.append(final_clause)
+            final = sentence[last_char_pos:].strip()
+            if final:
+                clauses.append(final)
 
         return clauses if clauses else [sentence.strip()]
 

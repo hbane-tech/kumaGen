@@ -124,6 +124,10 @@ def render_identificatory(tree, S, neg, G):
                        for t in tree.get('_tokens', []))
     _end = 'wà ?' if _is_interrog else ''
     if _appos_bm:
+        # PRON subject + PROPN appositive → focus équatif : S de PROPN yé
+        if S and S != _appos_bm:
+            _tam = 'tɛ' if neg else 'yé'
+            return j(S, 'de', _appos_bm, _tam, _end)
         return j(_appos_bm, 'tɛ' if neg else 'dòn', _end)
     return j(S, 'tɛ') if neg else j(S, 'dòn', _end)
 

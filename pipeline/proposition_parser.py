@@ -812,10 +812,16 @@ def load_connector_bm(db) -> dict:
 
 
 def _split_at_commas(tokens: list) -> list:
-    """Split token list into clauses at comma boundaries."""
+    """Split token list into clauses at comma boundaries.
+    Skips commas that introduce relative clauses (qui/que/dont)."""
     clauses, current = [], []
-    for t in tokens:
+    for i, t in enumerate(tokens):
         if t.get('role') == 'punct' and t.get('surface') == ',':
+            _next = next((x for x in tokens[i + 1:]
+                          if x.get('role') != 'punct'
+                          and x.get('surface') not in (',', '.')), None)
+            if _next and _next.get('role') == 'relative':
+                continue  # keep relative clause tokens in same segment
             if current:
                 clauses.append(current)
                 current = []

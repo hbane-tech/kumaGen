@@ -56,9 +56,13 @@ def load_csv(path):
             r['chrf'] = float(r.get('chrf') or 0)
             r['p1']   = float(r['p1'])  if r.get('p1')  not in (None, '', 'None') else None
             r['kgh']  = float(r['kgh']) if r.get('kgh') not in (None, '', 'None') else None
-            for b in ('clause_type_ok', 'tam_ok', 'neg_ok', 'slot_S', 'slot_V', 'slot_O'):
+            for b in ('clause_type_ok', 'tam_ok', 'neg_ok', 'slot_S', 'slot_V', 'slot_O',
+                      'ud_single_root', 'ud_root_pos_ok', 'ud_has_subject',
+                      'ud_connected', 'ud_no_dep_dep', 'word_order_ok'):
                 if b in r:
                     r[b] = _str2bool(r.get(b, ''))
+            r['ud_score'] = (float(r['ud_score'])
+                             if r.get('ud_score') not in (None, '', 'None') else None)
             rows.append(r)
     return rows
 
@@ -298,6 +302,137 @@ def fig_parser(json_path, outdir):
         _save(fig, outdir, 'fig8_pos_confusion')
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# FIGURE 9 — UD Parse Health (5 checks + score moyen)
+# ─────────────────────────────────────────────────────────────────────────────
+def fig_ud_health(rows, outdir):
+    checks = [
+        ('ud_single_root',   'ROOT unique'),
+        ('ud_root_pos_ok',   'ROOT pos valide'),
+        ('ud_has_subject',   'Sujet présent'),
+        ('ud_connected',     'Arbre connexe'),
+        ('ud_no_dep_dep',    'Pas de dep=dep'),
+    ]
+    valid = [r for r in rows if r.get('ud_single_root') is not None]
+    if not valid:
+        print("  ⚠️  Pas de données UD — fig9 ignorée")
+        return
+
+    labels = [lbl for _, lbl in checks]
+    values = [_avg_pct([r[k] for r in valid]) for k, _ in checks]
+    ud_avg = sum(r['ud_score'] for r in valid if r.get('ud_score') is not None)
+    ud_avg /= max(1, sum(1 for r in valid if r.get('ud_score') is not None))
+    ud_pct  = ud_avg / 5 * 100
+
+    colors = [C_GREEN if v >= 90 else C_ORANGE if v >= 70 else C_RED for v in values]
+
+    fig, ax = plt.subplots(figsize=(8, 4.5))
+    bars = ax.barh(labels, values, color=colors, edgecolor='black', linewidth=0.5)
+    for b, v in zip(bars, values):
+        ax.text(v + 0.5, b.get_y() + b.get_height()/2,
+                f'{v:.1f}%', va='center', fontsize=10, fontweight='bold')
+    ax.axvline(ud_pct, color=C_PURPLE, linestyle='--', linewidth=1.5,
+               label=f'Score UD moyen {ud_pct:.1f}%')
+    ax.set_xlim(0, 108)
+    ax.set_xlabel('Phrases conformes (%)')
+    ax.set_title(f'Santé du parse UD (spaCy FR, n={len(valid)})')
+    ax.legend(frameon=False, loc='lower right')
+    ax.invert_yaxis()
+    _save(fig, outdir, 'fig9_ud_health')
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# FIGURE 10 — Radar chart : vue d'ensemble de toutes les métriques
+# ─────────────────────────────────────────────────────────────────────────────
+def fig_radar(rows, outdir, parser_json=None):
+    n = len(rows)
+
+    def _p(lst):
+        return sum(lst) / len(lst) * 100 if lst else 0.0
+
+    metrics = {
+        'EXM':    _avg_pct([r['exm']  for r in rows]),
+        'chrF':   _avg_pct([r['chrf'] for r in rows]),
+        'P@1':    _p([r['p1']  * 100 for r in rows if r['p1']  is not None]),
+        'KGH':    _p([r['kgh'] * 100 for r in rows if r['kgh'] is not None]),
+        'CTA':    _p([r['clause_type_ok'] for r in rows if 'clause_type_ok' in r]),
+        'TAM':    _p([r['tam_ok'] for r in rows if r.get('ref_tam')]),
+        'NEG':    _p([r['neg_ok'] for r in rows if 'neg_ok' in r]),
+        'WO':     _p([r['word_order_ok'] for r in rows
+                      if r.get('word_order_ok') is not None]),
+        'UD':     sum(r['ud_score'] for r in rows if r.get('ud_score') is not None)
+                  / max(1, sum(1 for r in rows if r.get('ud_score') is not None))
+                  / 5 * 100,
+    }
+
+    # Parser metrics from JSON if available
+    if parser_json and os.path.exists(parser_json):
+        import json
+        with open(parser_json, encoding='utf-8') as f:
+            pj = json.load(f)
+        metrics['LAS']  = pj.get('LAS', 0)
+        metrics['UPOS'] = pj.get('UPOS', 0)
+
+    labels = list(metrics.keys())
+    values = list(metrics.values())
+    N = len(labels)
+    angles = [i * 2 * np.pi / N for i in range(N)] + [0]
+    values_plot = values + [values[0]]
+
+    fig, ax = plt.subplots(figsize=(6.5, 6.5), subplot_kw=dict(polar=True))
+    ax.plot(angles, values_plot, color=C_BLUE, linewidth=2)
+    ax.fill(angles, values_plot, color=C_BLUE, alpha=0.2)
+    ax.set_xticks(angles[:-1])
+    ax.set_xticklabels(labels, fontsize=11)
+    ax.set_ylim(0, 100)
+    ax.set_yticks([20, 40, 60, 80, 100])
+    ax.set_yticklabels(['20', '40', '60', '80', '100'], fontsize=8, color=C_GREY)
+    ax.set_title(f'Vue d\'ensemble Kuma-MT (n={n})', pad=20, fontsize=12)
+    # Annoter chaque point
+    for angle, val, lbl in zip(angles[:-1], values, labels):
+        ax.text(angle, val + 7, f'{val:.0f}', ha='center', va='center',
+                fontsize=9, fontweight='bold', color=C_BLUE)
+    _save(fig, outdir, 'fig10_radar')
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# FIGURE 11 — Word order OK par clause_type (stacked bar)
+# ─────────────────────────────────────────────────────────────────────────────
+def fig_word_order(rows, outdir, mapping):
+    valid = [r for r in rows if r.get('word_order_ok') is not None]
+    if not valid:
+        print("  ⚠️  Pas de données word_order — fig11 ignorée")
+        return
+
+    groups = defaultdict(lambda: {'ok': 0, 'fail': 0})
+    for r in valid:
+        g = _clause_group(r['category'], mapping)
+        if r['word_order_ok']:
+            groups[g]['ok']   += 1
+        else:
+            groups[g]['fail'] += 1
+
+    items = sorted(groups.items(), key=lambda x: -(x[1]['ok'] + x[1]['fail']))
+    names  = [g for g, _ in items]
+    ok_pct = [v['ok'] / (v['ok'] + v['fail']) * 100 for _, v in items]
+    fa_pct = [100 - p for p in ok_pct]
+
+    y = np.arange(len(names))
+    fig, ax = plt.subplots(figsize=(8, max(4, len(names) * 0.40)))
+    ax.barh(y, ok_pct, color=C_GREEN,  edgecolor='black', linewidth=0.4,
+            label='S-TAM-V ✓', alpha=0.9)
+    ax.barh(y, fa_pct, left=ok_pct, color=C_RED, edgecolor='black', linewidth=0.4,
+            label='S-TAM-V ✗', alpha=0.7)
+    ax.set_yticks(y)
+    ax.set_yticklabels(names, fontsize=9)
+    ax.invert_yaxis()
+    ax.set_xlim(0, 100)
+    ax.set_xlabel('% phrases')
+    ax.set_title(f'Conformité ordre des mots S-TAM-V (n={len(valid)})')
+    ax.legend(loc='lower right', frameon=False)
+    _save(fig, outdir, 'fig11_word_order')
+
+
 # ── Helpers ────────────────────────────────────────────────────────────────────
 def _avg_pct(lst):
     return sum(lst) / len(lst) * 100 if lst else 0.0
@@ -338,32 +473,40 @@ def main():
     csv_candidates = sorted(glob.glob('eval_*.csv'))
     csv_path = args.csv or (csv_candidates[-1] if csv_candidates else None)
 
+    # JSON parsing (optionnel) : parser_eval_*.json
+    parser_candidates = sorted(glob.glob('parser_eval_*.json'))
+    parser_json = parser_candidates[-1] if parser_candidates else None
+    if parser_json:
+        print(f"JSON parsing : {parser_json}")
+    else:
+        print("ℹ️  Aucun parser_eval_*.json — figures parsing ignorées "
+              "(lance : python -m eval.parser_eval)")
+
     if csv_path:
         print(f"CSV traduction : {csv_path}")
         rows = load_csv(csv_path)
-        print(f"Chargé : {len(rows)} phrases\nGénération des figures traduction dans {args.outdir}/ …\n")
+        print(f"Chargé : {len(rows)} phrases\nGénération des figures dans {args.outdir}/ …\n")
         try:
             from evaluate import CATEGORY_TO_CLAUSE as mapping
         except Exception:
             mapping = {}
+        # Figures traduction
         fig_global_metrics(rows, args.outdir)
         fig_by_clause_type(rows, args.outdir, mapping)
         fig_chrf_distribution(rows, args.outdir)
         fig_clause_confusion(rows, args.outdir, mapping)
         fig_chrf_vs_p1(rows, args.outdir)
         fig_tam_matrix(rows, args.outdir)
+        # Nouvelles figures
+        fig_ud_health(rows, args.outdir)
+        fig_radar(rows, args.outdir, parser_json=parser_json)
+        fig_word_order(rows, args.outdir, mapping)
     else:
         print("ℹ️  Aucun eval_*.csv — figures traduction ignorées.")
 
-    # JSON parsing (optionnel) : parser_eval_*.json
-    parser_candidates = sorted(glob.glob('parser_eval_*.json'))
-    if parser_candidates:
-        pj = parser_candidates[-1]
-        print(f"\nJSON parsing : {pj}\nGénération des figures parsing …")
-        fig_parser(pj, args.outdir)
-    else:
-        print("ℹ️  Aucun parser_eval_*.json — figures parsing ignorées "
-              "(lance : python -m eval.parser_eval)")
+    if parser_json:
+        print(f"\nGénération des figures parsing …")
+        fig_parser(parser_json, args.outdir)
 
     print(f"\n✅ Figures dans {args.outdir}/  (PNG 300dpi + PDF vectoriel)")
 

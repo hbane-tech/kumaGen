@@ -7,7 +7,8 @@ from rules.core import j
 
 def run(T, tree, m, processed_indices, G_kg, root_tok):
     _purp_case = next((x for x in T
-                       if x.get('dep') == 'case' and x.get('role') == 'purposive'
+                       if x.get('dep') == 'case'
+                       and x.get('role') in ('purposive', 'benefactive')
                        and root_tok and x.get('head_index') == root_tok['orig_index']), None)
     _has_cop = any(x.get('dep') == 'cop' for x in T)
 
@@ -19,7 +20,9 @@ def run(T, tree, m, processed_indices, G_kg, root_tok):
 
     if root_tok.get('pos') == 'PRON':
         m['O'] = root_tok.get('bm') or f"[{root_tok.get('lemma')}]"
+        tree['ownership_o_is_pron'] = True
     else:
+        tree['ownership_o_is_pron'] = False
         _poss_det = next((x for x in T
                           if x.get('dep') == 'det'
                           and x.get('role') in ('pronoun', 'possessive')

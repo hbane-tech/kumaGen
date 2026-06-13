@@ -590,8 +590,14 @@ def run(T, tree, m, processed_indices, G_kg, NX_G,
     # groupe verbal, sans équivalent bambara direct.
     # Ajouté à processed_indices pour empêcher step5 de créer un oblique parasite.
     _dative_mk = G_kg.get('dative_marker', 'ma') or 'ma'
+    # Verbes de communication (dire, répondre…) → datif 'yé' plutôt que 'ma'
+    if root_tok and root_tok.get('semantic_class') in ('saying', 'communication'):
+        _dative_mk = 'yé'
     for _iobj_tok in T:
-        if (_iobj_tok.get('dep') == 'iobj'
+        # Also catch mislabeled clitics: dep='dep' + role='object' (e.g. "Dis lui")
+        _is_dative_dep = (_iobj_tok.get('dep') == 'dep'
+                          and _iobj_tok.get('role') == 'object')
+        if ((_iobj_tok.get('dep') == 'iobj' or _is_dative_dep)
                 and _iobj_tok.get('pos') == 'PRON'
                 and _iobj_tok['orig_index'] not in processed_indices):
             _iobj_bm = str(_iobj_tok.get('bm', ''))
@@ -613,6 +619,18 @@ def run(T, tree, m, processed_indices, G_kg, NX_G,
                             and _ct.get('head_index') == _iobj_tok['orig_index']
                             and _ct['orig_index'] not in processed_indices):
                         processed_indices.add(_ct['orig_index'])
+
+    # Clitique accusatif mislabeled (dep='dep' + role='object_pronoun', e.g. "prends le")
+    for _acc_tok in T:
+        if (_acc_tok.get('dep') == 'dep'
+                and _acc_tok.get('pos') == 'PRON'
+                and _acc_tok.get('role') == 'object_pronoun'
+                and _acc_tok.get('bm')
+                and not str(_acc_tok.get('bm', '')).startswith('[')
+                and _acc_tok['orig_index'] not in processed_indices
+                and not m.get('O')):
+            m['O'] = _acc_tok.get('bm')
+            processed_indices.add(_acc_tok['orig_index'])
 
     # ── INFINITIF ─────────────────────────────────────────────────────────────
     _is_infinitive = (root_tok and root_tok.get('pos') == 'VERB'
@@ -817,7 +835,7 @@ def run(T, tree, m, processed_indices, G_kg, NX_G,
             if _amod_on_root:
                 _amod_bm = _amod_on_root.get('bm', '')
                 if _amod_on_root.get('pos') == 'ADJ':
-                    _amod_bm = adj_man(_amod_bm)
+                    _amod_bm = adj_man(_amod_bm, is_classifying=_amod_on_root.get('is_classifying_adj', False))
                 _root_bm = j(_root_bm, _amod_bm)
                 processed_indices.add(_amod_on_root['orig_index'])
         m['O'] = _root_bm
