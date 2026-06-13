@@ -16,18 +16,20 @@ def render_conditional(tree, m, S, O, V, V_ACT, TAM, obl_strings, G):
     """
     ní  : condition simple  → ní S TAM O V [obliques]
     mána: éventualité       → S mána O V   [obliques]  (mána remplace TAM)
+    Si la clause conditionnelle est une question → se termine par 'dun ?' (pas 'wà ?').
     """
     _marker = tree.get('conditional_marker', 'ní')
+    _end = 'dun ?' if tree.get('_has_question_mark') else ''
     if _marker == 'mána':
-        # S mána [O] V [V_ACT] [obliques]
+        # S mána [O] V [V_ACT] [obliques] [dun ?]
         if V_ACT:
-            return j(S, 'mána', V, 'ka', V_ACT, *obl_strings)
-        return j(S, 'mána', O, V, *obl_strings)
+            return j(S, 'mána', V, 'ka', V_ACT, *obl_strings, _end)
+        return j(S, 'mána', O, V, *obl_strings, _end)
     else:
-        # ní S TAM [O] V [V_ACT] [obliques]
+        # ní S TAM [O] V [V_ACT] [obliques] [dun ?]
         if V_ACT:
-            return j('ní', S, TAM, V, 'ka', V_ACT, *obl_strings)
-        return j('ní', S, TAM, O, V, *obl_strings)
+            return j('ní', S, TAM, V, 'ka', V_ACT, *obl_strings, _end)
+        return j('ní', S, TAM, O, V, *obl_strings, _end)
 
 
 def render_verb_serial(tree, m, S, O, V, V_ACT, TAM, obl_strings, G):
@@ -74,8 +76,14 @@ def render_verb_serial(tree, m, S, O, V, V_ACT, TAM, obl_strings, G):
     # → S V1 [O] V2, SANS 'ka'. V1 garde sa forme autonome : au passé positif,
     # forme résultative (il est parti chercher X → a fáɲira X láɲini), sinon
     # TAM + V1 (mais toujours sans 'ka'). ≠ autres sérielles (qui gardent 'ka').
+    _MOTION_LEMMAS_VS = {'aller', 'venir', 'partir', 'revenir', 'arriver',
+                         'passer', 'rentrer', 'sortir', 'monter', 'descendre', 'entrer'}
     _root_v1 = next((t for t in _tokens_ref if t.get('is_root')), None)
-    if _root_v1 and _root_v1.get('semantic_class') == 'motion':
+    _root_v1_is_motion = bool(_root_v1) and (
+        _root_v1.get('semantic_class') == 'motion'
+        or (_root_v1.get('lemma', '') or '').lower() in _MOTION_LEMMAS_VS
+    )
+    if _root_v1_is_motion:
         _v1 = V
         _v1_past = (tree.get('tense') == 'past' or _root_v1.get('tense') == 'past')
         if (_v1_past and not tree.get('neg')
@@ -165,7 +173,9 @@ def render_simple(tree, m, S, O, V, V_ACT, V_SUF, ADV, TAM, ct,
                        and _root_sc not in INTRANS_SC
                        and _root_sc != 'other'
                        and _root_it in ('ACTION', 'nominalized', 'support'))
-    _is_intrans_com = (V and not _v_already_la and not O and _has_com_obl and ct == 'simple')
+    _is_intrans_com = (V and not _v_already_la and not O and _has_com_obl and ct == 'simple'
+                       and _root_it != 'ABSOLU'
+                       and not _is_support_nom)
     # Verbe intransitif ACTION (∈ INTRANS_SC, ex: travailler=having) :
     #   présent    → V la   (n bɛ báara la)
     #   progressif → V kɛ   (n bɛ kà báara kɛ)
@@ -204,15 +214,13 @@ def render_simple(tree, m, S, O, V, V_ACT, V_SUF, ADV, TAM, ct,
 
     if _is_intrans_com:
         _v_nom = V + 'li'
-        _com_parts = []
-        for _ci, _obl in _com_obls:
-            _bm = j(_obl.get('COMPOUND', ''), _obl.get('HEAD', '')) if _obl.get('COMPOUND') else _obl.get('HEAD', '')
-            _com_parts.append(j('ni', _bm, 'yé'))
+        _com_strs = [obl_strings[_ci] for _ci, _obl in _com_obls
+                     if _ci < len(obl_strings)]
         _non_com = [obl_strings[_ci] for _ci, _obl in enumerate(_raw_obls)
                     if isinstance(_obl, dict)
                     and _obl.get('local_clause_type') != 'comitative'
                     and _ci < len(obl_strings)]
-        return j(S, TAM, _v_nom, _end_marker, *_com_parts, *_non_com)
+        return j(S, TAM, _v_nom, _end_marker, *_com_strs, *_non_com)
 
     if TAM in ('bɛ kà', 'tɛ kà'):
         # Progressif : 'kɛ' seulement pour les classes NOM-ACTION (having=báara…),
@@ -307,19 +315,38 @@ def render_misc(ct, S, O, V, V_ACT, V_SUF, ADV, TAM, neg, obl_strings, tree, m):
         # ADV (ex. participe '-tɔ' : en secouant → júnjuntɔ) après le verbe.
         return j('ka', O if O else S, *_pre_v, V, ADV, *_post_v)
     if ct == 'ownership':
+        # Possesseur PRON (n, a…) : pas de marqueur génital 'de' → "X yé n ta ye"
+        # Possesseur NOM (n mùsoma…) : génitif 'de' obligatoire → "X yé n mùsoma de ta ye"
+        if tree.get('ownership_o_is_pron'):
+            return j(S, 'yé', O, 'ta', 'ye')
         return j(S, 'yé', O, 'de', 'ta', 'ye')
     if ct == 'passive':
         return j(S, 'bɛ ka', V, *obl_strings)
     if ct in ('imperative', 'prohibitive'):
-        # Transitivité : un verbe transitif sans COD se nominalise → Vli kɛ
-        # (ne mange pas → kàna dúnli kɛ, pas kàna dún). Avec COD, verbe nu.
+        # Impératif: verbe transitif sans COD se nominalise (mange ! → dún, mais manger sans objet → [manger]li kɛ en purposive).
+        # Prohibitif: JAMAIS de nominalization (ne mange pas ! → kàna dún, ne parle pas ! → kàna kúma).
         _cmd_v = V
-        if not O:
-            _r = next((t for t in tree.get('_tokens', []) if t.get('is_root')), None)
-            if _r:
-                _cmd_v = _purp_verb_bm(_r, tree.get('_tokens', []), set())
+        _cmd_root = next((t for t in tree.get('_tokens', []) if t.get('is_root')), None)
+        if ct == 'imperative' and not O and not V_ACT and _cmd_root:
+            _cmd_v = _purp_verb_bm(_cmd_root, tree.get('_tokens', []), set())
+        _cmd_sc = _cmd_root.get('semantic_class', '') if _cmd_root else ''
+        _cmd_lemma = (_cmd_root.get('lemma', '') or '').lower() if _cmd_root else ''
+        _MOTION_LEMMAS = {'aller', 'venir', 'partir', 'revenir', 'arriver',
+                          'passer', 'rentrer', 'sortir', 'monter', 'descendre', 'entrer'}
+        _cmd_is_motion = (_cmd_sc == 'motion') or (_cmd_lemma in _MOTION_LEMMAS)
         if ct == 'imperative':
+            if V_ACT:
+                # Sérielle impérative : mouvement → wá O V2 (sans 'ka')
+                # Non-mouvement → V1 ka O V2
+                if _cmd_is_motion:
+                    return j(_cmd_v, O, V_ACT, *obl_strings)
+                return j(O, _cmd_v, 'ka', V_ACT, *obl_strings)
             return j(O, _cmd_v, *obl_strings)
+        # prohibitive
+        if V_ACT:
+            if _cmd_is_motion:
+                return j('kàna', _cmd_v, O, V_ACT, *obl_strings)
+            return j('kàna', O, _cmd_v, 'ka', V_ACT, *obl_strings)
         return j('kàna', O, _cmd_v, *obl_strings)
     if ct == 'participial_to':
         return j(S, V, ADV, *obl_strings)

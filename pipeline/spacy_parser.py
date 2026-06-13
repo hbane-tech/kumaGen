@@ -132,6 +132,9 @@ def _tense(tok):
     # Conditionnel → traité comme futur en bambara
     if 'cnd' in mood:
         return 'fut'
+    # Subjonctif → optatif bambara (S ka V)
+    if 'sub' in mood:
+        return 'sub'
 
     # 2. Tense
     tense = str(tok.morph.get('Tense')).lower()
@@ -158,6 +161,21 @@ def resolve_auxiliary_lemmas(tokens, db):
         if not surf_lower or surf_lower == 'none':
             continue
         lang_curr = t.get('lang', 'fr')
+
+        # Correction spaCy : impératifs 1ère conjugaison mal lemmatisés
+        # ex: "Donne" → lemma 'donne' au lieu de 'donner'. Détection :
+        # Mood=Imp + lemme finit en 'e' (non 're') → tenter lemme + 'r' via KG.
+        _lemma_curr = t.get('lemma', '')
+        if (t.get('pos') == 'VERB'
+                and 'Mood=Imp' in str(t.get('morph', ''))
+                and _lemma_curr.endswith('e')
+                and not _lemma_curr.endswith('re')):
+            _inf_cand = _lemma_curr + 'r'
+            _kg_check = db.query(
+                "MATCH (n:Sense) WHERE n.fr = $fr RETURN n.bm AS bm LIMIT 1",
+                {'fr': _inf_cand + '.'})
+            if _kg_check and _kg_check[0].get('bm'):
+                t['lemma'] = _inf_cand
 
         # Correction spaCy : 'suis' est parfois lemmatisé 'suivre' au lieu de 'être'
         # Règle : si ROOT ou cop sans obj direct → c'est 'être'
@@ -188,16 +206,46 @@ def resolve_auxiliary_lemmas(tokens, db):
         # (article 'le chat' = det vs pronom 'il le voit' = obj). On préfère le
         # nœud Pronoun{role:'object_pronoun'} (bm le/l'/la→a, les→u) au nœud
         # Article. Les déterminants (dep=det) tombent dans la requête générale.
-        if (t.get('pos') in ('PRON', 'DET')
-                and t.get('dep') in ('obj', 'iobj')):
+        # 'dep' catches "Dis lui"/"Donne lui"/"prends le" where spaCy mislabels
+        # the clitic as dep+ADV (lui) or dep+PUNCT (le) in short imperatives.
+        _dep_is_likely_dative = (
+            t.get('dep') == 'dep'
+            and t.get('pos') in ('PRON', 'ADV', 'PUNCT')
+            and any(x.get('dep') == 'ROOT' and x.get('pos') in ('VERB', 'AUX')
+                    and x.get('head_index') == t.get('head_index')
+                    for x in tokens))
+        if ((t.get('pos') in ('PRON', 'DET') and t.get('dep') in ('obj', 'iobj'))
+                or _dep_is_likely_dative):
             _objp = db.query(
-                "MATCH (n:Pronoun {role:'object_pronoun', lang:$lang}) "
+                "MATCH (n:Pronoun {lang:$lang}) "
                 "WHERE toLower(n.surface) = $surface "
-                "RETURN n.bm AS bm LIMIT 1",
+                "AND n.role IN ['object_pronoun', 'object'] "
+                "RETURN n.bm AS bm, n.role AS role LIMIT 1",
                 {'lang': lang_curr, 'surface': surf_lower})
             if _objp and _objp[0].get('bm'):
                 t['bm']   = _objp[0]['bm']
-                t['role'] = 'object_pronoun'
+                # Preserve KG role: 'object_pronoun'=accusatif (le/la/les),
+                # 'object'=datif (lui/leur/me/te). Permet à step3 de distinguer
+                # objet direct (→ m['O']) vs indirect (→ OBL_ALL avec ma/yé).
+                t['role'] = _objp[0].get('role') or 'object_pronoun'
+                t['pos']  = 'PRON'
+                continue
+            # Fallback surface → Bambara pour pronoms objet clitics FR
+            # KG roles: le/la/les='object_pronoun', lui/leur/me/te='object'
+            _OBJ_SURF_MAP = {
+                'me': ('n', 'object'), "m'": ('n', 'object'), 'm': ('n', 'object'), 'moi': ('n', 'object'),
+                'te': ('i', 'object'), "t'": ('i', 'object'), 'toi': ('i', 'object'),
+                'le': ('a', 'object_pronoun'), 'la': ('a', 'object_pronoun'),
+                "l'": ('a', 'object_pronoun'),
+                'lui': ('a', 'object'), 'leur': ('u', 'object'),
+                'les': ('u', 'object_pronoun'),
+                'eux': ('u', 'object_pronoun'), 'elles': ('u', 'object_pronoun'),
+                'nous': ('anw', 'object'), 'vous': ('aw', 'object'),
+            }
+            _fb = _OBJ_SURF_MAP.get(surf_lower)
+            if _fb:
+                t['bm']   = _fb[0]
+                t['role'] = _fb[1]
                 t['pos']  = 'PRON'
                 continue
 
@@ -213,11 +261,17 @@ def resolve_auxiliary_lemmas(tokens, db):
 
         if res and isinstance(res, list) and len(res) > 0:
             node_data = res[0]
+            # 'le/la/les' sont ambigus : article (dep=det) OU pronom clitique (dep=obj).
+            # La requête générique retourne souvent le nœud Pronoun en premier (LIMIT 1
+            # sans ORDER BY). Si le token est un article (dep='det'), rejeter le rôle
+            # et le bm du pronom objet pour ne pas contaminer le slot S/O en aval.
+            _is_det_ctx = (t.get('dep') == 'det'
+                           and node_data.get('role') == 'object_pronoun')
             if node_data.get('lemma'):
                 t['lemma'] = node_data['lemma']
-            if node_data.get('bm'):
+            if node_data.get('bm') and not _is_det_ctx:
                 t['bm'] = node_data['bm']
-            if node_data.get('role') and node_data['role'] != 'None':
+            if node_data.get('role') and node_data['role'] != 'None' and not _is_det_ctx:
                 t['role'] = node_data['role']
             if node_data.get('sc'):
                 t['semantic_class'] = node_data['sc']
@@ -351,6 +405,43 @@ def _fix_pos_errors(tokens, grammar):
             st['dep']  = 'punct'
             st['role'] = 'punct'
 
+    # ── PASSE 4 : arbre multi-ROOT cassé (fragment subordonné) ────────────────
+    # spaCy peut produire PLUSIEURS dep='ROOT' sur un fragment sans proposition
+    # principale (ex: "Quand il voit ce vieux" → voir/ce/vieux tous ROOT).
+    # On garde le 1er VERBE comme ROOT et on réattache les autres :
+    #   NOUN/ADJ/PROPN ROOT après le verbe → obj du verbe
+    #   DET/PRON ROOT (démonstratif) → det du nom/adj objet suivant le plus proche
+    # GARDE : ne se déclenche QUE s'il y a ≥2 ROOTs → les phrases normales
+    # (un seul ROOT) ne sont JAMAIS touchées (pas de régression).
+    _roots = [t for t in tokens if t.get('dep') == 'ROOT']
+    if len(_roots) >= 2:
+        _verb_root = next((t for t in _roots
+                           if t.get('pos') in ('VERB', 'AUX')), None)
+        if _verb_root:
+            _vr_idx = _verb_root['orig_index']
+            # 1) NOUN/ADJ/PROPN ROOT après le verbe → objet du verbe
+            for t in tokens:
+                if (t is not _verb_root and t.get('dep') == 'ROOT'
+                        and t.get('pos') in ('NOUN', 'ADJ', 'PROPN')
+                        and t['orig_index'] > _vr_idx):
+                    t['dep'] = 'obj'
+                    t['head_index'] = _vr_idx
+                    t['is_root'] = False
+            # 2) DET/PRON ROOT → det du nom/adj objet suivant le plus proche
+            for d in tokens:
+                if (d.get('dep') == 'ROOT'
+                        and d.get('pos') in ('DET', 'PRON')
+                        and d['orig_index'] > _vr_idx):
+                    _head_noun = next(
+                        (x for x in sorted(tokens, key=lambda z: z['orig_index'])
+                         if x['orig_index'] > d['orig_index']
+                         and x.get('dep') == 'obj'
+                         and x.get('pos') in ('NOUN', 'ADJ', 'PROPN')), None)
+                    if _head_noun:
+                        d['dep'] = 'det'
+                        d['head_index'] = _head_noun['orig_index']
+                        d['is_root'] = False
+
     return tokens
 
 def _detect_participial_to(tokens, grammar=None):
@@ -427,7 +518,7 @@ def _merge_multiword(tokens, funcs, lang):
             # par une apostrophe), ex: "jusqu'" + "au" → "jusqu'au".
             # Sans ce garde, "elle" + "s" (clitique réfléchi 's'' découpé) fusionnait
             # à tort en "elles" (pronom pluriel).
-            _first_elided = str(tokens[i]['surface']).rstrip().endswith(("'", '’'))
+            _first_elided = str(tokens[i]['surface']).rstrip().endswith(("'", '\u2019'))
             _keys = [
                 _raw_pair,
                 _raw_pair.replace("qu'", "que").replace("qu'", "que"),
@@ -679,24 +770,6 @@ class SpacyParser:
             surf_lower = t['surface'].lower()
             if surf_lower in llm_lem:
                 t['lemma'] = llm_lem[surf_lower]
-            # Garde-fou lemme verbal : spaCy renvoie parfois un lemme aberrant
-            # (chante -> cher). Si, pour un VERBE, le lemme retenu est PLUS
-            # COURT que la surface ET ne partage pas un prefixe d'au moins
-            # 3 lettres, il est invraisemblable -> on retombe sur la surface
-            # (meilleure pour le retrieval embedding que le mauvais lemme).
-            # Les infinitifs irreguliers (est->etre, vais->aller) sont aussi
-            # longs ou plus longs -> jamais touches.
-            if t.get('pos') == 'VERB':
-                _lem = (t.get('lemma') or '').lower()
-                if (_lem and _lem != surf_lower and _lem.isalpha()
-                        and len(_lem) < len(surf_lower)):
-                    _pref = 0
-                    for _a, _b in zip(_lem, surf_lower):
-                        if _a != _b:
-                            break
-                        _pref += 1
-                    if _pref < 3:
-                        t['lemma'] = t['surface']
 
         for t in tokens:
             surf_lower  = t.get('surface', '').lower()
@@ -713,14 +786,23 @@ class SpacyParser:
                                 and x.get('orig_index') == t.get('head_index')
                                 for x in tokens)):
                     t['role'] = 'relative'
-                else:
+                # Don't overwrite object pronoun/object roles already set by
+                # resolve_auxiliary_lemmas (clitic detection takes priority)
+                elif t.get('role') not in ('object_pronoun', 'object'):
                     t['role'] = 'pronoun'
                 t['is_plural'] = surf_lower not in G.get('sing', set())
                 # Appliquer bm et role précis depuis funcs si disponible
                 _func = G.get('funcs', {}).get((surf_lower, lang), {})
                 if _func.get('bm') and not t.get('bm'):
                     t['bm'] = _func['bm']
-                if _func.get('role') and _func['role'] != 'content':
+                # Don't overwrite object clitic roles with funcs article/pronoun.
+                # Guard: dep='det' → article défini (le riz), pas un pronom clitique
+                # objet → ne pas lui attribuer role='object_pronoun'.
+                _func_role_is_obj = _func.get('role') in ('object_pronoun', 'object')
+                _is_article_det = (t.get('dep') == 'det' and _func_role_is_obj)
+                if (_func.get('role') and _func['role'] != 'content'
+                        and t.get('role') not in ('object_pronoun', 'object')
+                        and not _is_article_det):
                     t['role'] = _func['role']
 
             elif surf_lower in G.get('demo', set()):
@@ -857,6 +939,29 @@ class SpacyParser:
         for t in tokens:
             if t.get('surface', '').lower() == 'avec':
                 print(f"DEBUG avec final: role={t.get('role')} bm={t.get('bm')} dep={t.get('dep')}")
+
+        # ── Optatif : "que" mark sur ROOT même si Mood=Ind (spaCy le rate) ──
+        # "que Moussa mange" → spaCy donne Mood=Ind pour 'mange' mais c'est
+        # un optatif. On force tense='sub' si le ROOT porte un mark SCONJ 'que'.
+        # EXCLUSION : passé composé (aux:tense présent) ou participe passé
+        # → subordination factuelle (que j'ai dit…), pas optatif.
+        for t in tokens:
+            if (t.get('is_root')
+                    and t.get('pos') == 'VERB'
+                    and t.get('tense') != 'sub'
+                    and 'VerbForm=Part' not in str(t.get('morph', ''))
+                    and not any(x.get('dep') == 'aux:tense'
+                                and x.get('head_index') == t['orig_index']
+                                for x in tokens)):
+                _que_mark = any(
+                    x.get('dep') == 'mark'
+                    and x.get('pos') == 'SCONJ'
+                    and str(x.get('surface', '')).lower().rstrip("'").rstrip('\u2019')
+                    in ('que', 'qu')
+                    and x.get('head_index') == t['orig_index']
+                    for x in tokens)
+                if _que_mark:
+                    t['tense'] = 'sub'
 
         # ── Fusion des mots grammaticaux multi-tokens ─────────────────────
         tokens = _merge_multiword(tokens, G.get('funcs', {}), lang)
