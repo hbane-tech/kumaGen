@@ -259,18 +259,19 @@ def run(T, tree, m, processed_indices, G_kg, NX_G,
             _poss_obj = next((x for x in T
                               if x.get('dep') == 'det'
                               and x.get('role') in ('pronoun', 'possessive')
-                              and x.get('head_index') == tete_tok['orig_index']
-                              and x.get('bm')), None)
+                              and x.get('head_index') == tete_tok['orig_index']), None)
             if _poss_obj:
-                _poss_bm = _poss_obj.get('bm', '')
-                _is_rel  = (tete_tok.get('is_relational', False)
-                            or tete_bm in G_kg.get('relational_bms', set()))
-                if _is_rel:
-                    tete_bm = j(_poss_bm, tete_bm)
-                else:
-                    _gen_mk = G_kg.get('genitive_marker', 'ka') or 'ka'
-                    tete_bm = j(_poss_bm, _gen_mk, tete_bm)
-                processed_indices.add(_poss_obj['orig_index'])
+                # Use BM if available; fallback to surface form (ton, mon, son...)
+                _poss_bm = _poss_obj.get('bm') or _poss_obj.get('surface', '')
+                if _poss_bm:
+                    _is_rel  = (tete_tok.get('is_relational', False)
+                                or tete_bm in G_kg.get('relational_bms', set()))
+                    if _is_rel:
+                        tete_bm = j(_poss_bm, tete_bm)
+                    else:
+                        _gen_mk = G_kg.get('genitive_marker', 'ka') or 'ka'
+                        tete_bm = j(_poss_bm, _gen_mk, tete_bm)
+                    processed_indices.add(_poss_obj['orig_index'])
 
             _global_postpos = _postpos_amods
 
