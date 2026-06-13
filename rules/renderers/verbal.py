@@ -323,11 +323,12 @@ def render_misc(ct, S, O, V, V_ACT, V_SUF, ADV, TAM, neg, obl_strings, tree, m):
     if ct == 'passive':
         return j(S, 'bɛ ka', V, *obl_strings)
     if ct in ('imperative', 'prohibitive'):
-        # Impératif: verbe transitif sans COD se nominalise (mange ! → dún, mais manger sans objet → [manger]li kɛ en purposive).
-        # Prohibitif: JAMAIS de nominalization (ne mange pas ! → kàna dún, ne parle pas ! → kàna kúma).
+        # Transitivité uniforme : verbe transitif sans COD → nominalisé (V+li kɛ)
+        # S'applique à l'impératif et au prohibitif (ne mange pas → kàna dúnli kɛ)
+        # Les verbes intransitifs ne se nominalisent pas (ne parle pas → kàna kúma)
         _cmd_v = V
         _cmd_root = next((t for t in tree.get('_tokens', []) if t.get('is_root')), None)
-        if ct == 'imperative' and not O and not V_ACT and _cmd_root:
+        if not O and not V_ACT and _cmd_root:
             _cmd_v = _purp_verb_bm(_cmd_root, tree.get('_tokens', []), set())
         _cmd_sc = _cmd_root.get('semantic_class', '') if _cmd_root else ''
         _cmd_lemma = (_cmd_root.get('lemma', '') or '').lower() if _cmd_root else ''
