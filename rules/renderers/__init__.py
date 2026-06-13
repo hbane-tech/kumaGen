@@ -294,6 +294,12 @@ def tree_to_bambara(tree, G=None, grammar=None):
         _attr = tree.get('restrictive_attr', '')
         result = j(S, TAM, 'yé', 'foyi', 'yé', 'ni', _attr, 'tɛ')
 
+    elif ct == 'quest_ce_que':
+        # Rule 7: Qu'est-ce que → mún + modal serial
+        # Example: "Qu'est-ce qu'il pourrait t'arriver ?" → mún a mán tè wà yàn ?
+        _quest_word = m.get('QUEST_WORD', 'mún')
+        result = j(_quest_word, S, TAM, V, V_ACT, *obl_strings)
+
     else:
         result = j(S, TAM, O, V, V_ACT, V_SUF, *obl_strings, ADV)
 

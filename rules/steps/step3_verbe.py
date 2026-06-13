@@ -240,6 +240,32 @@ def run(T, tree, m, processed_indices, G_kg, NX_G,
             if str(_qx.get('surface', '')).lower() in ('que', "qu'"):
                 processed_indices.add(_qx['orig_index'])
 
+    # ── QU'EST-CE QUE (Rule 7) ───────────────────────────────────────────────
+    # Detect: qu' (interrogative PRON root) + est-ce + que (mark)
+    # "Qu'est-ce qu'il pourrait t'arriver ?" → mún a mán tè wà yàn ?
+    _qu_root = (root_tok
+                and root_tok.get('pos') == 'PRON'
+                and root_tok.get('dep') == 'ROOT'
+                and 'Int' in str(root_tok.get('morph', ''))
+                and str(root_tok.get('surface', '')).lower().startswith('qu'))
+    _has_ce_que = any(
+        str(x.get('surface', '')).lower().rstrip('-').lstrip('-') == 'ce'
+        and x.get('dep') in ('nsubj', 'expl:subj')
+        for x in T) and _has_que_mark
+
+    if _qu_root and _has_ce_que:
+        # This is qu'est-ce que construction (Rule 7)
+        tree['clause_type'] = 'quest_ce_que'
+        m['QUEST_WORD'] = 'mún'  # What
+        processed_indices.add(root_tok['orig_index'])
+        # Mark ce and que as processed
+        for _cx in T:
+            if str(_cx.get('surface', '')).lower().rstrip('-').lstrip('-') == 'ce':
+                processed_indices.add(_cx['orig_index'])
+        for _qx in T:
+            if str(_qx.get('surface', '')).lower() in ('que', "qu'"):
+                processed_indices.add(_qx['orig_index'])
+
     # ── EST-CE QUE + PRON ROOT interrogatif ──────────────────────────────────
     # Qui est-ce qu'elle aime ? → content_question avec acl:relcl comme verbe
     _pron_root_interrog = (root_tok
