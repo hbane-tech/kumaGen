@@ -1000,10 +1000,22 @@ class TranslationEngine:
         return verb
 
     def _detect_semantic_class(self, lemma: str) -> str:
-        """Détecte la classe sémantique d'un verbe via LLM.
+        """Détecte la classe sémantique d'un verbe via LLM, avec cache KG persistant."""
+        # 1. Check KG cache (semantic_class stored on Sense nodes after first LLM call)
+        _fr_key = lemma.rstrip('.') + '.'
+        try:
+            _cached = self.db.query(
+                "MATCH (n:Sense) WHERE n.fr = $fr AND n.semantic_class IS NOT NULL "
+                "RETURN n.semantic_class AS cls LIMIT 1",
+                {'fr': _fr_key})
+            if _cached and _cached[0].get('cls'):
+                cls = _cached[0]['cls']
+                print(f"     🏷️  semantic_class('{lemma}') = {cls}  [KG cache]")
+                return cls
+        except Exception:
+            pass
 
-        Le LLM classe le verbe en autonome ou transitif basé sur sa sémantique.
-        """
+        # 2. LLM classification
         prompt = (
             f'Quelle est la nature sémantique du verbe français "{lemma}" ?\n\n'
             f'Catégories AUTONOMES (intransitifs, n\'acceptent pas de COD direct):\n'
@@ -1032,6 +1044,14 @@ class TranslationEngine:
             words   = _re.findall(r'[a-z]+', cls_raw)
             cls     = words[0] if words else 'other'
             print(f"     🏷️  semantic_class('{lemma}') = {cls}  [LLM]")
+            # 3. Persist to KG so future calls skip LLM
+            if cls and cls != 'other':
+                try:
+                    self.db.query(
+                        "MATCH (n:Sense) WHERE n.fr = $fr SET n.semantic_class = $cls",
+                        {'fr': _fr_key, 'cls': cls})
+                except Exception:
+                    pass
             return cls
         except Exception as e:
             print(f"     ⚠️  semantic class detection failed: {e}")
@@ -1636,6 +1656,16 @@ class TranslationEngine:
 
     def _translate_clause(self, clause: str, frame: str, lang: str = 'fr') -> str:
         self._current_sentence = clause
+
+        # ── FIXED PHRASES (Rule 5) ──────────────────────────────────────
+        _FIXED_PHRASES = {
+            'ainsi donc': 'ola sa',
+        }
+        clause_normalized = clause.lower().strip().rstrip('?!.,')
+        for fr_phrase, bm_phrase in _FIXED_PHRASES.items():
+            if clause_normalized == fr_phrase:
+                print(f"\n     🎯 FIXED PHRASE MATCH: '{clause}' → '{bm_phrase}'")
+                return bm_phrase
 
         clause_vector = self.model.encode(clause)
 

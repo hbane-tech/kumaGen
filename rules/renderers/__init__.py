@@ -288,6 +288,12 @@ def tree_to_bambara(tree, G=None, grammar=None):
     elif ct == 'relative_nominal':
         result = tree.get('final_string', '')
 
+    elif ct == 'restrictive':
+        # Rule 6: ne...que restrictive → S TAM yé foyi yé ni ATTR tɛ
+        # Example: "tu ne serais qu'un pleutre" → i bɛ yé foyi yé ni sègɛ tɛ
+        _attr = tree.get('restrictive_attr', '')
+        result = j(S, TAM, 'yé', 'foyi', 'yé', 'ni', _attr, 'tɛ')
+
     else:
         result = j(S, TAM, O, V, V_ACT, V_SUF, *obl_strings, ADV)
 

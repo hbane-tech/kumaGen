@@ -189,6 +189,28 @@ def run(T, tree, m, processed_indices, G_kg, NX_G,
                 and _is_genuine_neg(_nt, T)):
             processed_indices.add(_nt['orig_index'])
 
+    # ── RESTRICTIVE NE...QUE (Rule 6) ─────────────────────────────────────
+    # Detect: ne + que (restrictive "only") = foyi yé ni X tɛ
+    # Example: "tu ne serais qu'un pleutre" → i bɛ yé foyi yé ni sègɛ tɛ
+    _has_ne = tree.get('neg')
+    _que_restrictive = next((x for x in T
+                             if str(x.get('surface', '')).lower() in ('que', "qu'")
+                             and x.get('dep') == 'mark'
+                             and x.get('orig_index') not in processed_indices
+                             and x.get('role') != 'interrogative'), None)
+    if _has_ne and _que_restrictive:
+        # This is ne...que restrictive
+        _attr = next((x for x in T
+                      if x.get('orig_index') > _que_restrictive['orig_index']
+                      and x.get('pos') in ('NOUN', 'ADJ', 'PROPN')
+                      and x.get('orig_index') not in processed_indices), None)
+        if _attr:
+            tree['clause_type'] = 'restrictive'
+            tree['restrictive_attr'] = _attr.get('bm') or f"[{_attr.get('lemma')}]"
+            processed_indices.add(_que_restrictive['orig_index'])
+            processed_indices.add(_attr['orig_index'])
+            tree['neg'] = False  # Don't mark as negative; use restrictive pattern instead
+
     # ── PROHIBITIF ────────────────────────────────────────────────────────────
     _is_prohibitive = (root_tok and root_tok.get('pos') == 'VERB'
                        and not m.get('S') and tree.get('neg')
