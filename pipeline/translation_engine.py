@@ -1471,7 +1471,22 @@ class TranslationEngine:
 
         for tok in tokens:
             if tok.get('dep') in clause_dep_types:
-                clause_starts.append(tok)
+                # For relative clauses (acl:relcl), find the relative marker (qui, que, où, etc.)
+                # which is typically a child token (nsubj, obj) that appears BEFORE the verb
+                if tok.get('dep') == 'acl:relcl':
+                    # Find first child of this relcl verb (the relative pronoun)
+                    # A child has head_index pointing to this token's orig_index
+                    children = [t for t in tokens if t.get('head_index') == tok['orig_index']]
+                    if children:
+                        # Use the first child in sentence order (smallest orig_index)
+                        relative_marker = min(children, key=lambda t: t['orig_index'])
+                    else:
+                        # No children found, use verb itself as fallback
+                        relative_marker = tok
+                    clause_starts.append(relative_marker)
+                else:
+                    # For advcl, ccomp, xcomp, use the verb/marker itself
+                    clause_starts.append(tok)
 
         if not clause_starts:
             # No multi-clause deps found → single clause

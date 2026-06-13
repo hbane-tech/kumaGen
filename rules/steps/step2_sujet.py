@@ -228,7 +228,9 @@ def run(T, tree, m, processed_indices, G_kg, NX_G, root_tok,
             and 'VerbForm=Inf' not in str(root_tok.get('morph', ''))):
         subj_tok = next((x for x in T if x.get('pos') in ('PRON', 'NOUN')
                          and x.get('head_index') == root_tok['orig_index']
-                         and x != root_tok), None)
+                         and x != root_tok
+                         and x.get('dep') != 'dep'
+                         and x.get('role') not in ('object', 'object_pronoun')), None)
 
     # ── ROOT NOUN + has_acl + has_relcl ──────────────────────────────────────
     if root_noun is None:
