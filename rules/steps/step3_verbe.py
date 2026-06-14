@@ -413,8 +413,11 @@ def run(T, tree, m, processed_indices, G_kg, NX_G,
             and not any(x.get('dep') in ('cop', 'aux:pass') for x in T)):
         _compound_verb = next((x for x in T
                                if x.get('dep') in ('compound', 'ROOT', 'advcl', 'amod')
+                               and x.get('tense') != 'participial_to'
+                               and x.get('role') != 'participial_to'
                                and x.get('lemma', '').lower() not in ('', 'none')
-                               and x.get('orig_index') != root_tok.get('orig_index')), None)
+                               and x.get('orig_index') != root_tok.get('orig_index')
+                               and x['orig_index'] not in processed_indices), None)
         if _compound_verb:
             tree['clause_type'] = 'infinitive'
             tree['tam'] = ''
