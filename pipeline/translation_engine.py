@@ -1671,6 +1671,9 @@ class TranslationEngine:
             # Purposive/privative advcl (pour+inf, sans+inf) : garder dans la
             # clause principale pour que step5_obliques/advcl.py les gère comme slot
             if tok.get('dep') == 'advcl':
+                # Gérondif (en V-ant) : participial_to restera dans la clause principale
+                if tok.get('role') == 'participial_to':
+                    continue
                 _mark = next((t for t in tokens
                               if t.get('dep') == 'mark'
                               and t.get('head_index') == tok.get('orig_index')

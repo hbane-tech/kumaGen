@@ -444,6 +444,14 @@ def run(T, tree, m, processed_indices, G_kg, NX_G,
                     processed_indices.add(_amod['orig_index'])
                 m['O'] = _obj_bm
                 processed_indices.add(_obj_tok['orig_index'])
+        else:
+            # ADJ ROOT sans compound_verb → check participial_to (complètes en venant)
+            _has_part_to = any(x.get('role') == 'participial_to' for x in T)
+            if root_tok.get('bm') and _has_part_to:
+                m['V'] = root_tok.get('bm', '')
+                tree['clause_type'] = 'participial_to'
+                tree['tam'] = ''
+                processed_indices.add(root_tok['orig_index'])
 
     # ── INFINITIF : ka + O + V ───────────────────────────────────────────────
     # ex: manger du riz → ka iri dún
