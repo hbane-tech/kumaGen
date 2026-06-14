@@ -109,7 +109,11 @@ def render_interrogative(tree, m, S, O, V, TAM, obl_strings, G):
     if _is_action:
         return j(_question_marker, S, TAM, _v_display + 'li', 'kɛ', _vact_part,
                  *_clean_obls, _interrog_end)
-    return j(_question_marker, S, TAM, O, _v_display, _vact_part,
+    # Verbe modal (se=pouvoir…) + xcomp : S TAM V ka O V_ACT
+    if _v_act:
+        return j(_question_marker, S, TAM, _v_display, 'ka', O, _v_act,
+                 *_clean_obls, _interrog_end)
+    return j(_question_marker, S, TAM, O, _v_display,
              *_clean_obls, _interrog_end)
 
 

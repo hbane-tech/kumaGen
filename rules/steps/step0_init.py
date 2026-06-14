@@ -133,6 +133,18 @@ def run(T, G_kg):
                             and m.get('head_index') == t.get('orig_index')
                             for m in T)
             ), None)
+    # Fallback 3 : second ROOT verb infinitif (spaCy parsing error)
+    # "tu ne pourras pas partir" → 'pouvoir' ROOT+Fin, 'partir' ROOT+Inf
+    if not xcomp_verb_tok and root_tok:
+        xcomp_verb_tok = next((
+            t for t in T
+            if t.get('pos') == 'VERB'
+            and t.get('dep') == 'ROOT'
+            and t.get('orig_index') != root_tok['orig_index']
+            and 'VerbForm=Inf' in str(t.get('morph', ''))
+            and t.get('orig_index') not in _relcl_idx
+        ), None)
+
     xcomp_adj_tok  = next((t for t in T
                            if t.get('dep') == 'xcomp'
                            and t.get('pos') in ('ADJ', 'NOUN', 'PROPN')

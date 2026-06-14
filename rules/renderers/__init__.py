@@ -289,10 +289,10 @@ def tree_to_bambara(tree, G=None, grammar=None):
         result = tree.get('final_string', '')
 
     elif ct == 'restrictive':
-        # Rule 6: ne...que restrictive → S TAM yé foyi yé ni ATTR tɛ
-        # Example: "tu ne serais qu'un pleutre" → i bɛ yé foyi yé ni sègɛ tɛ
+        # Rule 6: ne...que restrictive → S TAM foyi yé ni ATTR tɛ
+        # Example: "tu ne serais qu'un pleutre" → i bɛ foyi yé ni sègɛ tɛ
         _attr = tree.get('restrictive_attr', '')
-        result = j(S, TAM, 'yé', 'foyi', 'yé', 'ni', _attr, 'tɛ')
+        result = j(S, TAM, 'foyi', 'yé', 'ni', _attr, 'tɛ')
 
     elif ct == 'quest_ce_que':
         # Rule 7: Qu'est-ce que → mún + modal serial

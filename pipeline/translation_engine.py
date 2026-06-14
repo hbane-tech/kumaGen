@@ -1580,6 +1580,53 @@ class TranslationEngine:
                     _split_start_tok = _after[0]
                     break
 
+        # d) Clauses coordonnées : "S V1, je/tu/il V2, ..."
+        #    Virgule entre deux clauses indépendantes à sujet pronominal distinct.
+        if not _split_start_tok:
+            for _ct in _comma_toks:
+                _ci    = _ct['orig_index']
+                _before = [t for t in _sorted_toks if t['orig_index'] < _ci]
+                _after  = [t for t in _sorted_toks
+                           if t['orig_index'] > _ci
+                           and t.get('pos') != 'PUNCT'
+                           and t.get('dep') != 'punct'
+                           and t.get('surface') not in (',', '.')]
+                if not _before or not _after:
+                    continue
+                _has_root_verb = any(
+                    t.get('pos') == 'VERB'
+                    and t.get('dep') not in ('acl', 'acl:relcl', 'amod')
+                    for t in _before
+                )
+                if (_has_root_verb
+                        and _after[0].get('pos') == 'PRON'
+                        and _after[0].get('role') != 'relative'
+                        and _after[0].get('dep') in ('nsubj', 'nsubj:pass')):
+                    _split_start_tok = _after[0]
+                    break
+
+        # e) Conjonction de coordination après clause principale
+        #    "S V O1, ainsi que O2" / "S V1, et S V2"
+        if not _split_start_tok:
+            for _ct in _comma_toks:
+                _ci    = _ct['orig_index']
+                _before = [t for t in _sorted_toks if t['orig_index'] < _ci]
+                _after  = [t for t in _sorted_toks
+                           if t['orig_index'] > _ci
+                           and t.get('pos') != 'PUNCT'
+                           and t.get('dep') != 'punct'
+                           and t.get('surface') not in (',', '.')]
+                if not _before or not _after:
+                    continue
+                _has_root_verb = any(
+                    t.get('pos') == 'VERB'
+                    and t.get('dep') not in ('acl', 'acl:relcl', 'amod')
+                    for t in _before
+                )
+                if _has_root_verb and _after[0].get('dep') == 'cc':
+                    _split_start_tok = _after[0]
+                    break
+
         # Si un comma split est trouvé : séparer texte + tokens, puis appliquer
         # le dep-split indépendamment dans chaque segment
         if _split_start_tok:
@@ -1587,7 +1634,13 @@ class TranslationEngine:
             seg1_toks = [t for t in tokens if t['orig_index'] < _si]
             seg2_toks = [t for t in tokens if t['orig_index'] >= _si]
             _surf     = _split_start_tok.get('surface', '')
-            _pos      = sentence.find(_surf)
+            _si_idx   = _split_start_tok.get('orig_index', -1)
+            _n_before = sum(1 for t in _sorted_toks
+                            if t.get('surface') == _surf
+                            and t['orig_index'] < _si_idx)
+            _pos = -1
+            for _ in range(_n_before + 1):
+                _pos = sentence.find(_surf, _pos + 1)
             if _pos > 0 and seg1_toks and seg2_toks:
                 seg1_text = sentence[:_pos].strip().rstrip(',').strip()
                 seg2_text = sentence[_pos:].strip()
