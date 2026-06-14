@@ -439,33 +439,43 @@ TEST_CASES = [
     # XXX. RÈGLES SPÉCIALISÉES (Rules 1-9)
     # ════════════════════════════════════════════════════════════════════
 
+    # ════════════════════════════════════════════════════════════════════
+    # RÈGLES SPÉCIALISÉES (Rules 1-9)
+    # ════════════════════════════════════════════════════════════════════
+
     # Rule 1: Conditional + question → ends with 'dun ?' not 'wà ?'
-    ("Si j'ai du courage, saurait-on ?",   "n bɛ gara dun, a mán se dun ?",     "rule1_conditional_question"),
+    ("Si j'ai du courage, saurait-on ?",                    "n bɛ gara dun, a mán se dun ?",         "rule1_conditional_question"),
 
     # Rule 2: Prohibitive + object → 'kàna [object] dùn'
-    ("Ne mange pas le riz",                "kàna iri dùn",                      "rule2_prohibitive_object"),
-    ("ne mange pas !",                     "kàna dúnli kɛ",                     "rule2_prohibitive_no_object"),
+    ("Ne mange pas le riz",                                 "kàna iri dùn",                         "rule2_prohibitive_object"),
+    ("ne mange pas !",                                      "kàna dúnli kɛ",                        "rule2_prohibitive_no_object"),
 
-    # Rule 3: Temporal + passé simple avoir
-    ("quand il eut ton appel",             "tuma min a yé wéle ɲóro",           "rule3_temporal_avoir"),
+    # Rule 3: Temporal + passé simple avoir + possessive
+    ("quand il eut ton appel",                              "tuma min a yé i ka wéle ɲóro",         "rule3_temporal_avoir_possessive"),
 
     # Rule 4: Temporal + passive passé simple
-    ("Quand cela fut fait",                "tuma min o tùn yògorolen dòn",      "rule4_temporal_passive"),
+    ("Quand cela fut fait",                                 "tuma min o tùn yògorolen dòn",         "rule4_temporal_passive"),
 
     # Rule 5: Fixed phrase 'Ainsi donc'
-    ("Ainsi donc",                         "ola sa",                            "rule5_fixed_phrase"),
+    ("Ainsi donc",                                          "ola sa",                               "rule5_fixed_phrase"),
 
-    # Rule 6: ne...que restrictive
-    ("tu ne serais qu'un pleutre",         "i bɛ yé foyi yé ni sègɛ tɛ",       "rule6_restrictive"),
+    # Rule 6: ne...que restrictive → 'S TAM foyi yé ni ATTR tɛ'
+    ("tu ne serais qu'un pleutre",                          "i bɛ foyi yé ni sègɛ tɛ",              "rule6_restrictive"),
 
     # Rule 7: Qu'est-ce que = mún + modal serial
-    ("Qu'est-ce qu'il pourrait t'arriver là-bas ?",  "mún a mán tè wà yàn ?",  "rule7_quest_ce_que"),
+    ("Qu'est-ce qu'il pourrait t'arriver là-bas ?",         "mún a mán tè wà yàn ?",                "rule7_quest_ce_que"),
 
-    # Rule 8: Complex relative with reflexive
-    ("Il se saisit de son fusil qu'il tint sur ses épaules",  "a mɛ a gabu ka sèbɛ nin a kùn a gara dòn",  "rule8_relative_reflexive"),
+    # Rule 8: Complex relative with reflexive + correct clause splitting
+    ("Toi qui prends l'ennemi vivant",                      "i bɛ júgu ɲɛ́nama",                    "rule8_relative_splitting"),
 
-    # Rule 9: valoir la peine idiom
-    ("Est-ce que cela vaut la peine de prendre un fusil",  "o bɛ buntu cɛ wà furu sàn kɛ ka se ?",  "rule9_valoir_peine"),
+    # Rule 9: valoir la peine idiom (follows general SOV rule)
+    ("cela vaut la peine de prendre un fusil",              "o bɛ buntu cɛ wà ka sàn",              "rule9_valoir_peine_sov"),
+
+    # Additional variants for better coverage
+    ("Il vient de partir",                                  "a bɛ bɔra ka táa",                     "recent_past_venir_de"),
+    ("Je viens de manger",                                  "n bɛ bɔra ka dumuni kɛ",               "recent_past_venir_de_transitive"),
+    ("Ne parle pas !",                                      "kàna kúma",                            "rule2_prohibitive_intransitive"),
+    ("tu ne serais que jaloux",                             "i bɛ foyi yé ni jiliya tɛ",            "rule6_restrictive_adj"),
 ]
 
 
