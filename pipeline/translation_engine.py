@@ -65,6 +65,8 @@ class TranslationEngine:
         self._current_sentence = ''
         self.model = _get_model()
         self._warmup_llm()
+        # Inject LLM classifiers into grammar so build_tree steps can call them
+        self.rule_engine.grammar['_classify_refl_verb'] = self._classify_refl_verb
 
     def _warmup_llm(self):
         """Premier appel léger pour charger le modèle en mémoire dès le démarrage.
@@ -967,8 +969,81 @@ class TranslationEngine:
         verdict = _result
         print(f"  🔍 [TRANSITIVITY] LLM verdict for '{lemma}' (class={semantic_class}) → {verdict}  [raw: {_raw!r}]")
         return verdict
-    
-    
+
+    def _classify_refl_verb(self, lemma: str) -> str:
+        """
+        Applique l'arbre de décision réflexif (Étapes 1 et 4) via LLM + cache KG.
+
+        Étape 1 — Existence autonome : le verbe peut-il exister sans 'se' ?
+          → NON  : PRONOMINAL (s'évanouir, se souvenir, se méfier, se taire…)
+
+        Étape 4 — Intentionnalité (sujet animé singulier) :
+          → OUI  : ACTIF     (se laver, se coiffer, se lever, se préparer…)
+          → NON  : ACCIDENTEL (se blesser, se couper, se brûler…)
+
+        Étapes 2 (animation sujet) et 3 (pluralité/réciprocité) sont détectées
+        structurellement dans step3 — pas de LLM pour elles.
+
+        Retourne : 'pronominal' | 'actif' | 'accidentel'
+        """
+        _fr_key = lemma.rstrip('.').lower() + '.'
+
+        # 1. Cache KG (propriété refl_category sur nœud Sense)
+        try:
+            _cached = self.db.query(
+                "MATCH (n:Sense) WHERE n.fr = $fr AND n.refl_category IS NOT NULL "
+                "RETURN n.refl_category AS cat LIMIT 1",
+                {'fr': _fr_key})
+            if _cached and _cached[0].get('cat'):
+                cat = _cached[0]['cat']
+                print(f"  🔄 [REFL_CAT] '{lemma}' → {cat}  [KG cache]")
+                return cat
+        except Exception:
+            pass
+
+        # 2. LLM — deux étapes en un seul prompt court
+        prompt = (
+            f'Le verbe français "{lemma}" est employé avec "se".\n\n'
+            f'Étape 1 — Peut-il exister SANS "se" ?\n'
+            f'  Si NON → répondre PRONOMINAL.\n'
+            f'  Ex PRONOMINAL : s\'évanouir, se souvenir, se méfier, se taire, '
+            f's\'abstenir, se repentir.\n\n'
+            f'Étape 2 — L\'action est-elle VOLONTAIRE ou ACCIDENTELLE ?\n'
+            f'  ACTIF     : sujet = agent + bénéficiaire, 100 % volontaire.\n'
+            f'    Ex : se laver, se coiffer, se lever, se coucher, se préparer.\n'
+            f'  ACCIDENTEL: le sujet subit un événement fortuit, sans intention.\n'
+            f'    Ex : se blesser, se couper, se brûler, se casser la jambe.\n\n'
+            f'Réponds UNIQUEMENT par : PRONOMINAL, ACTIF ou ACCIDENTEL'
+        )
+
+        _result = None
+        _raw = ''
+        for attempt in range(3):
+            try:
+                _raw = self._call_llm(prompt, max_tokens=5).strip().upper()
+                print(f"  🔬 [REFL_CAT raw] attempt {attempt+1}: {_raw!r}")
+                if 'PRONOMINAL' in _raw:
+                    _result = 'pronominal'; break
+                if 'ACCIDENTEL' in _raw:
+                    _result = 'accidentel'; break
+                if 'ACTIF' in _raw:
+                    _result = 'actif'; break
+            except Exception:
+                continue
+
+        cat = _result or 'actif'  # défaut si LLM indisponible
+        print(f"  🔄 [REFL_CAT] '{lemma}' → {cat}  [LLM, raw={_raw!r}]")
+
+        # 3. Persist au KG pour les prochains appels
+        try:
+            self.db.query(
+                "MATCH (n:Sense) WHERE n.fr = $fr SET n.refl_category = $cat",
+                {'fr': _fr_key, 'cat': cat})
+        except Exception:
+            pass
+
+        return cat
+
     def _normalize_verb_to_infinitive(self, verb: str) -> str:
         """Normalise un verbe conjugué à sa forme infinitive.
 
@@ -1582,6 +1657,7 @@ class TranslationEngine:
 
         # d) Clauses coordonnées : "S V1, je/tu/il V2, ..."
         #    Virgule entre deux clauses indépendantes à sujet pronominal distinct.
+        #    y compris "S V1, peut-il V2 ?" (inversion interrogative)
         if not _split_start_tok:
             for _ct in _comma_toks:
                 _ci    = _ct['orig_index']
@@ -1598,10 +1674,18 @@ class TranslationEngine:
                     and t.get('dep') not in ('acl', 'acl:relcl', 'amod')
                     for t in _before
                 )
-                if (_has_root_verb
-                        and _after[0].get('pos') == 'PRON'
-                        and _after[0].get('role') != 'relative'
-                        and _after[0].get('dep') in ('nsubj', 'nsubj:pass')):
+                # Match: pronoun subject (normal clause)
+                _is_pron_subj = (_after[0].get('pos') == 'PRON'
+                                 and _after[0].get('role') != 'relative'
+                                 and _after[0].get('dep') in ('nsubj', 'nsubj:pass'))
+                # Match: auxiliary/modal verb with inverted pronoun (interrogative)
+                # e.g., "peut-il manger"
+                _is_modal_inversion = (_after[0].get('pos') == 'VERB'
+                                      and _after[0].get('dep') in ('ROOT', 'aux')
+                                      and len(_after) > 1
+                                      and _after[1].get('pos') == 'PRON'
+                                      and _after[1].get('dep') in ('nsubj', 'nsubj:pass'))
+                if _has_root_verb and (_is_pron_subj or _is_modal_inversion):
                     _split_start_tok = _after[0]
                     break
 
@@ -1624,6 +1708,27 @@ class TranslationEngine:
                     for t in _before
                 )
                 if _has_root_verb and _after[0].get('dep') == 'cc':
+                    _split_start_tok = _after[0]
+                    break
+
+        # f) Clause adverbiale anteposée : "Si/Quand X, ROOT_clause"
+        #    advcl VERB avant la virgule, ROOT (ou premier token non-ponct) après
+        if not _split_start_tok:
+            for _ct in _comma_toks:
+                _ci    = _ct['orig_index']
+                _before = [t for t in _sorted_toks if t['orig_index'] < _ci]
+                _after  = [t for t in _sorted_toks
+                           if t['orig_index'] > _ci
+                           and t.get('pos') != 'PUNCT'
+                           and t.get('dep') != 'punct'
+                           and t.get('surface') not in (',', '.')]
+                if not _before or not _after:
+                    continue
+                _has_advcl_verb = any(
+                    t.get('dep') == 'advcl' and t.get('pos') in ('VERB', 'AUX')
+                    for t in _before)
+                _root_in_after = any(t.get('dep') == 'ROOT' for t in _after)
+                if _has_advcl_verb and _root_in_after:
                     _split_start_tok = _after[0]
                     break
 
@@ -1653,58 +1758,13 @@ class TranslationEngine:
         # Pas de comma split : dep-split direct
         return self._split_at_deps(sentence, tokens)
 
-    def _split_at_deps(self, sentence: str, tokens: list) -> list:
-        """Split a text segment at dep-based clause boundaries (advcl, ccomp, xcomp).
-        acl:relcl (relatives en qui/que/qu') sont gardées comme slots dans la clause principale.
-        advcl purposive (pour+inf) et privative (sans+inf) → slots gérés par advcl.py."""
+    def _split_at_deps(self, sentence: str, _tokens: list) -> list:
+        """Le rule engine gère ccomp/advcl inline (step3 ccomp block, step5 advcl.py).
+        Un split dep-based casse les frontières de clause (ex: ccomp sur le prédicat
+        nominal strande l'article dans la clause précédente). Phrase traitée en entier."""
         if not sentence.strip():
             return []
-
-        # xcomp = complément verbal du verbe principal (je veux MANGER) :
-        # géré inline par step0+step3 via xcomp_verb_tok → ne jamais splitter ici.
-        clause_dep_types = {'advcl', 'ccomp'}
-        clause_starts = []
-
-        for tok in tokens:
-            if tok.get('dep') not in clause_dep_types:
-                continue
-            # Purposive/privative advcl (pour+inf, sans+inf) : garder dans la
-            # clause principale pour que step5_obliques/advcl.py les gère comme slot
-            if tok.get('dep') == 'advcl':
-                # Gérondif (en V-ant) : participial_to restera dans la clause principale
-                if tok.get('role') == 'participial_to':
-                    continue
-                _mark = next((t for t in tokens
-                              if t.get('dep') == 'mark'
-                              and t.get('head_index') == tok.get('orig_index')
-                              and t.get('role') in ('purposive', 'privative')), None)
-                if _mark:
-                    continue
-            clause_starts.append(tok)
-
-        if not clause_starts:
-            return [sentence.strip()]
-
-        clause_starts.sort(key=lambda t: t['orig_index'])
-
-        clauses = []
-        last_char_pos = 0
-
-        for clause_tok in clause_starts:
-            marker_text = clause_tok.get('surface', '')
-            marker_pos  = sentence.find(marker_text, last_char_pos)
-            if marker_pos > last_char_pos:
-                prev = sentence[last_char_pos:marker_pos].strip().rstrip(',').strip()
-                if prev:
-                    clauses.append(prev)
-            last_char_pos = marker_pos
-
-        if last_char_pos < len(sentence):
-            final = sentence[last_char_pos:].strip()
-            if final:
-                clauses.append(final)
-
-        return clauses if clauses else [sentence.strip()]
+        return [sentence.strip()]
 
     # ------------------------------------------------------------------
     # SINGLE CLAUSE TRANSLATION
