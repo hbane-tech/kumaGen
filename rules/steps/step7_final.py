@@ -114,6 +114,22 @@ def run(T, tree, m, processed_indices, G_kg, NX_G, root_tok,
                 }
                 if _ccomp_obj:
                     processed_indices.add(_ccomp_obj['orig_index'])
+            elif (ccomp_tok.get('pos') == 'ADJ'
+                  and not ccomp_tok.get('is_statif')
+                  and not ccomp_tok.get('is_participe_passe')
+                  and not ccomp_tok.get('is_valeur')):
+                # ccomp à tête ADJ de type QUALITE (la route est LONGUE) :
+                # même structure que la copule autonome (S ka ADJ, cf
+                # step6_copule/identificatoire.py), pas l'équative à tête
+                # NOUN ci-dessous (S yé O yé) — sans cette distinction,
+                # "ils disent que la route est longue" sortait
+                # "...ko síraden yé búlubulu yé" au lieu de
+                # "...ko síraden ka búlubulu".
+                m['CCOMP'] = {
+                    'type': 'qualite',
+                    'S':    _subj_bm,
+                    'adj_bm': ccomp_head_bm,
+                }
             else:
                 # ccomp équatif à tête NOUN : inclure son génitif éventuel
                 # (les maîtres DU JEU → jeu [ka] mɛtiriw), sinon le complément
@@ -160,6 +176,15 @@ def run(T, tree, m, processed_indices, G_kg, NX_G, root_tok,
         _v_root = root_tok.get('bm', '')
         # Classes sémantiques vraiment autonomes (ne prennent pas de -li)
         _sc = root_tok.get('semantic_class', '')
+        # consumption ET preparation se scindent en solide (mange/cuisine →
+        # nominalisé, comme les autres transitifs sans COD) vs liquide
+        # (boire/préparer un liquide → nu, jamais de V+li/ni kɛ).
+        # Distinction structurelle via VerbNet (eat-39.1-1 membre 'eat' vs
+        # eat-39.1-2 membre 'drink'), pas de LLM.
+        _is_liquid = False
+        if _sc in ('consumption', 'preparation'):
+            from embeddings.verbnet_classifier import consumption_subtype
+            _is_liquid = (consumption_subtype(root_tok.get('lemma', '')) == 'liquid')
 
         # Verbe d'ACTIVITÉ intransitif (travailler=báara) : nom d'action.
         # On se base sur semantic_class=='action' (signal FIABLE) et NON sur
@@ -182,9 +207,15 @@ def run(T, tree, m, processed_indices, G_kg, NX_G, root_tok,
                 m['O'] = _v_root
                 m['V'] = 'kɛ'
                 tree['is_transitive'] = True
-        # 'other' = LLM a échoué à classifier → ne pas supposer nominalisable
+        # 'other' = classification échouée → ne pas supposer nominalisable
+        # consumption/preparation liquides exclus (boire, préparer un
+        # liquide) : sans COD, S TAM V nu (n bɛ jí), jamais V+li/ni kɛ.
+        # Le solide (manger, cuisiner) reste nominalisable comme les autres
+        # transitifs.
         elif (_intrans_type in ('nominalized', 'ACTION', 'support')
-                and _sc not in INTRANS_SC and _sc != 'other' and _v_root):
+                and _sc not in INTRANS_SC and _sc != 'other'
+                and not (_sc in ('consumption', 'preparation') and _is_liquid)
+                and _v_root):
             _action_noun = root_tok.get('action_noun')
             if _action_noun:
                 _nominalized = _action_noun
@@ -203,12 +234,14 @@ def run(T, tree, m, processed_indices, G_kg, NX_G, root_tok,
             m['V'] = 'kɛ'
             tree['is_transitive'] = True
         elif (not _is_pres and m.get('V') and not root_tok.get('is_statif')
+              and _sc not in ('having',)
               and (_intrans_type == 'ABSOLU'
                    or (_sc in INTRANS_SC and _intrans_type != 'ACTION'))
               and not tree.get('neg', False)):
             # Passé positif ABSOLU ou INTRANS_SC sans ACTION (partir, parler…)
             # → forme résultative V+na/-ra, pas de yé
-            # Les verbes ACTION dans INTRANS_SC (báara…) gardent TAM + V + kɛ
+            # 'having' exclu (báara/travailler) : garde TAM + kɛ (n yé báara kɛ)
+            # même quand LLM dit intransitive_type='ABSOLU' (nondéterminisme)
             tree['is_transitive'] = False
         # NB: le suffixage du verbe ordinaire sans objet (V la / V kɛ) est
         # désormais centralisé dans step6_copule pour éviter le double-suffixage.
@@ -227,9 +260,15 @@ def run(T, tree, m, processed_indices, G_kg, NX_G, root_tok,
         _intrans_type = root_tok.get('intransitive_type', '')
         _v_root       = root_tok.get('bm', '')
         _sc           = root_tok.get('semantic_class', '')
+        _is_liquid = False
+        if _sc in ('consumption', 'preparation'):
+            from embeddings.verbnet_classifier import consumption_subtype
+            _is_liquid = (consumption_subtype(root_tok.get('lemma', '')) == 'liquid')
 
         if (_intrans_type in ('nominalized', 'ACTION', 'support')
-                and _sc not in INTRANS_SC and _sc != 'other' and _v_root):
+                and _sc not in INTRANS_SC and _sc != 'other'
+                and not (_sc in ('consumption', 'preparation') and _is_liquid)
+                and _v_root):
             _action_noun = root_tok.get('action_noun')
             if _action_noun:
                 _nominalized = _action_noun

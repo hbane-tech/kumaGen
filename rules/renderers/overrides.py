@@ -72,7 +72,7 @@ def apply_overrides(tree, m, S, O, neg, _tokens_ref,
         _cop_fut = {'dep': 'cop', 'tense': 'fut',
                     'bm': tree.get('cop_bm', ''),
                     'lemma': tree.get('cop_lemma', 'être')}
-    if _cop_fut and _noun_conj and S:
+    if _cop_fut and _noun_conj and S and tree.get('clause_type') != 'restrictive':
         _cop_bm = _cop_fut.get('bm') or f"[{_cop_fut.get('lemma', 'être')}]"
         _obj_bm = O if O else _noun_conj.get('bm', '')
         _tam = 'tɛ na' if neg else 'bɛ na'

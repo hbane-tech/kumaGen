@@ -293,4 +293,5 @@ def render_noun_phrase_have(tree, S, O, neg, obl_strings, G):
         return j(O, _qty_interrog_bm, _exist_op, S, _poss_marker, '?')
     
     _polar_end = 'wà ?' if tree.get('_has_question_mark') else ''
-    return j(O, _exist_op, S, _poss_marker, *obl_strings, _polar_end)
+    _cond = tree.get('conditional_marker', '')
+    return j(_cond, O, _exist_op, S, _poss_marker, *obl_strings, _polar_end)

@@ -5,7 +5,7 @@ from rules.core import j
 
 def detect(T, root_tok, copula_tok, m, processed_indices, G_kg):
     _etre_as_root_cop = (
-        root_tok and _is_copula(root_tok, T)
+        root_tok and _is_copula(root_tok)
         and root_tok.get('pos') in ('VERB', 'AUX')
         and not copula_tok
         and not any(x.get('role') == 'interrogative' for x in T)

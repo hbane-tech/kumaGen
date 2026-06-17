@@ -169,6 +169,70 @@ class KGRetriever:
                  spacy_pos: str = None, top_k: int = 10,
                  lang: str = 'fr', context_tokens: list = None,
                  is_verbal_noun: bool = False):
+        # Handle hyphenated words (là-bas, week-end, etc.)
+        # Strategy: try full word first, then split if no matches
+        if '-' in token:
+            # Try full hyphenated word (preserve hyphen for KG lookup)
+            import unicodedata
+            token_lower = unicodedata.normalize('NFC', token.lower().strip())
+
+            allowed_pos = _allowed_kg_pos(None if is_verbal_noun else spacy_pos)
+            pos_filter = "AND s.pos IN $allowed_pos" if allowed_pos else ""
+
+            # Direct query for hyphenated word
+            hyphen_results = self.db.query(f"""
+            MATCH (w:Word)-[:HAS_SENSE]->(s:Sense)
+            WHERE toLower(s.fr) CONTAINS toLower($token)
+            {pos_filter}
+            RETURN s.bm AS bm, s.fr AS fr, s.en AS en,
+                   s.frame AS frame, s.pos AS pos
+            LIMIT 5
+            """, {
+                "token": token_lower,
+                "allowed_pos": allowed_pos,
+            })
+
+            if hyphen_results:
+                # Found full hyphenated word
+                candidates = []
+                for r in hyphen_results:
+                    score = _gloss_match_score(r['fr'], token_lower)
+                    if score > 0:
+                        candidates.append({
+                            'bm': r['bm'],
+                            'fr': r['fr'],
+                            'score': score,
+                            'pos': r['pos']
+                        })
+                if candidates:
+                    return candidates[:top_k]
+
+            # If no match for full word, split by hyphen and retrieve parts
+            parts = token.split('-')
+            combined_results = []
+            for part in parts:
+                if part.strip():
+                    part_results = self.retrieve(
+                        part.strip(), frame,
+                        spacy_pos=spacy_pos,
+                        top_k=3,
+                        lang=lang,
+                        context_tokens=context_tokens,
+                        is_verbal_noun=is_verbal_noun
+                    )
+                    if part_results:
+                        combined_results.append(part_results[0])  # Take best match for each part
+
+            if combined_results:
+                # Combine translations (space-separated)
+                combined_bm = ' '.join(r['bm'] for r in combined_results)
+                return [{
+                    'bm': combined_bm,
+                    'fr': '-'.join(parts),
+                    'score': 50,  # Fallback score for split words
+                    'pos': 'Combined'
+                }]
+
         norm = normalize_token(token)
         if not norm:
             return []

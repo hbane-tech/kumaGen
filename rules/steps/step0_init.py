@@ -79,7 +79,7 @@ def run(T, G_kg):
     # ── COPULE AVEC ADVCL : fallback pour "être + en train de + V" non capturé ──
     # Si root_tok est une copule (est/être) avec advcl/xcomp enfant VERB,
     # utiliser ce verbe comme root_tok (ex: "il est en train de se laver")
-    if root_tok and _is_copula(root_tok, T):
+    if root_tok and _is_copula(root_tok):
         _advcl_verb = next((t for t in T
                            if t.get('pos') == 'VERB'
                            and t.get('dep') in ('advcl', 'xcomp')
@@ -89,7 +89,7 @@ def run(T, G_kg):
     # Fallback : si root_tok est None, chercher copule avec enfant VERB acl/xcomp
     elif not root_tok:
         _copula_tok = next((t for t in T
-                           if _is_copula(t, T) and t.get('dep') in ('ROOT', 'cop')), None)
+                           if _is_copula(t) and t.get('dep') in ('ROOT', 'cop')), None)
         if _copula_tok:
             _advcl_verb = next((t for t in T
                                if t.get('pos') == 'VERB'
@@ -138,12 +138,29 @@ def run(T, G_kg):
     if not xcomp_verb_tok and root_tok:
         xcomp_verb_tok = next((
             t for t in T
-            if t.get('pos') == 'VERB'
-            and t.get('dep') == 'ROOT'
+            if t.get('dep') == 'ROOT'
             and t.get('orig_index') != root_tok['orig_index']
-            and 'VerbForm=Inf' in str(t.get('morph', ''))
+            and t.get('role') == 'content'
             and t.get('orig_index') not in _relcl_idx
         ), None)
+
+    # Fallback 4 : 'acl' + 'de' infinitive (spaCy uses 'acl' instead of 'xcomp')
+    # "cela vaut la peine incroyable de prendre un fusil" → 'prendre' (dep=acl)
+    # Treat as verb_serial like xcomp cases (V ka V structure)
+    if not xcomp_verb_tok and root_tok:
+        _has_de_mark = any(
+            t.get('dep') == 'mark'
+            and str(t.get('surface', '')).lower() == 'de'
+            for t in T)
+        if _has_de_mark:
+            xcomp_verb_tok = next((
+                t for t in T
+                if t.get('pos') == 'VERB'
+                and t.get('dep') == 'acl'
+                and t.get('head_index') == root_tok['orig_index']
+                and 'VerbForm=Inf' in str(t.get('morph', ''))
+                and t.get('orig_index') not in _relcl_idx
+            ), None)
 
     xcomp_adj_tok  = next((t for t in T
                            if t.get('dep') == 'xcomp'

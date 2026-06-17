@@ -96,6 +96,19 @@ def run(T, tree, m, processed_indices, G_kg, NX_G, root_tok,
         or next((x for x in T if x.get('dep') in ('nsubj', 'nsubj:pass')), None)
     )
 
+    # Correction ciblée : "Toi QUI prends..." → la recherche ci-dessus
+    # attrape 'qui' (nsubj de la relative 'prends') au lieu du vrai sujet
+    # 'Toi' (root_tok), parce que 'qui' a aussi dep='nsubj'. Ne corriger QUE
+    # ce cas précis (subj_tok est le nsubj d'un acl:relcl qui a pour tête
+    # root_tok lui-même) sans toucher à la recherche générale ci-dessus.
+    if (subj_tok and root_tok and subj_tok is not root_tok
+            and root_tok.get('pos') in ('PRON', 'NOUN')):
+        _subj_tok_head = next((x for x in T
+                               if x['orig_index'] == subj_tok.get('head_index')), None)
+        if (_subj_tok_head and _subj_tok_head.get('dep') == 'acl:relcl'
+                and _subj_tok_head.get('head_index') == root_tok['orig_index']):
+            subj_tok = root_tok
+
     _expl_subj_tok = next((x for x in T if x.get('dep') == 'expl:subj'), None)
     _expl_comp_tok = next((x for x in T if x.get('dep') == 'expl:comp'), None)
     _avoir_root    = (root_tok and _is_avoir(root_tok)
@@ -212,6 +225,13 @@ def run(T, tree, m, processed_indices, G_kg, NX_G, root_tok,
                              and x.get('head_index') == root_tok['orig_index'] for x in T)
         _root_has_amod = any(x.get('dep') in ('amod', 'conj')
                              and x.get('head_index') == root_tok['orig_index'] for x in T)
+        # Déterminant distributif/quantificateur sur la racine → syntagme nominal
+        # à rendre comme O (pas sujet) : 'chaque jour', 'tous les jours'
+        _root_has_distrib_det = any(
+            x.get('dep') == 'det'
+            and x.get('head_index') == root_tok['orig_index']
+            and x.get('role') in ('distributive_each', 'distributive_one', 'quantifier')
+            for x in T)
         # Ne pas utiliser root_tok comme sujet si expletif + cop + NOUN :
         # root_tok est l'attribut (O), pas le sujet (ex: c'est la vérité)
         _has_cop_here = any(x.get('dep') == 'cop' for x in T)
@@ -219,6 +239,7 @@ def run(T, tree, m, processed_indices, G_kg, NX_G, root_tok,
                          and root_tok.get('pos') == 'NOUN')
         if (not _is_expl_attr
                 and not _root_has_nmod
+                and not _root_has_distrib_det
                 and (not _root_has_amod
                      or root_tok.get('pos') not in ('NOUN', 'PROPN'))):
             subj_tok = root_tok
@@ -229,8 +250,15 @@ def run(T, tree, m, processed_indices, G_kg, NX_G, root_tok,
         subj_tok = next((x for x in T if x.get('pos') in ('PRON', 'NOUN')
                          and x.get('head_index') == root_tok['orig_index']
                          and x != root_tok
-                         and x.get('dep') != 'dep'
-                         and x.get('role') not in ('object', 'object_pronoun')), None)
+                         and x.get('dep') not in ('dep', 'obj', 'iobj')
+                         and not str(x.get('dep', '')).startswith('obl')
+                         and x.get('role') not in ('object', 'object_pronoun')
+                         # Skip nmod with locative case (prep + noun = prepositional phrase)
+                         and not (x.get('dep') == 'nmod'
+                                 and any(c.get('dep') == 'case'
+                                        and c.get('role') == 'locative'
+                                        and c.get('head_index') == x['orig_index']
+                                        for c in T))), None)
 
     # ── ROOT NOUN + has_acl + has_relcl ──────────────────────────────────────
     if root_noun is None:
@@ -552,6 +580,14 @@ def run(T, tree, m, processed_indices, G_kg, NX_G, root_tok,
                 if _poss_rel_obj:
                     _rel_obj_bm = j(_poss_rel_obj.get('bm'), _rel_obj_bm)
                     processed_indices.add(_poss_rel_obj['orig_index'])
+                # amod sur l'objet de la relative (ex: l'ennemi VIVANT) :
+                # bambara = nom + adjectif, jamais reflété sinon (perdu).
+                _rel_obj_amod = next((x for x in T if x.get('dep') == 'amod'
+                                      and x.get('head_index') == _rel_obj['orig_index']
+                                      and x.get('bm')), None)
+                if _rel_obj_amod:
+                    _rel_obj_bm = j(_rel_obj_bm, _rel_obj_amod.get('bm'))
+                    processed_indices.add(_rel_obj_amod['orig_index'])
                 if (_rel_obj.get('is_plural') and not _rel_obj_bm.endswith('w')
                         and _rel_obj.get('pos') not in ('PRON', 'PROPN')):
                     _rel_obj_bm += 'w'

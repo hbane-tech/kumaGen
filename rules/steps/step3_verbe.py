@@ -26,7 +26,7 @@ def run(T, tree, m, processed_indices, G_kg, NX_G,
     # ── ÉTAPE 2 : VERBE ROOT ─────────────────────────────────────────────────
     if root_tok and root_tok.get('pos') in ('VERB', 'AUX'):
         _root_is_copula = (
-            _is_copula(root_tok, T)
+            _is_copula(root_tok)
             or (_is_avoir(root_tok)
                 and root_tok.get('dep') in ('aux', 'aux:tense', 'aux:pass', 'cop'))
             or any(x.get('dep') == 'case'
@@ -153,7 +153,12 @@ def run(T, tree, m, processed_indices, G_kg, NX_G,
                 _xcomp_obj_bm = (j('n', _xcomp_obj_bm) if _poss_bm == 'n'
                                  else j(_poss_bm, _xcomp_obj_bm))
                 processed_indices.add(_xcomp_poss['orig_index'])
-            m['O'] = _xcomp_obj_bm
+            # Don't overwrite m['O'] (ROOT verb object). Store xcomp object separately.
+            # "valoir la peine de prendre un fusil" → O='peine', O_XCOMP='fusil'
+            if m.get('O'):
+                m['O_XCOMP'] = _xcomp_obj_bm
+            else:
+                m['O'] = _xcomp_obj_bm
             processed_indices.add(_xcomp_obj['orig_index'])
 
     # ── NÉGATION ─────────────────────────────────────────────────────────────
@@ -195,9 +200,8 @@ def run(T, tree, m, processed_indices, G_kg, NX_G,
     _has_ne = tree.get('neg')
     _que_restrictive = next((x for x in T
                              if str(x.get('surface', '')).lower() in ('que', "qu'")
-                             and x.get('dep') == 'mark'
-                             and x.get('orig_index') not in processed_indices
-                             and x.get('role') != 'interrogative'), None)
+                             and x.get('dep') in ('mark', 'advmod')
+                             and x.get('orig_index') not in processed_indices), None)
     if _has_ne and _que_restrictive:
         # This is ne...que restrictive
         _attr = next((x for x in T
@@ -207,9 +211,10 @@ def run(T, tree, m, processed_indices, G_kg, NX_G,
         if _attr:
             tree['clause_type'] = 'restrictive'
             tree['restrictive_attr'] = _attr.get('bm') or f"[{_attr.get('lemma')}]"
+            tree['restrictive_neg'] = bool(_has_ne)  # store neg for TAM in renderer
             processed_indices.add(_que_restrictive['orig_index'])
             processed_indices.add(_attr['orig_index'])
-            tree['neg'] = False  # Don't mark as negative; use restrictive pattern instead
+            tree['neg'] = False  # éviter double-négation dans le reste du pipeline
 
     # ── PROHIBITIF ────────────────────────────────────────────────────────────
     _is_prohibitive = (root_tok and root_tok.get('pos') == 'VERB'
@@ -242,22 +247,67 @@ def run(T, tree, m, processed_indices, G_kg, NX_G,
 
     # ── QU'EST-CE QUE (Rule 7) ───────────────────────────────────────────────
     # Detect: qu' (interrogative PRON root) + est-ce + que (mark)
-    # "Qu'est-ce qu'il pourrait t'arriver ?" → mún a mán tè wà yàn ?
+    # Pattern: Qu' (ROOT) + être (dep/aux) + -ce (dep) + que (mark) + subject
+    # "Qu'est-ce qu'il pourrait t'arriver ?" → mún S TAM se ka t' sé yèn ?
     _qu_root = (root_tok
                 and root_tok.get('pos') == 'PRON'
                 and root_tok.get('dep') == 'ROOT'
                 and 'Int' in str(root_tok.get('morph', ''))
                 and str(root_tok.get('surface', '')).lower().startswith('qu'))
-    _has_ce_que = any(
-        str(x.get('surface', '')).lower().rstrip('-').lstrip('-') == 'ce'
-        and x.get('dep') in ('nsubj', 'expl:subj')
-        for x in T) and _has_que_mark
+    # Check for 'ce' token and 'que' mark (flexible dep matching for spaCy variations)
+    _has_ce = any(
+        'ce' in str(x.get('surface', '')).lower().rstrip('-').lstrip('-')
+        for x in T)
+    _has_subj_or_expl = any(
+        x.get('dep') in ('expl:subj', 'nsubj')
+        and x.get('pos') == 'PRON'
+        for x in T)
+    _has_ce_que = _has_ce and _has_que_mark and _has_subj_or_expl
 
     if _qu_root and _has_ce_que:
         # This is qu'est-ce que construction (Rule 7)
         tree['clause_type'] = 'quest_ce_que'
         m['QUEST_WORD'] = 'mún'  # What
         processed_indices.add(root_tok['orig_index'])
+
+        # Assign correct TAM for quest_ce_que (default present: bɛ)
+        tree['tam'] = _resolve_tam(tree.get('tense', 'pres'), tree.get('neg', False), G_kg) or 'bɛ'
+
+        # Handle subject: use only REAL subjects (nsubj), skip expletive subjects (expl:subj)
+        # "Qu'est-ce qu'il pourrait arriver" → 'il' is expletive → no S
+        # "Qu'est-ce qu'il peut faire" → 'il' is real subject → S=a
+        _expl_subj = next((x for x in T if x.get('dep') == 'expl:subj' and x.get('role') == 'subject'), None)
+        if _expl_subj:
+            # Clear S if subject is expletive (no subject in output)
+            m['S'] = ''
+            processed_indices.add(_expl_subj['orig_index'])
+
+        # Extract modal verb (pouvoir → se) for quest_ce_que + modal structure
+        # "Qu'est-ce qu'il pourrait t'arriver" → mún S TAM se ka t' sé yèn
+        _modal_verb = next((x for x in T
+                           if x.get('pos') == 'VERB'
+                           and x.get('dep') in ('dep', 'aux')
+                           and x.get('head_index') == root_tok['orig_index']
+                           and x != root_tok
+                           and x.get('bm')), None)
+        if _modal_verb and not m.get('V'):
+            m['V'] = _modal_verb.get('bm')
+            processed_indices.add(_modal_verb['orig_index'])
+
+            # For quest_ce_que with modal, extract the subject of xcomp
+            # "t'arriver" → t' (the indirect object: what happens to whom)
+            # Store as XCOMP_SUBJ, not O (which is the interrogative word mún)
+            _xcomp_subj = next((x for x in T
+                               if x.get('pos') == 'PRON'
+                               and x.get('dep') in ('nsubj', 'iobj')
+                               and any(c.get('dep') == 'xcomp'
+                                      and c.get('head_index') == _modal_verb['orig_index']
+                                      for c in T)
+                               and x.get('bm')), None)
+            if _xcomp_subj:
+                m['XCOMP_SUBJ'] = _xcomp_subj.get('bm')
+                processed_indices.add(_xcomp_subj['orig_index'])
+
         # Mark ce and que as processed
         for _cx in T:
             if str(_cx.get('surface', '')).lower().rstrip('-').lstrip('-') == 'ce':
@@ -265,6 +315,31 @@ def run(T, tree, m, processed_indices, G_kg, NX_G,
         for _qx in T:
             if str(_qx.get('surface', '')).lower() in ('que', "qu'"):
                 processed_indices.add(_qx['orig_index'])
+
+    # ── DISTRIBUTIF : chacun d'entre [PRON] → [PRON] kélen kélenna bɛ ─────────
+    _distrib_one_root = (root_tok
+                         and root_tok.get('pos') == 'PRON'
+                         and root_tok.get('role') == 'distributive_one')
+    if _distrib_one_root:
+        _nmod_compl = next((x for x in T
+                            if x.get('dep') == 'nmod'
+                            and x.get('head_index') == root_tok['orig_index']
+                            and x.get('bm')), None)
+        _base_bm = (_nmod_compl.get('bm') if _nmod_compl
+                    else root_tok.get('bm') or '')
+        _distrib_bm = root_tok.get('bm') or 'kélen kélenna'
+        m['S'] = j(_base_bm, _distrib_bm)
+        tree['clause_type'] = 'simple'
+        processed_indices.add(root_tok['orig_index'])
+        if _nmod_compl:
+            processed_indices.add(_nmod_compl['orig_index'])
+        # Marquer les tokens de la chaîne d'entre (case/fixed) traités
+        for _cx in T:
+            if (_cx.get('dep') in ('case', 'fixed')
+                    and _nmod_compl
+                    and _cx.get('head_index') in (_nmod_compl['orig_index'],
+                                                   root_tok['orig_index'])):
+                processed_indices.add(_cx['orig_index'])
 
     # ── EST-CE QUE + PRON ROOT interrogatif ──────────────────────────────────
     # Qui est-ce qu'elle aime ? → content_question avec acl:relcl comme verbe
@@ -349,61 +424,91 @@ def run(T, tree, m, processed_indices, G_kg, NX_G,
                              if x.get('dep') in ('obj', 'nsubj', 'nsubj:pass', 'obl:arg')
                              and x.get('pos') in ('NOUN', 'PROPN')), None)
         if _obj_tok:
-            # _det_interrog = any(
-            #     x.get('dep') in ('det', 'amod')
-            #     and (x.get('role') == 'interrogative'
-            #          or 'Int' in str(x.get('morph', ''))
-            #          or 'PronType=Int' in str(x.get('morph', '')))
-            #     and x.get('head_index') == _obj_tok['orig_index']
-            #     for x in T)
-            _det_interrog = any(
-                x.get('dep') in ('det', 'amod', 'obj', 'advmod')
-                and (x.get('role') == 'interrogative'
-                     or 'Int' in str(x.get('morph', ''))
-                     or 'PronType=Int' in str(x.get('morph', '')))
-                for x in T)
-            
-            _has_body_obl = any(
-                x.get('dep') in ('obl', 'obl:arg')
-                and x.get('head_index') == root_tok['orig_index']
-                for x in T)
-            _obj_is_pain = (_obj_tok.get('role') == 'pain'
-                            or _obj_tok.get('semantic_class') == 'pain')
-            if _det_interrog:
-                # AGE seulement si l'objet est un nom d'âge/temps
-                _obj_sc = _obj_tok.get('semantic_class', '')
-                _obj_lemma = _obj_tok.get('lemma', '').lower()
-                _age_lemmas = {'âge', 'an', 'ans', 'année', 'années'}
-                if _obj_sc in ('time', 'duration', 'age') or _obj_lemma in _age_lemmas:
-                    tree['have_type'] = 'AGE'
-                else:
-                    tree['have_type'] = 'ABSTRACT'
-            elif _obj_is_pain or (_has_body_obl and not _det_interrog):
-                tree['have_type'] = 'PAIN'
-            else:
-                tree['have_type'] = _obj_tok.get('possession_type', 'UNKNOWN')
-                tree['have_obj_lemma'] = _obj_tok.get('lemma', '')
-                # Assigner O = nom (enfant, voiture...) et stocker quantité interrogative
-            # Ne réassigner m['O'] que si step1_avoir n'a pas déjà traité cet objet
-            # (step1_avoir ajoute _obj_poss à processed_indices après avoir inclus les conj)
-            if _obj_tok['orig_index'] not in processed_indices:
+            _avoir_morph = str(root_tok.get('morph', ''))
+            _avoir_is_present_indic = (
+                root_tok.get('tense') in ('pres', None)
+                and 'Mood=Cnd' not in _avoir_morph
+                and 'VerbForm=Part' not in _avoir_morph
+            )
+
+            if not _avoir_is_present_indic:
+                # Non-présent (conditionnel, passé, futur) → S TAM O sɔrɔ
                 _obj_bm = _obj_tok.get('bm', '')
                 if _obj_tok.get('is_plural') and _obj_bm and not _obj_bm.endswith('w'):
                     _obj_bm += 'w'
-                if _obj_bm:
+                # Déterminant possessif sur l'objet (ton appel → i ka wéle) :
+                # même logique que step4_objet.objet_standard, car ce bloc
+                # marque l'objet 'processed' avant que step4 ne puisse agir.
+                _poss_obj = next((x for x in T
+                                  if x.get('dep') == 'det'
+                                  and x.get('role') in ('pronoun', 'possessive')
+                                  and x.get('head_index') == _obj_tok['orig_index']), None)
+                if _poss_obj and _obj_bm:
+                    _poss_bm = _poss_obj.get('bm') or _poss_obj.get('surface', '')
+                    if _poss_bm:
+                        _is_rel = (_obj_tok.get('is_relational', False)
+                                   or _obj_bm in G_kg.get('relational_bms', set()))
+                        if _is_rel:
+                            _obj_bm = j(_poss_bm, _obj_bm)
+                        else:
+                            _gen_mk = G_kg.get('genitive_marker', 'ka') or 'ka'
+                            _obj_bm = j(_poss_bm, _gen_mk, _obj_bm)
+                        processed_indices.add(_poss_obj['orig_index'])
+                if _obj_bm and _obj_tok['orig_index'] not in processed_indices:
                     m['O'] = _obj_bm
                     processed_indices.add(_obj_tok['orig_index'])
-            # Stocker combien/quel comme quantité interrogative
-            if _det_interrog:
-                _interrog_qty = next((x for x in T
-                                      if x.get('role') == 'interrogative'
-                                      and x.get('bm')), None)
-                if _interrog_qty:
-                    tree['interrog_qty'] = _interrog_qty.get('bm', '')
-                    processed_indices.add(_interrog_qty['orig_index'])
+                m['V'] = 'sɔrɔ'
+                tree['clause_type'] = 'simple'
+            else:
+                # Présent indicatif → construction possessive O bɛ S bóló
+                _det_interrog = any(
+                    x.get('dep') in ('det', 'amod', 'obj', 'advmod')
+                    and (x.get('role') == 'interrogative'
+                         or 'Int' in str(x.get('morph', ''))
+                         or 'PronType=Int' in str(x.get('morph', '')))
+                    for x in T)
 
-            if tree.get('have_type'):
-                tree['clause_type'] = 'noun_phrase_have'
+                _has_body_obl = any(
+                    x.get('dep') in ('obl', 'obl:arg')
+                    and x.get('head_index') == root_tok['orig_index']
+                    for x in T)
+                _obj_is_pain = (_obj_tok.get('role') == 'pain'
+                                or _obj_tok.get('semantic_class') == 'pain')
+                if _det_interrog:
+                    _obj_sc = _obj_tok.get('semantic_class', '')
+                    _obj_lemma = _obj_tok.get('lemma', '').lower()
+                    _age_lemmas = {'âge', 'an', 'ans', 'année', 'années'}
+                    if _obj_sc in ('time', 'duration', 'age') or _obj_lemma in _age_lemmas:
+                        tree['have_type'] = 'AGE'
+                    else:
+                        tree['have_type'] = 'ABSTRACT'
+                elif _obj_is_pain or (_has_body_obl and not _det_interrog):
+                    tree['have_type'] = 'PAIN'
+                else:
+                    _pt = _obj_tok.get('possession_type', 'UNKNOWN')
+                    tree['have_type'] = _pt
+                    tree['have_obj_lemma'] = _obj_tok.get('lemma', '')
+                    if _pt == 'MATERIAL':
+                        tree['possession_type'] = 'material'
+                    elif _pt in ('ABSTRACT', 'PAIN', 'AGE'):
+                        tree['possession_type'] = _pt.lower()
+                if _obj_tok['orig_index'] not in processed_indices:
+                    _obj_bm = _obj_tok.get('bm', '')
+                    if _obj_tok.get('is_plural') and _obj_bm and not _obj_bm.endswith('w'):
+                        _obj_bm += 'w'
+                    if _obj_bm:
+                        m['O'] = _obj_bm
+                        processed_indices.add(_obj_tok['orig_index'])
+                if _det_interrog:
+                    _interrog_qty = next((x for x in T
+                                          if x.get('role') == 'interrogative'
+                                          and x.get('bm')), None)
+                    if _interrog_qty:
+                        tree['interrog_qty'] = _interrog_qty.get('bm', '')
+                        processed_indices.add(_interrog_qty['orig_index'])
+
+                if tree.get('have_type'):
+                    tree['clause_type'] = 'noun_phrase_have'
 
     # ── COMPOUND VERB → infinitif ─────────────────────────────────────────────
     # Cas : spaCy parse ADJ comme ROOT avec VERB compound (ex: publier une info crédible)
@@ -477,6 +582,15 @@ def run(T, tree, m, processed_indices, G_kg, NX_G,
     if _is_imperative_affirm:
         tree['clause_type'] = 'imperative'
         tree['tam'] = ''
+
+    # ── OPTATIF/JUSSIF : "Que Dieu t'aide" (sub + sujet explicite) ───────────
+    # tense='sub' (posé par le mark SCONJ 'que' sur le ROOT, cf spacy_parser)
+    # n'était consommé nulle part en aval (aucune entrée 'sub' dans la table
+    # TAM) → retombait sur le TAM par défaut (bɛ, présent), perdant le sens
+    # optatif. Avec sujet explicite (≠ impératif bare ci-dessus) : S ka O V.
+    elif root_tok and root_tok.get('tense') == 'sub':
+        tree['clause_type'] = 'optative'
+        tree['tam'] = 'ka'
 
     # ── RÉFLEXIF / RÉCIPROQUE ────────────────────────────────────────────────
     # Détection via Reflex=Yes (spaCy morph) — pas de surfaces codées en dur.
@@ -590,7 +704,7 @@ def run(T, tree, m, processed_indices, G_kg, NX_G,
                 # Sujet PLURIEL + réfléchi 'se' → RÉCIPROQUE (ɲɔgɔn), comme la
                 # branche obj/iobj qui rend plural→réciproque inconditionnellement.
                 # On NE dépend PLUS de _same_surf ni de is_reciprocal (verdict LLM
-                # reflexive_type qui oscille : 'se battre' était classé IDIOMATIC
+                # reflexive_type qui oscille : 'se battre' était classé SUBJECTIVE
                 # au lieu de RECIPROCAL → 'u bɛ u gòsi' au lieu de 'u bɛ ɲɔgɔn gòsi').
                 # Les sujets Dem/NOUN singuliers (la porte se ferme) sont déjà
                 # exclus plus haut (passif réflexif).
@@ -605,26 +719,97 @@ def run(T, tree, m, processed_indices, G_kg, NX_G,
             tree['clause_type'] = 'reciprocal'
         # Singulier dep='obj' : traité par refl_absolute en aval (refl_yere contrôle yɛrɛ)
 
-    # ── RÉFLEXIF → S TAM S V (réfléchi, pas passif) ──────────────────────────
-    # Tout verbe réflexif (clitique 's''/'se' = expl:comp) reprend le sujet par un
-    # pronom objet : il s'est blessé → a yé a [blesser] (et NON le résultatif
-    # passif a [blesser]ra, réservé au passif « il est lavé »).
-    # Vaut quelle que soit la transitivité (ACTION incluse) : la distinction
-    # réfléchi/passif vient de la présence du clitique, pas de l'intransitive_type.
-    # is_refl_passive (s'appeler, se souvenir) reste exclu → verbe nu.
+    # ── ARBRE DE DÉCISION RÉFLEXIF ────────────────────────────────────────────
+    # Appliqué à tout verbe V associé à son pronom réflexif (se/me/te/nous/vous).
+    #
+    # Étape 1 : Existence autonome
+    #   → Verbe sans 'se' inexistant (s'évanouir, se souvenir) = Essentiellement pronominal
+    #   → Signal : is_refl_Subjective=True / is_refl_passive=True  → SKIP (verbe nu)
+    #
+    # Étape 2 : Animation du sujet
+    #   → Sujet inanimé (objet/concept) = Sens Passif ("les voitures se vendent")
+    #   → Signal : is_refl_passive=True (KG) ou _nsubj_tok.is_animate=False
+    #   → SKIP : laisser le chemin passif gérer
+    #
+    # Étape 3 : Pluralité / Réciprocité
+    #   → Sujet pluriel + action partagée (A→B et B→A) = Réciproque
+    #   → Géré plus haut : clause_type='reciprocal'  → SKIP
+    #
+    # Étape 4 : Catégorie fine (_classify_refl_verb, 5 catégories, VerbeNet-groundé
+    #   — VerbeNet = VerbNet français de Danlos et al., github.com/aymara/verbenet)
+    #   → SOIN_CORPOREL (floss-41.2.1/braid-41.2.2) : se laver, se coiffer, s'habiller
+    #   → POSTURE (assuming_position-50, classe pronominale dédiée) : s'asseoir, se lever
+    #   → ACCIDENTEL (hurt-40.8.3)                   : se blesser, se couper, se brûler
+    #   → ACTIF (reste)                              : se préparer, se déguiser
+    #   → Bambara : MÊME structure S TAM refl_pron V pour les 4 catégories
+    #   → yɛrɛ NON par défaut, sauf ACCIDENTEL (True) ou emphase explicite ('lui même')
+    #
+    # Résultat : clause_type='refl_absolute' pour les 4 catégories ci-dessus
+
+    # Étape 1 LLM : existence autonome + intentionnalité
+    # Appeler _classify_refl_verb si disponible (injecté par TranslationEngine)
+    _classify_refl_fn = G_kg.get('_classify_refl_verb')
+    _refl_cat = 'actif'   # défaut si classifieur absent
+    if _refl_tok and root_tok and _classify_refl_fn:
+        _refl_cat = _classify_refl_fn(root_tok.get('lemma', ''))
+
+    # Étape 2 : animation du sujet (complément de is_refl_passive)
+    # Si le KG marque explicitement le nom-sujet comme inanimé → sens passif → SKIP
+    _nsubj_animate = (
+        not _nsubj_tok                                          # pas de sujet nsubj
+        or _nsubj_tok.get('pos') in ('PRON', 'PROPN')          # pronoms/noms propres = animés
+        or _nsubj_tok.get('is_animate', True) is not False     # flag KG (défaut=animé)
+    )
+
     if (_refl_tok and root_tok and root_tok.get('pos') == 'VERB'
             and not root_tok.get('is_statif')
-            and not root_tok.get('is_refl_passive')
-            and tree.get('clause_type') != 'reciprocal'):   # ne pas écraser réciproque
-        print(f"DEBUG [REFL_ABSOLUTE SET] _refl_tok={_refl_tok.get('surface')}, root_tok={root_tok.get('surface')}, is_statif={root_tok.get('is_statif')}, is_refl_passive={root_tok.get('is_refl_passive')}, clause_type={tree.get('clause_type')}")
+            and not root_tok.get('is_refl_passive')   # Étape 1+2 (KG passif)
+            and _refl_cat != 'pronominal'              # Étape 1 LLM (essentiellement pronominal)
+            and _nsubj_animate                         # Étape 2 (animacy heuristic)
+            and tree.get('clause_type') != 'reciprocal'):   # Étape 3 déjà géré
+        print(f"DEBUG [REFL_ABSOLUTE SET] _refl_tok={_refl_tok.get('surface')}, root_tok={root_tok.get('surface')}, refl_cat={_refl_cat}, is_statif={root_tok.get('is_statif')}, is_refl_passive={root_tok.get('is_refl_passive')}, clause_type={tree.get('clause_type')}")
+
+        # Étape 4 : annotation Cat. 1 / Cat. 2 (même structure Bambara pour les deux)
+        tree['refl_category'] = _refl_cat   # 'actif' ou 'accidentel' (LLM)
+
         tree['clause_type'] = 'refl_absolute'
         tree['is_transitive'] = True   # évite le F6 résultatif (V+ra)
-        # yɛrɛ (soi-même) seulement pour les réflexifs AGENTIFS TRANSITIFS
-        # (se blesser → a yé a yɛrɛ màjógin). Les inhérents posture/soin
-        # (s'asseoir, se laver ∈ _refl_abs_classes) → pas de yɛrɛ : a yé a V.
-        tree['refl_yere'] = (root_tok.get('intransitive_type') == 'ACTION'
-                             and root_tok.get('semantic_class') not in _refl_abs_classes
-                             and not root_tok.get('is_refl_idiomatic'))
+        # yɛrɛ uniquement si:
+        #   1. Pronom emphatique explicite ('lui même', 'soi même', 'moi même') → True
+        #   2. Idiomatique + marque locative xcomp ('se mettre à V') → True
+        #   3. _refl_cat == 'accidentel' (≈ VerbeNet hurt-40.8.3 : se blesser, se
+        #      couper, se brûler) → True, l'évènement atteint le sujet comme un
+        #      patient distinct, contrairement à soin_corporel/posture/actif.
+        #   4. Sinon → False (réflexifs inhérents : se laver, s'asseoir, etc.)
+        _emph_meme = next((x for x in T
+                           if x.get('role') == 'reflexive'
+                           and str(x.get('surface', '')).lower() in ('même', 'meme', 'mêmes', 'memes', 'soi')
+                           and x['orig_index'] not in processed_indices), None)
+        _xcomp_locative_mark = (
+            xcomp_verb_tok and next((
+                x for x in T
+                if x.get('dep') == 'mark'
+                and x.get('role') == 'locative'
+                and x.get('head_index') == xcomp_verb_tok['orig_index']
+            ), None)
+        ) if root_tok.get('is_refl_Subjective') and xcomp_verb_tok else None
+        if _emph_meme:
+            tree['refl_yere'] = True
+            processed_indices.add(_emph_meme['orig_index'])
+            # Consommer aussi le pronom adjacent ('lui', 'soi', 'moi', 'toi', etc.)
+            _emph_pron = next((x for x in T
+                               if x.get('pos') == 'PRON'
+                               and x['orig_index'] not in processed_indices
+                               and abs(x['orig_index'] - _emph_meme['orig_index']) <= 1), None)
+            if _emph_pron:
+                processed_indices.add(_emph_pron['orig_index'])
+        elif _xcomp_locative_mark:
+            tree['refl_yere'] = True
+            tree['refl_serial_postpos'] = 'la'
+        elif _refl_cat == 'accidentel':
+            tree['refl_yere'] = True
+        else:
+            tree['refl_yere'] = False
         processed_indices.add(_refl_tok['orig_index'])
         # Capturer le verbe NU ici : step6 (participe résultatif du passé composé)
         # écraserait sinon m['V'] en V+ra et viderait le TAM.
@@ -642,7 +827,7 @@ def run(T, tree, m, processed_indices, G_kg, NX_G,
         tree['neg'] = tree.get('neg', False) or root_tok.get('is_neg', False)
         tree['tam'] = _resolve_tam(tree['tense'], tree['neg'], G_kg)
 
-        print(f"DEBUG [REFL_ABSOLUTE DONE] tree['refl_verb']={tree.get('refl_verb')}, tree['refl_pron']={tree.get('refl_pron')}, tree['refl_yere']={tree.get('refl_yere')}, tree['tam']={tree.get('tam')}")
+        print(f"DEBUG [REFL_ABSOLUTE DONE] cat={tree.get('refl_category')} refl_verb={tree.get('refl_verb')}, refl_pron={tree.get('refl_pron')}, refl_yere={tree.get('refl_yere')}, tam={tree.get('tam')}")
 
     # ── CLITIQUES PRONOMINAUX IOBJ SANS TRADUCTION ───────────────────────────
     # PRON dep='iobj' sans bm valide = clitique adverbial (en, y…) partie du
@@ -711,7 +896,8 @@ def run(T, tree, m, processed_indices, G_kg, NX_G,
         tree['conditional_marker'] = ('mána'
                                       if (_cond_bm == 'mána' or _has_jamais)
                                       else 'ní')
-        tree['clause_type'] = 'conditional'
+        if tree.get('clause_type') != 'noun_phrase_have':
+            tree['clause_type'] = 'conditional'
         processed_indices.add(_cond_mark['orig_index'])
 
     # ── TEMPOREL : quand / lorsque → marqueur postposé (ex: tuma min) ───────
@@ -738,9 +924,21 @@ def run(T, tree, m, processed_indices, G_kg, NX_G,
             aux_tense_tok = root_tok
 
     if aux_tense_tok and root_tok:
-        tree['tense'] = aux_tense_tok.get('tense', 'pres')
+        _tn = aux_tense_tok.get('tense', 'pres')
+        # Plus-que-parfait : avoir/être imparfait (hab) + participe passé → plup
+        # (tùn yé / tùn ma), distinct du passé simple (yé / ma).
+        if (_tn == 'hab'
+                and root_tok.get('tense') == 'past'
+                and 'VerbForm=Part' in str(root_tok.get('morph', ''))):
+            _tn = 'plup'
+        tree['tense'] = _tn
         tree['neg']   = tree['neg'] or aux_tense_tok.get('is_neg', False)
         tree['tam']   = _resolve_tam(tree['tense'], tree['neg'], G_kg)
+        # Imparfait progressif : "j'étais en train de V" → aux porte hab, root
+        # porte prog (posé par _detect_progressive). tree['tense'] reste 'hab'
+        # (pour les listes past/hab/plup ailleurs) ; seul le TAM gagne 'kà'.
+        if _tn == 'hab' and root_tok.get('tense') == 'prog':
+            tree['tam'] = j(tree['tam'], 'kà')
     elif (root_tok and root_tok.get('tense') in ('past', 'fut', 'cond', 'hab', 'prog')
           and not root_tok.get('is_statif')):
         tree['tense'] = root_tok['tense']
@@ -757,7 +955,10 @@ def run(T, tree, m, processed_indices, G_kg, NX_G,
         elif copula_tok_f1:
             if tree.get('clause_type') == 'locative':
                 tree['tam'] = _resolve_tam('pres', tree.get('neg', False), G_kg) or 'bɛ'
-        else:
+        elif tree.get('clause_type') != 'optative':
+            # 'optative' exclu : tam='ka' déjà posé plus haut (sub + sujet
+            # explicite) — sans aux/copule ici, ce repli l'aurait écrasé par
+            # le défaut présent (bɛ), perdant le marqueur optatif.
             tree['tam'] = (G_kg.get('tam_default', '')
                            or _resolve_tam('pres', tree['neg'], G_kg))
 

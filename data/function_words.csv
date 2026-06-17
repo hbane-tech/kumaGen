@@ -60,4 +60,6 @@ trente,fr,bi saba,quantifier
 quarante,fr,bi naani,quantifier
 cinquante,fr,bi duuru,quantifier
 cent,fr,kɛmɛ,quantifier
-mille,fr,waa,quantifier
+mille,fr,waa,quantifiertous,fr,bɛɛ,quantifier
+chaque,fr,ò,distributive_each
+chacun,fr,kélen kélenna,distributive_one

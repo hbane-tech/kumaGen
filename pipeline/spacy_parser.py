@@ -94,15 +94,125 @@ def _classify_adj_verb(surface: str, sentence: str,
         return None
 
 
+# ── Désambiguïsation imparfait/conditionnel/présent via le lexique LEFFF ────
+# (faire/savoir/plaire/taire/traire : "il fait/sait/plaît/taît/trait"
+# partagent une terminaison de surface avec l'imparfait "-ais/-ait" mais sont
+# au présent). Le lexique LEFFF (Sagot 2010, via spacy-lefff) donne le code
+# morphologique exact de chaque forme fléchie : aucune collision I/P
+# n'existe dans tout le lexique pour les formes -ais/-ait, donc pas besoin
+# de liste de verbes ni d'appel LLM — une consultation de dictionnaire
+# suffit à trancher.
+_lefff_verb_codes_cache: Optional[dict] = None
+
+
+def _lefff_verb_codes() -> dict:
+    """Charge (une fois) form -> {codes morphologiques LEFFF} pour cat='v'."""
+    global _lefff_verb_codes_cache
+    if _lefff_verb_codes_cache is None:
+        d: dict = {}
+        try:
+            import io
+            from spacy_lefff.lefff import DATA_DIR, LEFFF_FILE_NAME
+            path = f"{DATA_DIR}/{LEFFF_FILE_NAME}"
+            with io.open(path, encoding='utf-8') as f:
+                for line in f:
+                    parts = line.rstrip('\n').split('\t')
+                    if len(parts) < 4 or parts[1] != 'v':
+                        continue
+                    d.setdefault(parts[0].lower(), set()).add(parts[3])
+        except Exception:
+            d = {}
+        _lefff_verb_codes_cache = d
+    return _lefff_verb_codes_cache
+
+
+def _lefff_tense(surface: str) -> Optional[str]:
+    """Tranche le temps d'une forme verbale via le code morphologique LEFFF
+    (I=imparfait, C=conditionnel, F=futur, J=passé simple). Retourne None si
+    la forme est absente du lexique ou ne correspond à aucun de ces temps
+    (présent, impératif, participe... laissés au reste de _tense)."""
+    codes = _lefff_verb_codes().get(surface.lower())
+    if not codes:
+        return None
+    leadings = {c[0] for c in codes}
+    for prefix, tense in (('I', 'hab'), ('C', 'fut'), ('F', 'fut'), ('J', 'past')):
+        if prefix in leadings:
+            return tense
+    return None
+
+
+_lefff_verb_lemma_cache: Optional[dict] = None
+
+
+def _lefff_verb_lemmas() -> dict:
+    """Charge (une fois) form -> {lemmes LEFFF} pour cat='v'."""
+    global _lefff_verb_lemma_cache
+    if _lefff_verb_lemma_cache is None:
+        d: dict = {}
+        try:
+            import io
+            from spacy_lefff.lefff import DATA_DIR, LEFFF_FILE_NAME
+            path = f"{DATA_DIR}/{LEFFF_FILE_NAME}"
+            with io.open(path, encoding='utf-8') as f:
+                for line in f:
+                    parts = line.rstrip('\n').split('\t')
+                    if len(parts) < 4 or parts[1] != 'v':
+                        continue
+                    d.setdefault(parts[0].lower(), set()).add(parts[2].lower())
+        except Exception:
+            d = {}
+        _lefff_verb_lemma_cache = d
+    return _lefff_verb_lemma_cache
+
+
+def _lefff_lemma(surface: str) -> Optional[str]:
+    """Lemme infinitif d'une forme verbale via LEFFF. Retourne None si la
+    forme est absente du lexique ou ambiguë entre plusieurs lemmes (rare :
+    ~0.15% des formes verbales) — dans ces cas, on laisse spaCy/LLM décider.
+    Corrige des cas où spaCy mélabelle le lemme (ex: 'lave' → lemme 'lave'
+    au lieu de 'laver', probablement par confusion avec le nom 'lave' (la
+    roche volcanique), un homographe exact)."""
+    lemmas = _lefff_verb_lemmas().get(surface.lower())
+    if lemmas and len(lemmas) == 1:
+        return next(iter(lemmas))
+    return None
+
+
+# def _get_nlp(lang):
+#     """Load and cache spaCy model for lang."""
+#     if lang not in _nlp_cache:
+#         import spacy
+#         for m in (['fr_dep_news_trf','fr_core_news_lg','fr_core_news_md','fr_core_news_sm'] if lang=='fr'
+#                   else ['en_core_web_trf','en_core_web_lg','en_core_web_md','en_core_web_sm']):
+#             try: _nlp_cache[lang] = spacy.load(m); break
+#             except: continue
+#         else: _nlp_cache[lang] = None
+#     return _nlp_cache[lang]
+import spacy
+
+_nlp_cache = {}
+
 def _get_nlp(lang):
-    """Load and cache spaCy model for lang."""
     if lang not in _nlp_cache:
-        import spacy
-        for m in (['fr_dep_news_trf','fr_core_news_lg','fr_core_news_md','fr_core_news_sm'] if lang=='fr'
-                  else ['en_core_web_trf','en_core_web_lg','en_core_web_md','en_core_web_sm']):
-            try: _nlp_cache[lang] = spacy.load(m); break
-            except: continue
-        else: _nlp_cache[lang] = None
+        # Listes triées de la précision maximale vers la vitesse maximale
+        models_pool = {
+            "fr": ["fr_dep_news_trf", "fr_core_news_lg", "fr_core_news_md", "fr_core_news_sm"],
+            "en": ["en_core_web_trf", "en_core_web_lg", "en_core_web_md", "en_core_web_sm"]
+        }
+        
+        # Récupère la liste correspondante ou une liste vide si la langue n'est pas supportée
+        candidates = models_pool.get(lang, [])
+        
+        for model_name in candidates:
+            try:
+                _nlp_cache[lang] = spacy.load(model_name)
+                break  # Succès ! On sort de la boucle immédiatement
+            except Exception:
+                continue  # Échec, on tente le modèle inférieur
+        else:
+            # S'exécute uniquement si aucun modèle de la liste n'a pu être chargé
+            _nlp_cache[lang] = None
+            
     return _nlp_cache[lang]
 
 
@@ -136,7 +246,17 @@ def _tense(tok):
     if 'sub' in mood:
         return 'sub'
 
-    # 2. Tense
+    # 2. Lexique LEFFF (forme fléchie exacte -> code morphologique) :
+    # autorité prioritaire sur le Tense de spaCy, qui mélabelle régulièrement
+    # aussi bien l'imparfait lui-même (Tense=Pres pour "lavais") que les
+    # présents irréguliers homographes de l'imparfait (Tense=Imp pour
+    # "tait"/"taît"/"sait"/"fait" — faire/savoir/plaire/taire/traire).
+    if tok.pos_ in ('VERB', 'AUX'):
+        _lefff_t = _lefff_tense(tok.text)
+        if _lefff_t:
+            return _lefff_t
+
+    # 3. Tense (repli si la forme est absente du lexique LEFFF)
     tense = str(tok.morph.get('Tense')).lower()
     if 'imp' in tense:
         return 'hab'
@@ -161,6 +281,17 @@ def resolve_auxiliary_lemmas(tokens, db):
         if not surf_lower or surf_lower == 'none':
             continue
         lang_curr = t.get('lang', 'fr')
+
+        # Correction spaCy : lemme erroné pour une forme verbale fléchie
+        # (ex: "lave" → lemme 'lave' au lieu de 'laver', homographe du nom
+        # 'lave' = roche volcanique). Autorité : LEFFF (lemme non-ambigu
+        # uniquement) — appliqué avant la lemmatisation LLM (étape 3) pour
+        # que celle-ci ne l'écrase pas si elle échoue/se trompe.
+        if t.get('pos') in ('VERB', 'AUX'):
+            _lefff_lem = _lefff_lemma(surf_lower)
+            if _lefff_lem and _lefff_lem != t.get('lemma', '').lower():
+                t['lemma'] = _lefff_lem
+                t['_lefff_lemma_fixed'] = True
 
         # Correction spaCy : impératifs 1ère conjugaison mal lemmatisés
         # ex: "Donne" → lemma 'donne' au lieu de 'donner'. Détection :
@@ -293,6 +424,67 @@ def _split_contractions(text: str) -> str:
     text = re.sub(r"([lLdDjJmMtTsS])['']([A-Za-zÀ-ÖØ-öø-ÿ])", r"\1' \2", text)
     return text
 
+
+_APOS_CHARS = {"'", "’", "ʼ"}
+
+_ELISION_EXPAND = {
+    "j'": 'je', "n'": 'ne', "qu'": 'que', "l'": 'le',
+    "d'": 'de', "s'": 'se', "m'": 'me', "t'": 'te', "c'": 'ce',
+}
+
+def _expand_elision(surf_lower: str) -> str:
+    """
+    je/ne/que/le/de/se/me/te/ce élidés (j'/n'/qu'/...) devant voyelle.
+
+    Règle orthographique fermée du français (8 clitiques + ce) — pas un
+    choix sémantique, donc pas besoin de LLM. Sans cette expansion, "j'ai"
+    a pour surface "j'" qui ne matche pas l'entrée KG Pronoun "je" (bm='n'),
+    et retombe sur le fallback "[lemma]" (ex: "[j]") au lieu de "n".
+    """
+    for _a in _APOS_CHARS:
+        if surf_lower.endswith(_a):
+            return _ELISION_EXPAND.get(surf_lower[:-1] + "'", surf_lower)
+    return surf_lower
+
+
+def _merge_orphan_apostrophe(tokens):
+    """
+    Fusionne un token apostrophe isolé dans le token précédent.
+
+    _split_contractions() force spaCy à séparer "J'ai" en "J' ai", mais le
+    tokenizer spaCy peut alors produire l'apostrophe comme TOKEN À PART
+    (ex: 'J' + "'" au lieu de "J'"), surtout en début de phrase (majuscule).
+    Cette apostrophe orpheline hérite d'un dep parasite du parser (observé :
+    dep='expl:comp', comme le "y" de "il y a") qui déclenche à tort les
+    routes existentielles pour n'importe quelle phrase avec sujet élidé
+    (j'/n'/qu'/l'/d'/s'/m'/t' + verbe). Sans ce merge, "j'ai eu une voiture"
+    route vers existential_absolute au lieu de la possession.
+    """
+    if not any(t.get('surface') in _APOS_CHARS for t in tokens):
+        return tokens
+
+    survivors = []
+    old_to_survivor_old = {}
+    for t in tokens:
+        if t.get('surface') in _APOS_CHARS and survivors:
+            prev = survivors[-1]
+            prev['surface'] = prev['surface'] + t['surface']
+            prev['text'] = prev.get('text', prev['surface']) + t['surface']
+            old_to_survivor_old[t['orig_index']] = prev['orig_index']
+            continue
+        survivors.append(t)
+
+    full_old_map = {t['orig_index']: t['orig_index'] for t in survivors}
+    full_old_map.update(old_to_survivor_old)
+    old_to_new = {t['orig_index']: i for i, t in enumerate(survivors)}
+
+    for t in survivors:
+        _mapped_head = full_old_map.get(t['head_index'], t['head_index'])
+        t['head_index'] = old_to_new.get(_mapped_head, t['head_index'])
+        t['orig_index'] = old_to_new[t['orig_index']]
+    return survivors
+
+
 def _fix_pos_errors(tokens, grammar):
     adp       = grammar.get('adp_surfaces', set())
     cconj     = grammar.get('cconj_surfaces', set())
@@ -355,6 +547,13 @@ def _fix_pos_errors(tokens, grammar):
                             and _d.get('head_index') == _adj_head['orig_index']
                             and _d['orig_index'] < t['orig_index']):
                         _d['head_index'] = t['orig_index']
+
+        # PUNCT ROOT content → verbe mal étiqueté par spaCy
+        # dep=ROOT ne peut jamais être une vraie ponctuation
+        if (t.get('pos') == 'PUNCT'
+                and t.get('dep') == 'ROOT'
+                and t.get('role') == 'content'):
+            t['pos'] = 'VERB'
 
         if t.get('pos') == 'AUX' and surf in adp:
             t['pos'] = 'ADP'
@@ -582,6 +781,7 @@ class SpacyParser:
                            # ── data-driven POS correction ──
                            'adp_surfaces':set(),'cconj_surfaces':set(),
                            'clitic_surfaces':set(),'quantifiers':{},
+                           'distributive_each':{},'distributive_one':{},
                            'progressive_markers':[],'participial_markers':set(),
                            'expletive_surfaces':set(),
                            'locative_markers':set(),'temporal_markers':set(),
@@ -632,6 +832,11 @@ class SpacyParser:
         quantifiers = {r['s'].lower(): r.get('b', '') for r in fw
                        if r.get('r') == 'quantifier'}
 
+        distributive_each = {r['s'].lower(): r.get('b', '') for r in fw
+                              if r.get('r') == 'distributive_each'}
+        distributive_one  = {r['s'].lower(): r.get('b', '') for r in fw
+                              if r.get('r') == 'distributive_one'}
+
         progressive_markers = [r['s'].lower().split() for r in fw
                                 if r.get('r') == 'progressive_marker']
 
@@ -673,6 +878,8 @@ class SpacyParser:
             'cconj_surfaces':    cconj_surfaces,
             'clitic_surfaces':   clitic_surfaces,
             'quantifiers':       quantifiers,
+            'distributive_each': distributive_each,
+            'distributive_one':  distributive_one,
             'progressive_markers':  progressive_markers,
             'participial_markers':  participial_markers,
             'expletive_surfaces':   expletive_surfaces,
@@ -736,6 +943,8 @@ class SpacyParser:
             }
             tokens.append(t_dict)
 
+        tokens = _merge_orphan_apostrophe(tokens)
+
         # ── 2. Corrections et détections structurelles ────────────────────────
         tokens = resolve_auxiliary_lemmas(tokens, self.db)
 
@@ -768,13 +977,14 @@ class SpacyParser:
 
         for t in tokens:
             surf_lower = t['surface'].lower()
-            if surf_lower in llm_lem:
+            if surf_lower in llm_lem and not t.get('_lefff_lemma_fixed'):
                 t['lemma'] = llm_lem[surf_lower]
 
         for t in tokens:
             surf_lower  = t.get('surface', '').lower()
             if not surf_lower or surf_lower == 'none':
                 continue
+            surf_lower = _expand_elision(surf_lower)
 
             lemma_raw   = t.get('lemma')
             lemma_lower = lemma_raw.lower() if lemma_raw else surf_lower
@@ -811,6 +1021,14 @@ class SpacyParser:
             elif surf_lower in G.get('quantifiers', {}):
                 t['role'] = 'quantifier'
                 t['bm']   = G['quantifiers'][surf_lower]
+
+            elif surf_lower in G.get('distributive_each', {}):
+                t['role'] = 'distributive_each'
+                t['bm']   = G['distributive_each'][surf_lower]
+
+            elif surf_lower in G.get('distributive_one', {}):
+                t['role'] = 'distributive_one'
+                t['bm']   = G['distributive_one'][surf_lower]
 
             elif (surf_lower, lang) in G.get('preps', {}):
                 prep_config  = G['preps'][(surf_lower, lang)]
@@ -858,10 +1076,18 @@ class SpacyParser:
         # LLM : TEMPORAL → subordonnant temporel ; COMPLETEUR → complémenteur de verbe
         # Fallback : tête VERB + dep ≠ ccomp/xcomp/acl → temporel ; sinon complémenteur
         _ccomp_deps = ('ccomp', 'xcomp', 'acl', 'acl:relcl')
+        _when_homographs = {'quand', 'lorsque'}
         for t in tokens:
+            # Restreint à l'homographe 'quand'/'lorsque' que cette désambiguïsation
+            # cible explicitement (cf commentaire ci-dessus) : sans ce filtre de
+            # surface, n'importe quel autre SCONJ marqué role='interrogative' en
+            # amont (ex: 'que' dans l'optatif "Que Dieu t'aide") se faisait happer
+            # par le même repli structurel et reclassé TEMPORAL à tort (tête=ROOT
+            # non exclue), perdant son vrai sens au profit de 'tuma min'.
             if (t.get('dep') == 'mark'
                     and t.get('pos') == 'SCONJ'
-                    and t.get('role') == 'interrogative'):
+                    and t.get('role') == 'interrogative'
+                    and str(t.get('surface', '')).lower() in _when_homographs):
                 _verdict = _classify_sconj(
                     t.get('surface', ''), sentence,
                     model=getattr(self, '_llm_model', 'qwen2.5:3b'))

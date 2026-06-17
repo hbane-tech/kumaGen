@@ -104,10 +104,14 @@ class TranslationEngine:
     _LLM_TIMEOUT   = 90   # hard ceiling per Ollama call (seconds)
     _LLM_RETRY_GAP = 0    # retry immédiatement après chaque échec
 
-    def _call_llm(self, prompt: str, max_tokens: int = 10, timeout: int = 8) -> str:  # noqa: ARG002
-        """Generic LLM call — Ollama (qwen) uniquement."""
+    def _call_llm(self, prompt: str, max_tokens: int = 10, timeout: int = None) -> str:
+        """Generic LLM call — Ollama (qwen) uniquement.
+        timeout=None (défaut) : ceiling standard _LLM_TIMEOUT (90s). Les appelants
+        dont la réponse attendue est courte/peu coûteuse peuvent passer un timeout
+        explicite plus serré pour échouer vite plutôt que de bloquer jusqu'à 90s."""
         import time as _time
         ollama_ok = _time.time() >= TranslationEngine._llm_circuit_open_until
+        _timeout = timeout if timeout is not None else TranslationEngine._LLM_TIMEOUT
 
         if ollama_ok and LLM_BACKEND == 'ollama':
             payload = {
@@ -120,8 +124,8 @@ class TranslationEngine:
                 r = requests.post(
                     "http://localhost:11434/api/generate",
                     json=payload,
-                    timeout=TranslationEngine._LLM_TIMEOUT)
-                return r.json()["response"].strip()
+                    timeout=_timeout)
+                return r.json().get("response", "").strip()
             except (requests.exceptions.ReadTimeout,
                     requests.exceptions.ConnectTimeout,
                     requests.exceptions.ConnectionError) as _e:
@@ -842,23 +846,27 @@ class TranslationEngine:
 
     def _detect_reflexive_type(self, lemma: str) -> str:
         """Classifie le type de construction réflexive du verbe.
-        Retourne RECIPROCAL, REFLEXIVE, PASSIVE ou IDIOMATIC."""
+        Retourne RECIPROCAL, REFLEXIVE, PASSIVE ou SUBJECTIVE."""
         prompt = (
             f'Verb: "{lemma}". Used with reflexive "se".\n'
-            f'RECIPROCAL: two or more participants perform the action on each other '
+            f'RECIPROCAL: Two or more participants perform the action on each other '
             f'(meet, fight, kiss, marry, see each other).\n'
-            f'REFLEXIVE: the action is intentionally directed back to the subject as an object; '
-            f'the subject consciously acts on themselves '
-            f'(hurt oneself, blame oneself, judge oneself, examine oneself, punish oneself).\n'
+
+            f'REFLEXIVE: The subject consciously and literally performs the action on themselves '
+            f'as an object. This includes grooming/body-care '
+            f'(wash, dress, shave, comb, hurt oneself, blame oneself, examine oneself).\n'
+
             f'PASSIVE: "se" has no semantic role; the subject undergoes the action '
             f'or the construction is impersonal/passive '
             f'(be sold, be called, be done, happen, be used).\n'
-            f'IDIOMATIC: includes body-care/grooming actions (wash, dress, shave, comb, '
-            f'bathe, dry oneself), AND verbs that require "se" to express a state, change '
-            f'of state, emotion, cognition, movement, or fixed meaning '
+
+            f'SUBJECTIVE: "se" is an intrinsic part of the verb to express a state, change '
+            f'of state, emotion, cognition, movement, or a completely non-literal meaning '
             f'(realize, remember, get angry, hurry, leave, wonder, concentrate, '
-            f'make a mistake, get up, lie down, sit down, get dressed, get bored).\n'
-            f'Return one word only: RECIPROCAL, REFLEXIVE, PASSIVE, or IDIOMATIC.'
+            f'make a mistake, get up, lie down, sit down, get bored).\n'
+
+            f'Return one word only: RECIPROCAL, REFLEXIVE, PASSIVE, or SUBJECTIVE.'
+
         )
         for _attempt in range(3):
             try:
@@ -868,11 +876,11 @@ class TranslationEngine:
                     raise ValueError('empty response')
                 raw = parts[0]
                 print(f"     🔍 reflexive_type? '{raw}'")
-                result = raw if raw in ('RECIPROCAL', 'REFLEXIVE', 'PASSIVE', 'IDIOMATIC') else 'IDIOMATIC'
+                result = raw if raw in ('RECIPROCAL', 'REFLEXIVE', 'PASSIVE', 'SUBJECTIVE') else 'SUBJECTIVE'
                 return result
             except Exception as e:
                 print(f"     🔍 attempt {_attempt+1} failed: {e}")
-        return 'IDIOMATIC'
+        return 'SUBJECTIVE'
 
     def _load_semantic_classes(self) -> str:
         try:
@@ -955,6 +963,7 @@ class TranslationEngine:
             f"Réponds UNIQUEMENT par : ACTION ou ABSOLU"
         )
         _result = None
+        _raw = ''
         for attempt in range(3):
             try:
                 _raw = self._call_llm(prompt, max_tokens=5).strip().upper()
@@ -972,76 +981,73 @@ class TranslationEngine:
 
     def _classify_refl_verb(self, lemma: str) -> str:
         """
-        Applique l'arbre de décision réflexif (Étapes 1 et 4) via LLM + cache KG.
+        Classe un verbe réfléchi français selon son comportement syntaxique
+        (catégories alignées sur les classes VerbeNet — le VerbNet français
+        de Danlos et al., https://github.com/aymara/verbenet — plutôt que
+        sur le seul critère volontaire/accidentel) :
 
-        Étape 1 — Existence autonome : le verbe peut-il exister sans 'se' ?
-          → NON  : PRONOMINAL (s'évanouir, se souvenir, se méfier, se taire…)
+          PRONOMINAL    : n'existe PAS sans 'se' (s'évanouir, se souvenir,
+                          se méfier, se taire). ≈ pas d'équivalent VerbeNet
+                          (classe purement French-specific, absente du
+                          VerbNet anglais source).
+          SOIN_CORPOREL : toilette/soin du corps, objet réfléchi par défaut.
+                          ≈ VerbeNet floss-41.2.1 (laver, raser) +
+                          braid-41.2.2 (coiffer, maquiller, peigner) +
+                          dress-41.1.1 (habiller, vêtir).
+          POSTURE       : position/changement de position, pas une action
+                          sur un objet (s'asseoir, se lever, se coucher,
+                          se pencher, s'agenouiller). ≈ VerbeNet
+                          assuming_position-50, qui liste justement les
+                          formes pronominales ('asseoir s'', 'coucher se',
+                          'agenouiller s'') séparément de leurs variantes
+                          transitives-causatives (spatial_configuration-47.6 :
+                          'asseoir qqn', 'lever qqch').
+          ACCIDENTEL    : le sujet subit un évènement fortuit qui l'atteint
+                          physiquement (se blesser, se couper, se brûler).
+                          ≈ VerbeNet hurt-40.8.3 (blesser, brûler, casser,
+                          déchirer, écorcher).
+          ACTIF         : toute autre action volontaire du sujet sur lui-même
+                          (se préparer, se déguiser, se défendre).
 
-        Étape 4 — Intentionnalité (sujet animé singulier) :
-          → OUI  : ACTIF     (se laver, se coiffer, se lever, se préparer…)
-          → NON  : ACCIDENTEL (se blesser, se couper, se brûler…)
-
-        Étapes 2 (animation sujet) et 3 (pluralité/réciprocité) sont détectées
-        structurellement dans step3 — pas de LLM pour elles.
-
-        Retourne : 'pronominal' | 'actif' | 'accidentel'
+        Retourne : 'pronominal' | 'soin_corporel' | 'posture' | 'accidentel' | 'actif'
         """
-        _fr_key = lemma.rstrip('.').lower() + '.'
-
-        # 1. Cache KG (propriété refl_category sur nœud Sense)
-        try:
-            _cached = self.db.query(
-                "MATCH (n:Sense) WHERE n.fr = $fr AND n.refl_category IS NOT NULL "
-                "RETURN n.refl_category AS cat LIMIT 1",
-                {'fr': _fr_key})
-            if _cached and _cached[0].get('cat'):
-                cat = _cached[0]['cat']
-                print(f"  🔄 [REFL_CAT] '{lemma}' → {cat}  [KG cache]")
-                return cat
-        except Exception:
-            pass
-
-        # 2. LLM — deux étapes en un seul prompt court
+        # Pas de cache KG : un verdict LLM périmé/erroné (timeout → défaut
+        # 'actif') se figeait sinon indéfiniment. On rappelle le LLM à chaque
+        # fois.
         prompt = (
-            f'Le verbe français "{lemma}" est employé avec "se".\n\n'
-            f'Étape 1 — Peut-il exister SANS "se" ?\n'
-            f'  Si NON → répondre PRONOMINAL.\n'
-            f'  Ex PRONOMINAL : s\'évanouir, se souvenir, se méfier, se taire, '
-            f's\'abstenir, se repentir.\n\n'
-            f'Étape 2 — L\'action est-elle VOLONTAIRE ou ACCIDENTELLE ?\n'
-            f'  ACTIF     : sujet = agent + bénéficiaire, 100 % volontaire.\n'
-            f'    Ex : se laver, se coiffer, se lever, se coucher, se préparer.\n'
-            f'  ACCIDENTEL: le sujet subit un événement fortuit, sans intention.\n'
-            f'    Ex : se blesser, se couper, se brûler, se casser la jambe.\n\n'
-            f'Réponds UNIQUEMENT par : PRONOMINAL, ACTIF ou ACCIDENTEL'
+            f'Le verbe français "{lemma}" est utilisé à la forme réfléchie (se {lemma}).\n'
+            f'Choisis la catégorie qui correspond le mieux à son comportement :\n\n'
+            f'PRONOMINAL : le verbe n\'existe PAS sans "se" (aucun sens sans la forme réfléchie).\n'
+            f'  Ex : s\'évanouir, se souvenir, se méfier, se taire, s\'abstenir, se repentir.\n\n'
+            f'SOIN_CORPOREL : toilette et soin du corps, l\'action s\'applique par défaut à soi-même.\n'
+            f'  Ex : se laver, se raser, se coiffer, s\'habiller, se maquiller, se peigner.\n\n'
+            f'POSTURE : changement de position du corps, pas une action sur un objet.\n'
+            f'  Ex : s\'asseoir, se lever, se coucher, se pencher, s\'agenouiller.\n\n'
+            f'ACCIDENTEL : le sujet subit un évènement fortuit, involontaire, qui l\'atteint physiquement.\n'
+            f'  Ex : se blesser, se couper, se brûler, se casser (la jambe), s\'écorcher.\n\n'
+            f'ACTIF : toute autre action volontaire du sujet sur lui-même, agent et bénéficiaire.\n'
+            f'  Ex : se préparer, se déguiser, se présenter, se défendre.\n\n'
+            f'Réponds UNIQUEMENT par : PRONOMINAL, SOIN_CORPOREL, POSTURE, ACCIDENTEL ou ACTIF'
         )
 
+        _CATS = ('PRONOMINAL', 'SOIN_CORPOREL', 'POSTURE', 'ACCIDENTEL', 'ACTIF')
         _result = None
         _raw = ''
         for attempt in range(3):
             try:
-                _raw = self._call_llm(prompt, max_tokens=5).strip().upper()
+                # timeout court (15s) : réponse attendue = un seul mot-catégorie,
+                # pas besoin du ceiling 90s — échoue vite sur les 3 tentatives
+                # plutôt que de bloquer jusqu'à 4'30 quand Ollama est indisponible.
+                _raw = self._call_llm(prompt, max_tokens=6, timeout=15).strip().upper()
                 print(f"  🔬 [REFL_CAT raw] attempt {attempt+1}: {_raw!r}")
-                if 'PRONOMINAL' in _raw:
-                    _result = 'pronominal'; break
-                if 'ACCIDENTEL' in _raw:
-                    _result = 'accidentel'; break
-                if 'ACTIF' in _raw:
-                    _result = 'actif'; break
+                _hit = next((c for c in _CATS if c in _raw), None)
+                if _hit:
+                    _result = _hit.lower(); break
             except Exception:
                 continue
 
         cat = _result or 'actif'  # défaut si LLM indisponible
         print(f"  🔄 [REFL_CAT] '{lemma}' → {cat}  [LLM, raw={_raw!r}]")
-
-        # 3. Persist au KG pour les prochains appels
-        try:
-            self.db.query(
-                "MATCH (n:Sense) WHERE n.fr = $fr SET n.refl_category = $cat",
-                {'fr': _fr_key, 'cat': cat})
-        except Exception:
-            pass
-
         return cat
 
     def _normalize_verb_to_infinitive(self, verb: str) -> str:
@@ -1065,32 +1071,30 @@ class TranslationEngine:
             f'Réponds UNIQUEMENT par l\'infinitif (un seul mot), minuscules, sans ponctuation.'
         )
 
-        try:
-            infinitive = self._call_llm(prompt, max_tokens=8).strip().lower()
-            if infinitive and len(infinitive) > 1:
-                return infinitive
-        except Exception as e:
-            print(f"     ⚠️  Infinitive normalization failed: {e}")
+        for attempt in range(3):
+            try:
+                infinitive = self._call_llm(prompt, max_tokens=8).strip().lower()
+                if infinitive and len(infinitive) > 1:
+                    return infinitive
+            except Exception as e:
+                print(f"     ⚠️  Infinitive normalization failed (attempt {attempt+1}): {e}")
 
         return verb
 
     def _detect_semantic_class(self, lemma: str) -> str:
-        """Détecte la classe sémantique d'un verbe via LLM, avec cache KG persistant."""
-        # 1. Check KG cache (semantic_class stored on Sense nodes after first LLM call)
-        _fr_key = lemma.rstrip('.') + '.'
-        try:
-            _cached = self.db.query(
-                "MATCH (n:Sense) WHERE n.fr = $fr AND n.semantic_class IS NOT NULL "
-                "RETURN n.semantic_class AS cls LIMIT 1",
-                {'fr': _fr_key})
-            if _cached and _cached[0].get('cls'):
-                cls = _cached[0]['cls']
-                print(f"     🏷️  semantic_class('{lemma}') = {cls}  [KG cache]")
-                return cls
-        except Exception:
-            pass
+        """Détecte la classe sémantique d'un verbe via VerbNet (nltk) en
+        priorité — verbe français -> WOLF -> synsets WordNet -> lemmes
+        anglais -> classes VerbNet (cf embeddings/verbnet_classifier.py),
+        bien plus fiable que le LLM et sans cache (lookups locaux
+        déterministes, pas de risque de figer un verdict périmé). Si VerbNet
+        n'a aucune couverture pour ce verbe (pas dans WOLF), on retombe sur
+        le LLM plutôt que de renvoyer 'other' à l'aveugle."""
+        from embeddings.verbnet_classifier import verbnet_semantic_class
+        cls = verbnet_semantic_class(lemma)
+        if cls:
+            print(f"     🏷️  semantic_class('{lemma}') = {cls}  [VerbNet]")
+            return cls
 
-        # 2. LLM classification
         prompt = (
             f'Quelle est la nature sémantique du verbe français "{lemma}" ?\n\n'
             f'Catégories AUTONOMES (intransitifs, n\'acceptent pas de COD direct):\n'
@@ -1112,21 +1116,12 @@ class TranslationEngine:
             f'  other=aucune catégorie ne convient.\n\n'
             f'Réponds UNIQUEMENT par le nom de la catégorie.'
         )
-
         try:
             import re as _re
             cls_raw = self._call_llm(prompt, max_tokens=15).strip().lower()
             words   = _re.findall(r'[a-z]+', cls_raw)
             cls     = words[0] if words else 'other'
-            print(f"     🏷️  semantic_class('{lemma}') = {cls}  [LLM]")
-            # 3. Persist to KG so future calls skip LLM
-            if cls and cls != 'other':
-                try:
-                    self.db.query(
-                        "MATCH (n:Sense) WHERE n.fr = $fr SET n.semantic_class = $cls",
-                        {'fr': _fr_key, 'cls': cls})
-                except Exception:
-                    pass
+            print(f"     🏷️  semantic_class('{lemma}') = {cls}  [LLM fallback, hors couverture VerbNet]")
             return cls
         except Exception as e:
             print(f"     ⚠️  semantic class detection failed: {e}")
@@ -1255,20 +1250,11 @@ class TranslationEngine:
                 f'Reply with ONE word or EMPTY.'
             )
             try:
+                # Pas de persistance KG : un mot-outil mal traduit par le LLM
+                # (ex: 'avec' → 'avec', simple écho) se figeait sinon en dur.
                 result = self._call_llm(prompt, max_tokens=8).strip()
                 if result and result.upper() != 'EMPTY':
                     tok['bm'] = result
-                    if kg_label:
-                        try:
-                            self.db.query(f"""
-                                MERGE (n:{kg_label} {{fr: $lemma, lang: $lang}})
-                                SET n.bm = $bm, n.surface = $surface,
-                                    n.pos = $pos
-                            """, {'lemma': lemma, 'lang': lang,
-                                  'bm': result, 'surface': surface,
-                                  'pos': pos})
-                        except Exception:
-                            pass
             except Exception as e:
                 print(f"     ⚠️  LLM function word failed: {e}")
             return tok, []
@@ -1421,8 +1407,16 @@ class TranslationEngine:
                 if _sc in ('posture', 'biological', 'spontaneous', 'consumption'):
                     _is_statif = True
                 else:
+                    # _detect_statif_adj renvoie une des 4 catégories
+                    # QUALITE/STATIF/VALEUR/PARTICIPE (jamais vide) : seule
+                    # 'STATIF' correspond à un participe-adjectif statif
+                    # (-len/-nen dòn). Un check de vérité générique sur la
+                    # chaîne était toujours vrai (VALEUR/QUALITE/PARTICIPE
+                    # sont aussi des chaînes non-vides) → tout participe
+                    # passif finissait classé statif (ex: 'faire' → VALEUR
+                    # → is_statif=True à tort).
                     try:
-                        _is_statif = self._detect_statif_adj(tok['lemma'])
+                        _is_statif = (self._detect_statif_adj(tok['lemma']) == 'STATIF')
                     except Exception:
                         _is_statif = False
                 if _is_statif:
@@ -1509,7 +1503,20 @@ class TranslationEngine:
                 )
             )
 
-            if _has_refl_pron:
+            # Construction périphrastique "se V à/de INF" (se mettre à, se
+            # décider à, s'apprêter à...) : le verbe réflexif régit un
+            # complément infinitif (xcomp) → inchoatif/aspectuel par
+            # construction syntaxique, signal fiable sans appel LLM (le LLM,
+            # ne voyant que le lemme nu hors contexte "à V", confond souvent
+            # ce sens avec le sens littéral du verbe, ex: mettre = "placer").
+            _governs_xcomp_inf = any(
+                t.get('dep') == 'xcomp' and t.get('pos') == 'VERB'
+                and t.get('head_index') == tok.get('orig_index')
+                for t in _ctoks_v)
+
+            if _has_refl_pron and _governs_xcomp_inf:
+                tok['is_refl_Subjective'] = True
+            elif _has_refl_pron:
                 # NOUN singulier / Dem → passif réflexif
                 # NOUN pluriel → traité comme les autres pluriels (LLM ou même-surface)
                 if _is_dem_noun and not _is_plural_subj:
@@ -1524,10 +1531,10 @@ class TranslationEngine:
                         tok['is_reciprocal'] = True
                     elif _rtype == 'PASSIVE':
                         tok['is_refl_passive'] = True
-                    elif _rtype == 'IDIOMATIC':
-                        tok['is_refl_idiomatic'] = True
+                    elif _rtype == 'SUBJECTIVE':
+                        tok['is_refl_Subjective'] = True
                 else:
-                    # Singulier (expl:comp ou obj) : LLM décide IDIOMATIC vs REFLEXIVE vs PASSIVE
+                    # Singulier (expl:comp ou obj) : LLM décide SUBJECTIVE vs REFLEXIVE vs PASSIVE
                     _refl_sing = next((t for t in _ctoks_v
                                        if t.get('dep') in ('expl:comp', 'obj')
                                        and t.get('pos') == 'PRON'), None)
@@ -1535,8 +1542,8 @@ class TranslationEngine:
                         _rtype = self._detect_reflexive_type(tok['lemma'])
                         if _rtype == 'PASSIVE':
                             tok['is_refl_passive'] = True
-                        elif _rtype == 'IDIOMATIC':
-                            tok['is_refl_idiomatic'] = True
+                        elif _rtype == 'SUBJECTIVE':
+                            tok['is_refl_Subjective'] = True
 
         if tok['pos'] == 'ADJ' and tok.get('bm'):
             _clause_toks = getattr(self, '_current_clause_tokens', [])
@@ -1732,7 +1739,55 @@ class TranslationEngine:
                     _split_start_tok = _after[0]
                     break
 
-        # Si un comma split est trouvé : séparer texte + tokens, puis appliquer
+        # g) Fallback : clauses indépendantes séparées par virgule
+        #    "S V1, S V2, S V3, ..." (énumération de clauses)
+        if not _split_start_tok and _comma_toks:
+            for _ct in _comma_toks:
+                _ci    = _ct['orig_index']
+                _before = [t for t in _sorted_toks if t['orig_index'] < _ci
+                          and t.get('pos') != 'PUNCT' and t.get('dep') != 'punct']
+                _after  = [t for t in _sorted_toks
+                           if t['orig_index'] > _ci
+                           and t.get('pos') != 'PUNCT'
+                           and t.get('dep') != 'punct'
+                           and t.get('surface') not in (',', '.')]
+                if not _before or not _after:
+                    continue
+                # Vérifier que before ET after ont un VERB ROOT indépendant
+                _before_has_root = any(
+                    t.get('dep') == 'ROOT' and t.get('pos') in ('VERB', 'AUX')
+                    for t in _before)
+                _after_has_root = any(
+                    t.get('dep') == 'ROOT' and t.get('pos') in ('VERB', 'AUX')
+                    for t in _after)
+                if _before_has_root and _after_has_root:
+                    _split_start_tok = _after[0]
+                    break
+
+        # h) Coordination sans virgule : "S V1 et S V2" (deux clauses
+        #    indépendantes coordonnées sans virgule). Signal structurel : le
+        #    verbe en dep=conj a son propre sujet (nsubj/nsubj:pass) distinct
+        #    de celui du ROOT — sinon c'est une coordination de verbes sur un
+        #    sujet partagé ("il mange et dort"), qu'on ne scinde pas.
+        if not _split_start_tok:
+            for _cc in _sorted_toks:
+                if _cc.get('pos') != 'CCONJ' or _cc.get('dep') != 'cc':
+                    continue
+                _conj_v = next((t for t in _sorted_toks
+                                 if t.get('orig_index') == _cc.get('head_index')
+                                 and t.get('pos') in ('VERB', 'AUX')
+                                 and t.get('dep') == 'conj'), None)
+                if not _conj_v:
+                    continue
+                _has_own_subj = any(
+                    t.get('head_index') == _conj_v['orig_index']
+                    and t.get('dep') in ('nsubj', 'nsubj:pass')
+                    for t in _sorted_toks)
+                if _has_own_subj:
+                    _split_start_tok = _cc
+                    break
+
+        # Si un split est trouvé : séparer texte + tokens, puis appliquer
         # le dep-split indépendamment dans chaque segment
         if _split_start_tok:
             _si       = _split_start_tok.get('orig_index', -1)

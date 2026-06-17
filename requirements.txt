@@ -1,6 +1,8 @@
 fastapi>=0.111.0
 uvicorn[standard]>=0.29.0
 spacy>=3.5.0,<3.8.0
+spacy-lefff>=0.5.1
+nltk>=3.9.0
 sentence-transformers>=2.2.0
 gensim>=4.0.0
 neo4j>=5.0.0

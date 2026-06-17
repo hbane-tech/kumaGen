@@ -60,6 +60,8 @@ _GRAMMAR_FALLBACK = {
     'resultative_marker':      'ye',
     'tam_default':             'bɛ',
     'quantifier_words':        {},
+    'distributive_each':       {},
+    'distributive_one':        {},
     'temporal_suffix_markers': set(),
     'privative_markers':       set(),
     'neg_surfaces':            set(),
@@ -77,23 +79,17 @@ def _resolve_tam(tense: str, neg: bool, grammar: dict) -> str:
     return _TAM_HARDCODED.get((tense, neg), '')
 
 
-def _is_copula(tok, all_tokens=None) -> bool:
+def _is_copula(tok) -> bool:
     if not tok:
         return False
-    # Garde STRUCTUREL : un verbe qui a un objet direct (dep='obj') n'est PAS
-    # une copule — c'est un transitif (possession 'avoir', etc.). Le LLM classe
-    # parfois 'avoir' comme semantic_class='copula' (non-déterminisme) ; sans ce
-    # garde, 'il a une voiture' (avoir + obj) était routé vers l'équatif
-    # (a yé wátiri yé) au lieu de la possession (wátiri bɛ a bolo).
-    # On ne neutralise QUE la classe LLM (sc) : un vrai marqueur syntaxique de
-    # copule (dep='cop' / role='copula') reste prioritaire.
+    # Structural copula signal (spaCy dep='cop' or role annotation)
     _struct_cop = (tok.get('dep') == 'cop' or tok.get('role') == 'copula')
-    if not _struct_cop and tok.get('semantic_class') == 'copula' and all_tokens:
-        _has_dobj = any(x.get('dep') == 'obj'
-                        and x.get('head_index') == tok.get('orig_index')
-                        for x in all_tokens)
-        if _has_dobj:
-            return False
+
+    # LLM semantic_class='copula' is unreliable (savoir, avoir misclassified).
+    # Accept it ONLY if there's a structural signal; otherwise ignore it.
+    if tok.get('semantic_class') == 'copula' and not _struct_cop:
+        return False
+
     return (tok.get('semantic_class') == 'copula' or _struct_cop)
 
 

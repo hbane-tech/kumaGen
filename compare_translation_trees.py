@@ -23,12 +23,82 @@ def extract_pos_from_text(pos_tree_str: str) -> List[str]:
 
 
 def calculate_tree_similarity(tree1: List[str], tree2: List[str]) -> float:
-    """Calculate similarity between two POS sequences (0-1 scale)."""
+    """Calculate similarity between two POS sequences using Sequence Matcher (0-1 scale)."""
     if not tree1 or not tree2:
         return 0.0
 
     matcher = SequenceMatcher(None, tree1, tree2)
     return matcher.ratio()
+
+
+def levenshtein_distance(tree1: List[str], tree2: List[str]) -> float:
+    """Calculate normalized edit distance (Levenshtein) between two POS sequences."""
+    if not tree1 or not tree2:
+        return 1.0 if tree1 != tree2 else 0.0
+
+    m, n = len(tree1), len(tree2)
+    dp = [[0] * (n + 1) for _ in range(m + 1)]
+
+    for i in range(m + 1):
+        dp[i][0] = i
+    for j in range(n + 1):
+        dp[0][j] = j
+
+    for i in range(1, m + 1):
+        for j in range(1, n + 1):
+            if tree1[i-1] == tree2[j-1]:
+                dp[i][j] = dp[i-1][j-1]
+            else:
+                dp[i][j] = 1 + min(dp[i-1][j], dp[i][j-1], dp[i-1][j-1])
+
+    max_dist = max(m, n)
+    return dp[m][n] / max_dist if max_dist > 0 else 0.0
+
+
+def jaccard_similarity(tree1: List[str], tree2: List[str]) -> float:
+    """Calculate Jaccard similarity between two POS sets."""
+    set1, set2 = set(tree1), set(tree2)
+    if not set1 or not set2:
+        return 0.0
+
+    intersection = len(set1 & set2)
+    union = len(set1 | set2)
+    return intersection / union if union > 0 else 0.0
+
+
+def distribution_distance(tree1: List[str], tree2: List[str]) -> float:
+    """Calculate distribution distance (Wasserstein) between POS frequency distributions."""
+    from collections import Counter
+
+    total = max(len(tree1), len(tree2))
+    if total == 0:
+        return 0.0
+
+    dist1 = Counter(tree1)
+    dist2 = Counter(tree2)
+    all_pos = set(dist1.keys()) | set(dist2.keys())
+
+    distance = sum(
+        abs((dist1.get(pos, 0) / len(tree1) if tree1 else 0) -
+            (dist2.get(pos, 0) / len(tree2) if tree2 else 0))
+        for pos in all_pos
+    )
+
+    return distance / len(all_pos) if all_pos else 0.0
+
+
+def quality_score(tree1: List[str], tree2: List[str]) -> float:
+    """
+    Calculate composite quality score combining multiple metrics.
+    Weights: similarity=0.4, depth=0.2, jaccard=0.2, edit_dist=0.2
+    """
+    sim = calculate_tree_similarity(tree1, tree2)
+    depth_penalty = 1.0 - min(abs(len(tree2) - len(tree1)) / max(len(tree1), 1), 1.0)
+    jacc = jaccard_similarity(tree1, tree2)
+    edit = 1.0 - levenshtein_distance(tree1, tree2)
+
+    weights = [0.4, 0.2, 0.2, 0.2]
+    return sum(w * m for w, m in zip(weights, [sim, depth_penalty, jacc, edit]))
 
 
 def get_tree_depth(pos_tree: List[str]) -> int:
@@ -55,23 +125,34 @@ def get_tree_complexity(pos_tree: List[str]) -> Dict:
 
 def compare_trees(french_pos: str, kuma_pos: str) -> Dict:
     """
-    Compare French input tree with kuma_mt output tree.
+    Compare French input tree with kuma_mt output tree using multiple metrics.
 
     Args:
         french_pos: POS tree from French input
         kuma_pos: POS tree from kuma_mt output
 
     Returns:
-        Dict with comparison metrics
+        Dict with comprehensive comparison metrics
     """
     fr_tree = extract_pos_from_text(french_pos)
     km_tree = extract_pos_from_text(kuma_pos)
 
     return {
+        # Basic metrics
         'french_depth': len(fr_tree),
         'kuma_depth': len(km_tree),
         'depth_change': len(km_tree) - len(fr_tree),
-        'similarity': calculate_tree_similarity(fr_tree, km_tree),
+
+        # Similarity metrics
+        'sequence_similarity': calculate_tree_similarity(fr_tree, km_tree),
+        'jaccard_similarity': jaccard_similarity(fr_tree, km_tree),
+        'edit_distance': levenshtein_distance(fr_tree, km_tree),
+        'distribution_distance': distribution_distance(fr_tree, km_tree),
+
+        # Composite
+        'quality_score': quality_score(fr_tree, km_tree),
+
+        # Complexity
         'french_complexity': get_tree_complexity(fr_tree),
         'kuma_complexity': get_tree_complexity(km_tree),
     }
@@ -101,7 +182,11 @@ def analyze_csv_file(csv_path: str):
 
     # Collect statistics
     total_comparisons = 0
-    similarity_scores = []
+    sequence_sims = []
+    jaccard_sims = []
+    edit_dists = []
+    dist_dists = []
+    quality_scores = []
     depth_changes = []
 
     # Display individual comparisons
@@ -115,7 +200,11 @@ def analyze_csv_file(csv_path: str):
 
         if french_pos and kuma_pos:
             comparison = compare_trees(french_pos, kuma_pos)
-            similarity_scores.append(comparison['similarity'])
+            sequence_sims.append(comparison['sequence_similarity'])
+            jaccard_sims.append(comparison['jaccard_similarity'])
+            edit_dists.append(comparison['edit_distance'])
+            dist_dists.append(comparison['distribution_distance'])
+            quality_scores.append(comparison['quality_score'])
             depth_changes.append(comparison['depth_change'])
             total_comparisons += 1
 
@@ -123,22 +212,37 @@ def analyze_csv_file(csv_path: str):
             print(f"    Status: {result['statut']}")
             print(f"    French tree:  {french_pos}")
             print(f"    Kuma tree:    {kuma_pos}")
-            print(f"    Similarity:   {comparison['similarity']:.2%}")
-            print(f"    Depth change: {comparison['depth_change']:+d} tokens")
+            print(f"    ─── Metrics ───")
+            print(f"    Sequence Similarity:    {comparison['sequence_similarity']:.2%}")
+            print(f"    Jaccard Similarity:     {comparison['jaccard_similarity']:.2%}")
+            print(f"    Edit Distance:          {comparison['edit_distance']:.2%}")
+            print(f"    Distribution Distance:  {comparison['distribution_distance']:.3f}")
+            print(f"    Quality Score:          {comparison['quality_score']:.2%}")
+            print(f"    Depth Change:           {comparison['depth_change']:+d} tokens")
             print()
 
     # Overall statistics
     print(f"\n{'='*80}")
-    print(f"📈 OVERALL STATISTICS")
+    print(f"📈 OVERALL STATISTICS (Across all comparisons)")
     print(f"{'='*80}\n")
 
-    if similarity_scores:
-        avg_similarity = sum(similarity_scores) / len(similarity_scores)
-        print(f"Average Tree Similarity:     {avg_similarity:.2%}")
-        print(f"Similarity Range:           {min(similarity_scores):.2%} - {max(similarity_scores):.2%}")
-        print(f"Median Depth Change:        {sorted(depth_changes)[len(depth_changes)//2]:+d} tokens")
-        print(f"Max Expansion:              {max(depth_changes):+d} tokens")
-        print(f"Max Compression:            {min(depth_changes):+d} tokens")
+    if sequence_sims:
+        print(f"SIMILARITY METRICS:")
+        print(f"  Sequence Similarity:        {sum(sequence_sims)/len(sequence_sims):.2%} (avg)")
+        print(f"  Range:                      {min(sequence_sims):.2%} - {max(sequence_sims):.2%}")
+        print(f"\n  Jaccard Similarity:         {sum(jaccard_sims)/len(jaccard_sims):.2%} (avg)")
+        print(f"  Range:                      {min(jaccard_sims):.2%} - {max(jaccard_sims):.2%}")
+        print(f"\n  Edit Distance:              {sum(edit_dists)/len(edit_dists):.2%} (avg)")
+        print(f"  Range:                      {min(edit_dists):.2%} - {max(edit_dists):.2%}")
+        print(f"\n  Distribution Distance:      {sum(dist_dists)/len(dist_dists):.3f} (avg)")
+        print(f"  Range:                      {min(dist_dists):.3f} - {max(dist_dists):.3f}")
+        print(f"\nCOMPOSITE QUALITY:")
+        print(f"  Quality Score:              {sum(quality_scores)/len(quality_scores):.2%} (avg)")
+        print(f"  Range:                      {min(quality_scores):.2%} - {max(quality_scores):.2%}")
+        print(f"\nDEPTH CHANGES:")
+        print(f"  Median Depth Change:        {sorted(depth_changes)[len(depth_changes)//2]:+d} tokens")
+        print(f"  Max Expansion:              {max(depth_changes):+d} tokens")
+        print(f"  Max Compression:            {min(depth_changes):+d} tokens")
 
     print(f"\n{'='*80}")
     print(f"⚠️  NEXT STEPS FOR FULL COMPARISON:")

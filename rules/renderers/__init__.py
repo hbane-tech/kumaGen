@@ -66,6 +66,12 @@ def tree_to_bambara(tree, G=None, grammar=None):
                            _ccomp_data.get('tam', ''),
                            _ccomp_data.get('O', ''),
                            _ccomp_data.get('V', ''))
+        elif _ccomp_data.get('type') == 'qualite':
+            # ccomp ADJ de qualité (la route EST LONGUE) : ko S ka ADJ —
+            # un seul 'ka', pas le redoublement équatif "S yé O yé" du
+            # bloc générique ci-dessous (réservé aux ccomp à tête NOUN).
+            _ccomp_str = j(_ko, _ccomp_data.get('S', ''), 'ka',
+                           _ccomp_data.get('adj_bm', ''))
         elif _ccomp_data.get('O'):
             _ccomp_str = j(_ko, _ccomp_data.get('S', ''),
                            _ccomp_data.get('tam', 'yé'),
@@ -249,11 +255,16 @@ def tree_to_bambara(tree, G=None, grammar=None):
         # TAM transitif : passé yé/ma, présent bɛ/tɛ. Verbe NU (pas V+ra).
         # yɛrɛ (soi-même) seulement pour les agentifs transitifs (se blesser),
         # pas pour les inhérents posture/soin (s'asseoir, se laver).
-        _refl_pron = tree.get('refl_pron', 'a')
-        _refl_v    = tree.get('refl_verb') or V
-        _refl_tam  = TAM  # respecte progressif (bɛ kà), passé (yé/ma), négatif (tɛ/ma)
-        _refl_self = 'yɛrɛ' if tree.get('refl_yere') else ''
-        result = j(S, _refl_tam, _refl_pron, _refl_self, _refl_v, *obl_strings, ADV)
+        # Avec V_ACT (se mettre à + V) : S TAM S yɛrɛ V V_ACT postpos
+        _refl_pron  = tree.get('refl_pron', 'a')
+        _refl_v     = tree.get('refl_verb') or V
+        _refl_tam   = TAM  # respecte progressif (bɛ kà), passé (yé/ma), négatif (tɛ/ma)
+        _refl_self  = 'yɛrɛ' if tree.get('refl_yere') else ''
+        _serial_pp  = tree.get('refl_serial_postpos', '')
+        if V_ACT:
+            result = j(S, _refl_tam, _refl_pron, _refl_self, _refl_v, V_ACT, _serial_pp, *obl_strings, ADV)
+        else:
+            result = j(S, _refl_tam, _refl_pron, _refl_self, _refl_v, *obl_strings, ADV)
 
     elif ct == 'qualitative':
         result = render_qualitative(tree, m, S, O, V, TAM, neg, tn,
@@ -289,22 +300,36 @@ def tree_to_bambara(tree, G=None, grammar=None):
         result = tree.get('final_string', '')
 
     elif ct == 'restrictive':
-        # Rule 6: ne...que restrictive → S TAM foyi yé ni ATTR tɛ
-        # Example: "tu ne serais qu'un pleutre" → i bɛ foyi yé ni sègɛ tɛ
+        # Rule 6: ne...que restrictive → S TAM [cop] foyi yé ni ATTR tɛ
+        # TAM tient compte du temps du copule (serais=cond → tɛ na, est=pres → tɛ)
         _attr = tree.get('restrictive_attr', '')
-        result = j(S, TAM, 'foyi', 'yé', 'ni', _attr, 'tɛ')
+        _rest_tense = tree.get('cop_tense') or tn
+        _rest_tam = _resolve_tam(_rest_tense, bool(tree.get('restrictive_neg')), G) or 'bɛ'
+        _cop_bm = (tree.get('cop_bm', '') or
+                   (f"[{tree.get('cop_lemma', '')}]" if tree.get('cop_lemma') else ''))
+        result = j(S, _rest_tam, _cop_bm, 'foyi', 'yé', 'ni', _attr, 'tɛ')
 
     elif ct == 'quest_ce_que':
-        # Rule 7: Qu'est-ce que → mún + modal serial
-        # Example: "Qu'est-ce qu'il pourrait t'arriver ?" → mún a mán tè wà yàn ?
+        # Rule 7: Qu'est-ce que → mún [S] TAM VERB(modal) ka [XCOMP_SUBJ] VERB(action) [XCOMP_OBJ] [obliques]
+        # Example: "Qu'est-ce qu'il pourrait t'arriver ?" → mún [_] bɛ se ka i sé [_] yèn ?
+        # SOV order: question word + [empty subject] + TAM + modal verb + 'ka' + xcomp subject + action verb + obliques
+        # Don't repeat O (interrogative word) — use XCOMP_SUBJ from xcomp, not O from root verb
         _quest_word = m.get('QUEST_WORD', 'mún')
-        result = j(_quest_word, S, TAM, V, V_ACT, *obl_strings)
+        _xcomp_subj = m.get('XCOMP_SUBJ', '')
+        result = j(_quest_word, S, TAM, V, 'ka', _xcomp_subj, V_ACT, *obl_strings)
 
     else:
         result = j(S, TAM, O, V, V_ACT, V_SUF, *obl_strings, ADV)
 
     # ── Marqueur temporel antéposé (quand/lorsque → tuma min, position FR) ────
-    if ct == 'temporal' and tree.get('temporal_marker') and result:
+    # Pas de garde sur ct=='temporal' : clause_type est souvent réécrit par
+    # des étapes plus tardives et plus spécifiques (passif, statif,
+    # équative...) qui ignorent temporal_marker — le garder sur ct=='temporal'
+    # uniquement perdait le marqueur dès qu'une de ces étapes s'appliquait
+    # (ex: "Quand cela fut fait" → ct='statif_past'/'simple', 'tuma min' jamais
+    # réinjecté). temporal_marker n'est posé qu'à un seul endroit
+    # (step3_verbe.py) et consommé qu'ici → aucun risque de double-préfixage.
+    if tree.get('temporal_marker') and result:
         result = j(tree['temporal_marker'], result)
 
     print(f"  ✂️  Clause 1 -> '{result}'")

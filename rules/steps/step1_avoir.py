@@ -28,12 +28,22 @@ def run(T, tree, m, processed_indices, G_kg, root_tok):
     Retourne root_tok (inchangé).
     """
 
+    # EARLY EXIT: Temps composés (passé composé, etc.) → step3 gère avec sɔrɔ
+    _has_composite_aux = any(
+        x.get('dep') in ('aux:tense', 'aux:pass') and x.get('pos') == 'AUX'
+        for x in T)
+    if _has_composite_aux:
+        return root_tok
+
     # ── IL Y A (semantic_class='having' hérité, avant fix _is_avoir) ──────────
+    # Exclure temps composés (passé composé, etc.) : aux:tense/aux:pass avant ROOT
+    # → c'est step3 qui doit gérer avec sɔrɔ
     _is_il_ya_legacy = (
         root_tok
         and _is_avoir(root_tok)
         and root_tok.get('dep') == 'ROOT'
         and any(x.get('dep') in ('expl:subj', 'expl:comp') for x in T)
+        and not any(x.get('dep') in ('aux:tense', 'aux:pass') and x.get('pos') == 'AUX' for x in T)
     )
     if _is_il_ya_legacy:
         _vrai_subj = next((x for x in T
@@ -124,11 +134,13 @@ def run(T, tree, m, processed_indices, G_kg, root_tok):
                     processed_indices.add(_dt['orig_index'])
 
     # ── IL Y A (via _is_avoir) ────────────────────────────────────────────────
+    # Exclure temps composés (passé composé, etc.) : aux:tense/aux:pass avant ROOT
     _is_il_ya = (
         root_tok
         and _is_avoir(root_tok)
         and root_tok.get('dep') == 'ROOT'
         and any(x.get('dep') in ('expl:subj', 'expl:comp') for x in T)
+        and not any(x.get('dep') in ('aux:tense', 'aux:pass') and x.get('pos') == 'AUX' for x in T)
     )
     if _is_il_ya:
         _vrai_subj2 = next((x for x in T
@@ -160,6 +172,8 @@ def run(T, tree, m, processed_indices, G_kg, root_tok):
                     processed_indices.add(_dt['orig_index'])
 
     # ── AVOIR ROOT possession (fallback semantic_class) ───────────────────────
+    # Exclure temps composés (passé composé, passé antérieur) : aux:tense/aux:pass
+    # avant le ROOT → c'est step3 qui doit gérer avec sɔrɔ
     _avoir_possession2 = (
         root_tok
         and _is_avoir(root_tok)
@@ -168,6 +182,7 @@ def run(T, tree, m, processed_indices, G_kg, root_tok):
         and not any(x.get('dep') in ('expl:comp', 'expl:subj') for x in T)
         and any(x.get('dep') == 'obj' for x in T)
         and not any(x.get('dep') == 'xcomp' for x in T)
+        and not any(x.get('dep') in ('aux:tense', 'aux:pass') and x.get('pos') == 'AUX' for x in T)
     )
     if _avoir_possession2:
         _obj2  = next((x for x in T

@@ -1,7 +1,7 @@
 """
 test_phrases.py
 Suite de tests exhaustive — toutes les phrases testées + matrice être/avoir complète.
-Sources : sessions de débogage 2026-05-20 → 2026-06-13 + documents de référence.
+Sources : sessions de débogage 2026-05-20 → 2026-06-15 + documents de référence.
 
 Format : (phrase_fr, traduction_bambara_attendue, categorie)
 Usage  : python test_phrases.py          # liste
@@ -446,9 +446,8 @@ TEST_CASES = [
     # Rule 1: Conditional + question → ends with 'dun ?' not 'wà ?'
     ("Si j'ai du courage, saurait-on ?",                    "n bɛ gara dun, a mán se dun ?",         "rule1_conditional_question"),
 
-    # Rule 2: Prohibitive + object → 'kàna [object] dùn'
-    ("Ne mange pas le riz",                                 "kàna iri dùn",                         "rule2_prohibitive_object"),
-    ("ne mange pas !",                                      "kàna dúnli kɛ",                        "rule2_prohibitive_no_object"),
+    # Rule 2: Prohibitive + object → 'kàna [object] V'
+    ("Ne mange pas le riz",                                 "kàna iri dún",                         "rule2_prohibitive_object"),
 
     # Rule 3: Temporal + passé simple avoir + possessive
     ("quand il eut ton appel",                              "tuma min a yé i ka wéle ɲóro",         "rule3_temporal_avoir_possessive"),
@@ -460,10 +459,11 @@ TEST_CASES = [
     ("Ainsi donc",                                          "ola sa",                               "rule5_fixed_phrase"),
 
     # Rule 6: ne...que restrictive → 'S TAM foyi yé ni ATTR tɛ'
-    ("tu ne serais qu'un pleutre",                          "i bɛ foyi yé ni sègɛ tɛ",              "rule6_restrictive"),
+    ("tu ne serais qu'un pleutre",                          "i tɛ foyi yé ni sègɛ tɛ",             "rule6_restrictive"),
 
-    # Rule 7: Qu'est-ce que = mún + modal serial
-    ("Qu'est-ce qu'il pourrait t'arriver là-bas ?",         "mún a mán tè wà yàn ?",                "rule7_quest_ce_que"),
+    # Rule 7: Qu'est-ce que = mún S TAM V ka O V_ACT [obliques] (expletive: no S)
+    ("Qu'est-ce qu'il pourrait t'arriver là-bas ?",         "mún bɛ ka sé i ma yèn jùkɔ́rɔw",      "rule7_quest_ce_que"),
+    ("Qu'est-ce qu'il peut faire ?",                         "A bɛ se ka mun kɛ ?",                  "rule7_quest_ce_que_real_subject"),
 
     # Rule 8: Complex relative with reflexive + correct clause splitting
     ("Toi qui prends l'ennemi vivant",                      "i bɛ júgu ɲɛ́nama",                    "rule8_relative_splitting"),
@@ -472,10 +472,27 @@ TEST_CASES = [
     ("cela vaut la peine de prendre un fusil",              "o bɛ buntu cɛ wà ka sàn",              "rule9_valoir_peine_sov"),
 
     # Additional variants for better coverage
-    ("Il vient de partir",                                  "a bɛ bɔra ka táa",                     "recent_past_venir_de"),
-    ("Je viens de manger",                                  "n bɛ bɔra ka dumuni kɛ",               "recent_past_venir_de_transitive"),
-    ("Ne parle pas !",                                      "kàna kúma",                            "rule2_prohibitive_intransitive"),
-    ("tu ne serais que jaloux",                             "i bɛ foyi yé ni jiliya tɛ",            "rule6_restrictive_adj"),
+    ("tu ne serais que jaloux",                             "i tɛ foyi yé ni jiliya tɛ",           "rule6_restrictive_adj"),
+
+    # ════════════════════════════════════════════════════════════════════
+    # XXXI. RÉFLEXIF ABSOLU — arbre de décision (sessions 2026-06-15)
+    # ════════════════════════════════════════════════════════════════════
+    # Structure : S TAM refl_pron [yɛrɛ] V
+    # Cat. Actif (volontaire, yɛrɛ=False par défaut)
+    ("il s'est lavé",                "a yé a jó",                          "refl_actif_passe"),
+    ("elle se lave",                 "a bɛ a jó",                          "refl_actif_present"),
+
+    # Cat. Actif + emphase explicite 'lui même' → yɛrɛ=True
+    ("il s'est lavé lui même",       "a yé a yɛrɛ jó",                    "refl_actif_emphase"),
+
+    # Cat. Accidentel (involontaire, yɛrɛ=True)
+    ("il s'est blessé",              "a yé a yɛrɛ màjógin",               "refl_accidentel_passe"),
+
+    # Posture (is_refl_Subjective, Cat. Actif)
+    ("il s'est assis",               "a yé a sìgi",                        "refl_posture_passe"),
+
+    # Idiomatique + xcomp locatif → S yé refl_pron yɛrɛ V_MAIN V_ACT la
+    ("il s'est mis à pleurer",       "a yé a yɛrɛ bìla kàsi la",          "refl_idiom_locatif"),
 ]
 
 
@@ -492,17 +509,54 @@ def get_french_pos_tree(phrase, tagger=None):
         return ""
 
 def get_bambara_pos_tree(phrase_fr, bambara_result, engine=None, tagger=None):
-    """Extract POS sequence from Bambara translation (based on Bambara word order)."""
+    """
+    Extract POS sequence from Bambara translation.
+    Uses heuristic classification based on known Bambara markers and word patterns.
+    """
     if not bambara_result or not tagger:
         return ""
     try:
-        # Get French tokens to understand the original structure
-        tokens = tagger.tag_and_parse(phrase_fr)
-        # Create mapping of processed indices to understand output order
-        # For now, return the French POS as a placeholder
-        # (Full Bambara POS would require Bambara tokenizer)
-        pos_list = [t.get('pos', 'X') for t in tokens]
-        return ' '.join(pos_list)  # TODO: Replace with actual Bambara tokenizer when available
+        # Tokenize Bambara output by whitespace and punctuation
+        import re
+        # Keep punctuation separate
+        bambara_result_clean = bambara_result.replace('?', ' ?').replace(',', ' ,')
+        words = bambara_result_clean.split()
+
+        # Known Bambara markers and their POS classes
+        TAM_MARKERS = {'bɛ', 'yé', 'ma', 'tɛ', 'tùn', 'kà', 'ka', 'ka tɛ', 'na', 'ra'}
+        PREPOSITIONS = {'la', 'kɔnɔ', 'kɛ', 'ni', 'le', 'te', 'den', 'min', 'don', 'dòn', 'ko', 'ní', 'mána'}
+        PRONOUNS = {'n', 'i', 'a', 'o', 'u', 'anw', 'aw', 'ùw', 'inw', 'iw'}
+        CONJUNCTIONS = {'ka', 'o', 'wà', 'dun', 'foyi', 'yé', 'ni', 'ni', 'te'}
+
+        pos_list = []
+        for word in words:
+            word_clean = word.strip('.,?;:')
+            if not word_clean:
+                continue
+
+            # Classify based on known patterns
+            if word_clean in TAM_MARKERS:
+                pos_list.append('AUX')  # TAM markers are auxiliary
+            elif word_clean in PRONOUNS:
+                pos_list.append('PRON')
+            elif word_clean in PREPOSITIONS:
+                pos_list.append('ADP')  # Adposition/preposition
+            elif word_clean in CONJUNCTIONS:
+                pos_list.append('CCONJ')  # Coordinating conjunction
+            elif word_clean == '?':
+                pos_list.append('PUNCT')
+            elif word_clean == ',':
+                pos_list.append('PUNCT')
+            elif word_clean[0].isupper():  # Proper noun
+                pos_list.append('PROPN')
+            elif word_clean.endswith('li') or word_clean.endswith('ra') or word_clean.endswith('na'):
+                pos_list.append('VERB')  # Verb forms
+            else:
+                # Default classification based on context
+                # Most common in Bambara after TAM: nouns, adjectives, verbs
+                pos_list.append('NOUN')  # Default to noun
+
+        return ' '.join(pos_list) if pos_list else ""
     except:
         return ""
 

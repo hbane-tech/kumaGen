@@ -95,8 +95,9 @@ def run(T, tree, m, processed_indices, G_kg, root_tok,
                     processed_indices.add(_ex['orig_index'])
 
     if _cop_is_on_root:
-        if tree.get('clause_type') in ('identificatory', 'ownership', 'locative'):
-            pass
+        if tree.get('clause_type') in ('identificatory', 'ownership', 'locative', 'restrictive'):
+            if tree.get('clause_type') == 'restrictive' and root_tok:
+                processed_indices.add(root_tok['orig_index'])
 
         elif (root_tok and root_tok.get('is_passive')
               and 'VerbForm=Part' in str(root_tok.get('morph', ''))

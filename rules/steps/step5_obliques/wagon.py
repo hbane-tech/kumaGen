@@ -121,12 +121,23 @@ def append(tok_item, T, m, processed_indices, G_kg, NX_G,
             _compound_amods.append(c_amod)
             absorbed_amods.add(c_amod['orig_index'])
     clean_amod_toks = [a for a in amod_toks if a['orig_index'] not in absorbed_amods]
+    # Quantifier amods (e.g. tous→bɛɛ) postposés directement sur head_base,
+    # sans adj_man. Les autres amods ADJ passent par adj_man normalement.
+    _quant_amods  = [a for a in clean_amod_toks if a.get('role') == 'quantifier']
+    _distrib_dets = [x for x in obl_chunk
+                     if x.get('dep') == 'det' and x.get('role') == 'distributive_each']
+    _regular_amods = [a for a in clean_amod_toks if a.get('role') != 'quantifier']
     mod_compiled = j(*[
         adj_man(a.get('bm') or f"[{a.get('lemma')}]",
                 is_classifying=a.get('is_classifying_adj', False)) if a.get('pos') == 'ADJ'
         else (a.get('bm') or f"[{a.get('lemma')}]")
-        for a in clean_amod_toks + _compound_amods
+        for a in _regular_amods + _compound_amods
     ])
+    for a in _quant_amods:
+        head_base = j(head_base, a.get('bm') or f"[{a.get('lemma')}]")
+    for d in _distrib_dets:
+        _d_bm = d.get('bm') or 'ò'
+        head_base = j(head_base, _d_bm, head_base)
 
     if demo_tok and compound_base:
         suff_val = G_kg.get('demonstrative_suffix', 'in') or 'in'

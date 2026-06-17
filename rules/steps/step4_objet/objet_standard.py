@@ -126,10 +126,10 @@ def run(T, tree, m, processed_indices, G_kg, NX_G,
                         and any(d.get('role') == 'interrogative'
                                 for d in T if d.get('head_index') == x['orig_index'])), None)
     if not obj_tok and _phrase_interrog:
-        # Exclure les sujets grammaticaux (nsubj) du fallback objet
+        # Exclure les sujets grammaticaux et les têtes de ccomp (gérées par step7)
         obj_tok = next((x for x in T
                         if x.get('pos') == 'NOUN'
-                        and x.get('dep') not in ('nsubj', 'nsubj:pass')), None)
+                        and x.get('dep') not in ('nsubj', 'nsubj:pass', 'ccomp')), None)
 
     # PROPN/NOUN dep='ROOT' secondaire (spaCy double ROOT) → traiter comme objet
     # ex: elle ne parle pas bambara → bambara dep='ROOT' is_root=False
@@ -182,13 +182,14 @@ def run(T, tree, m, processed_indices, G_kg, NX_G,
         return
 
     o_chunk = get_bounded_chunk_tokens(obj_tok['orig_index'], NX_G, processed_indices)
-    print(f"DEBUG o_chunk={[(t.get('surface'), t.get('dep'), t.get('orig_index')) for t in o_chunk]}")
 
-    if tree.get('clause_type') == 'noun_phrase':
-        _has_any_nmod = any(x.get('dep') == 'nmod' for x in o_chunk)
-        o_chunk = [x for x in o_chunk if x.get('dep') != 'obl:mod']
-        if not _has_any_nmod:
-            o_chunk = [x for x in o_chunk if x.get('dep') not in ('nmod', 'obl', 'case')]
+    # Marqueur temporel introducteur ('depuis'→kabini, case+role=temporal) :
+    # placé en préfixe du syntagme nominal une fois celui-ci construit, pas
+    # supprimé. Un noun_phrase fragment ("depuis quelques années" seul, sans
+    # clause hôte pour porter l'oblique) le perdait sinon entièrement.
+    _temporal_case_marker = next(
+        (x for x in o_chunk if x.get('dep') == 'case'
+         and x.get('role') == 'temporal' and x.get('bm')), None)
 
     o_chunk = sorted([x for x in o_chunk if x.get('pos') not in ('PUNCT', 'SYM')],
                      key=lambda x: x['orig_index'])
@@ -199,6 +200,8 @@ def run(T, tree, m, processed_indices, G_kg, NX_G,
     tete_tok = next((x for x in o_chunk if x == obj_tok or x.get('dep') == 'ROOT'), obj_tok)
     _has_nmod_chain = any(x.get('dep') == 'nmod' for x in o_chunk)
     objet_elements  = []
+    _postpos_amods  = []
+    _distrib_det    = None
 
     if _has_nmod_chain and tete_tok:
         _resolved = _build_genitive_chain(tete_tok, T, G_kg)
@@ -228,6 +231,14 @@ def run(T, tree, m, processed_indices, G_kg, NX_G,
             _amods      = [x for x in o_chunk if x.get('dep') == 'amod'
                            and x.get('head_index') == tete_tok['orig_index']]
             _postpos_amods = [x for x in _amods if x.get('role') == 'quantifier']
+            # Quantificateur déterminant (quelques, plusieurs...) : même
+            # postposition que les amod quantifiants ('tous les jours' →
+            # tumaw bɛɛ), mais dep='det' donc absent de _amods ci-dessus —
+            # sans ça 'quelques' (et tout DET role=quantifier) disparaissait.
+            _postpos_dets = [x for x in o_chunk if x.get('dep') == 'det'
+                             and x.get('role') == 'quantifier'
+                             and x.get('head_index') == tete_tok['orig_index']
+                             and x.get('bm')]
             _other_amods   = [x for x in _amods if x not in _postpos_amods]
             _pre_amods  = [a for a in _other_amods if a['orig_index'] < tete_tok['orig_index']]
             _post_amods = [a for a in _other_amods if a['orig_index'] > tete_tok['orig_index']]
@@ -273,7 +284,21 @@ def run(T, tree, m, processed_indices, G_kg, NX_G,
                         tete_bm = j(_poss_bm, _gen_mk, tete_bm)
                     processed_indices.add(_poss_obj['orig_index'])
 
-            _global_postpos = _postpos_amods
+            # Pluraliser le NOM avant la postposition du quantificateur :
+            # 'tous les jours' → tumaw bɛɛ (et non tuma bɛɛw)
+            if _postpos_amods or _postpos_dets:
+                _det_for_plur = next((x for x in T if x.get('dep') == 'det'
+                                      and x.get('head_index') == obj_tok['orig_index']), None)
+                _det_plur = bool(_det_for_plur and (
+                    'Number=Plur' in str(_det_for_plur.get('morph', ''))
+                    or str(_det_for_plur.get('surface', '')).lower() in ('les', 'des')))
+                if ((obj_tok.get('is_plural') or _det_plur)
+                        and not tete_bm.endswith('w')
+                        and not tete_bm.startswith('[')
+                        and obj_tok.get('pos') not in ('PRON', 'PROPN')):
+                    tete_bm += 'w'
+
+            _global_postpos = _postpos_amods + _postpos_dets
 
             _amod_indices = {x['orig_index'] for x in _amods} | {tete_tok['orig_index']}
             _root_orig_o = root_tok['orig_index'] if root_tok else -1
@@ -323,6 +348,16 @@ def run(T, tree, m, processed_indices, G_kg, NX_G,
             for _a in _global_postpos:
                 tete_bm = j(tete_bm, _a.get('bm') or f"[{_a.get('lemma')}]")
                 processed_indices.add(_a['orig_index'])
+
+            # Distributif (chaque jour → jour ò jour)
+            _distrib_det = next((x for x in o_chunk
+                                 if x.get('dep') == 'det'
+                                 and x.get('role') == 'distributive_each'
+                                 and x.get('head_index') == tete_tok['orig_index']), None)
+            if _distrib_det:
+                _d_bm = _distrib_det.get('bm') or 'ò'
+                tete_bm = j(tete_bm, _d_bm, tete_bm)
+                processed_indices.add(_distrib_det['orig_index'])
             objet_elements = [tete_bm]
 
     for _ct in o_chunk:
@@ -343,6 +378,10 @@ def run(T, tree, m, processed_indices, G_kg, NX_G,
             objet_elements.append(_interrog_det.get('bm'))
         processed_indices.add(_interrog_det['orig_index'])
 
+    if _temporal_case_marker:
+        objet_elements.insert(0, _temporal_case_marker.get('bm'))
+        processed_indices.add(_temporal_case_marker['orig_index'])
+
     m['O'] = j(*[x for x in objet_elements if str(x).strip() != 'ni'])
 
     _is_deictique_pres = (tree.get('clause_type') == 'presentative'
@@ -358,6 +397,7 @@ def run(T, tree, m, processed_indices, G_kg, NX_G,
         or str(_obj_det.get('surface', '')).lower() in ('les', 'des')))
     if ((obj_tok.get('is_plural') or _det_is_plural)
             and not str(m['O']).endswith('w')
+            and not (_postpos_amods or _distrib_det)
             and (tree.get('clause_type') != 'presentative' or _is_deictique_pres)):
         if obj_tok.get('pos') not in ('PRON', 'PROPN'):
             m['O'] = f"{m['O']}w"

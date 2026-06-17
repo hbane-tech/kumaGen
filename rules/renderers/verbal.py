@@ -84,13 +84,14 @@ def render_verb_serial(tree, m, S, O, V, V_ACT, TAM, obl_strings, G):
                          and V_ACT)
 
     if _is_venir_de_verb:
-        # "Il vient de partir" → a bɛ bɔra ka táa (with V_ACT transitivty applied)
+        # "Il vient de partir" → a bɔra ka táa (passé récent : pas de TAM, bɔra encode le passé)
         if O:
-            return j(S, TAM, 'bɔra', 'ka', O, _com_str, V_ACT, *_other_obls)
+            return j(S, 'bɔra', 'ka', O, _com_str, V_ACT, *_other_obls)
         elif _xcomp_needs_li:
-            _xv = V_ACT + 'li' if (V_ACT and not V_ACT.endswith('li')) else V_ACT
-            return j(S, TAM, 'bɔra', 'ka', _xv, 'kɛ', _com_str, *_other_obls)
-        return j(S, TAM, 'bɔra', 'ka', V_ACT, _com_str, *_other_obls)
+            _action_noun = _xcomp_tok.get('action_noun') if _xcomp_tok else None
+            _xv = _action_noun or (V_ACT + 'li' if (V_ACT and not V_ACT.endswith('li')) else V_ACT)
+            return j(S, 'bɔra', 'ka', _xv, 'kɛ', _com_str, *_other_obls)
+        return j(S, 'bɔra', 'ka', V_ACT, _com_str, *_other_obls)
 
     # ── Sérielle de MOUVEMENT : V1 de mouvement (partir, aller, venir) + V2 ──
     # → S V1 [O] V2, SANS 'ka'. V1 garde sa forme autonome : au passé positif,
@@ -114,11 +115,17 @@ def render_verb_serial(tree, m, S, O, V, V_ACT, TAM, obl_strings, G):
         return j(S, TAM, _v1, O, _com_str, V_ACT, *_other_obls)
 
     if O:
+        _o_xcomp = m.get('O_XCOMP', '')
+        if _o_xcomp:
+            return j(S, TAM, V, 'ka', O, _o_xcomp, V_ACT, _com_str, *_other_obls)
         return j(S, TAM, V, 'ka', O, _com_str, V_ACT, *_other_obls)
     elif _xcomp_needs_li:
         # Pas de COD → forme nominalisée Vli kɛ (même avec comitative)
         _xv = V_ACT + 'li' if (V_ACT and not V_ACT.endswith('li')) else V_ACT
         return j(S, TAM, V, 'ka', _xv, 'kɛ', _com_str, *_other_obls)
+    elif m.get('O_XCOMP'):
+        _o_xcomp = m['O_XCOMP']
+        return j(S, TAM, V, 'ka', _o_xcomp, V_ACT, _com_str, *_other_obls)
     return j(S, TAM, V, 'ka', V_ACT, _com_str, *_other_obls)
 
 
@@ -187,10 +194,13 @@ def render_simple(tree, m, S, O, V, V_ACT, V_SUF, ADV, TAM, ct,
 
     # not _ccomp_str : un ccomp (ko…) tient lieu d'objet → pas de nominalisation
     # Vli la (sinon montrer QUE… donnerait 'ɲásili la' et larguerait le ko…).
+    # consumption/preparation exclus comme 'having' (INTRANS_SC) : ces classes
+    # passent par _is_support_nom (V nu + la/kɛ), jamais par V+li.
     _is_action_verb = (V and not _v_already_la and not O and not _ccomp_str
                        and ct == 'simple'
                        and not _root_is_resultative
                        and _root_sc not in INTRANS_SC
+                       and _root_sc not in ('consumption', 'preparation')
                        and _root_sc != 'other'
                        and _root_it in ('ACTION', 'nominalized', 'support'))
     _is_intrans_com = (V and not _v_already_la and not O and _has_com_obl and ct == 'simple'
@@ -213,10 +223,14 @@ def render_simple(tree, m, S, O, V, V_ACT, V_SUF, ADV, TAM, ct,
     # 'la' (présent) / 'kɛ' (progressif/perfectif). Gaté sur le semantic_class
     # (KG, stable, indépendant de la transitivité française et des timeouts Ollama).
     # Les vrais verbes (saying=kúma…) ne sont PAS ici → restent nus.
+    # consumption/preparation exclus (ex: boire→jí) : sans COD, S TAM V nu,
+    # jamais 'V la' — le solide (manger/cuisiner) est déjà nominalisé en
+    # O/V par step7_final.py avant d'arriver ici (O non-vide → ce bloc ne
+    # s'applique pas) ; seul le liquide atterrit ici, et doit rester nu.
     _is_support_nom = (V and not _v_already_la and not O and not _ccomp_str
                        and ct == 'simple'
                        and (not _root_is_resultative or _has_avoir_aux)
-                       and _root_sc in ('having', 'consumption', 'preparation'))
+                       and _root_sc == 'having')
 
     if _is_action_verb:
             _v_nom = V + 'li'
@@ -281,6 +295,13 @@ def render_simple(tree, m, S, O, V, V_ACT, V_SUF, ADV, TAM, ct,
 def render_relative_topic(tree, m, S, O, V, V_ACT, obl_strings):
     _rel_neg = tree.get('neg', False)
     _rel_tam = 'tɛ' if _rel_neg else 'bɛ'
+    # Pas de prédicat principal séparé (V/V_ACT/O tous vides) : le sujet à
+    # relative EST l'énoncé complet (ex: adresse/vocatif "Toi qui prends
+    # l'ennemi vivant"), pas de second prédicat ', o V' à ajouter. Sans cette
+    # garde, V='' déclenchait V_past = ''+'ra' = 'ra' (un suffixe résultatif
+    # collé sur rien) → "..., o ra" parasite.
+    if not V and not V_ACT and not O:
+        return j(S, *obl_strings)
     if V_ACT:
         return j(S, ',', 'o', _rel_tam, V, 'ka', O, V_ACT, *obl_strings)
     V_past = V if V.endswith('ra') or V.endswith('na') else (
@@ -348,7 +369,7 @@ def render_misc(ct, S, O, V, V_ACT, V_SUF, ADV, TAM, neg, obl_strings, tree, m):
         # Les verbes intransitifs ne se nominalisent pas (ne parle pas → kàna kúma)
         _cmd_v = V
         _cmd_root = next((t for t in tree.get('_tokens', []) if t.get('is_root')), None)
-        if not O and not V_ACT and _cmd_root:
+        if not O and not V_ACT and not obl_strings and _cmd_root:
             _cmd_v = _purp_verb_bm(_cmd_root, tree.get('_tokens', []), set())
         _cmd_sc = _cmd_root.get('semantic_class', '') if _cmd_root else ''
         _cmd_lemma = (_cmd_root.get('lemma', '') or '').lower() if _cmd_root else ''

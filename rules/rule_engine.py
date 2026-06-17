@@ -97,6 +97,14 @@ class RuleEngine:
         g['quantifier_words'] = {r['surface']: r['bm']
                                   for r in quantifier_rows if r.get('surface')}
 
+        distrib_rows = self._q(
+            "MATCH (f:FunctionWord) WHERE f.role IN ['distributive_each','distributive_one'] "
+            "AND f.lang = 'fr' RETURN f.surface AS surface, f.bm AS bm, f.role AS role")
+        g['distributive_each'] = {r['surface']: r['bm']
+                                   for r in distrib_rows if r.get('role') == 'distributive_each'}
+        g['distributive_one']  = {r['surface']: r['bm']
+                                   for r in distrib_rows if r.get('role') == 'distributive_one'}
+
         # Noms relationnels/inalienables → juxtaposition directe sans 'ka'
         # (parenté, rôles, parties du corps)
         _rel_rows = self._q(

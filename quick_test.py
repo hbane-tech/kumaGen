@@ -5,7 +5,7 @@ from pipeline.translation_engine import TranslationEngine
 db = Neo4jClient()
 engine = TranslationEngine(db)
 
-sentence = "Toi qui prends l'ennemi vivant"
-print(f"Testing: {sentence}\n")
-result = engine.translate(sentence)
-print(f"\nFinal result: {result['bambara']}")
+for sentence in ["chaque jour", "tous les jours", "chacun d entre vous"]:
+    print(f"Testing: {sentence}")
+    result = engine.translate(sentence)
+    print(f"Result: {result['bambara']}\n")
