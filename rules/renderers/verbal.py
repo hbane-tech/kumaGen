@@ -111,7 +111,17 @@ def render_verb_serial(tree, m, S, O, V, V_ACT, TAM, obl_strings, G):
                 and _v1 and not _v1.endswith(('ra', 'na', 'la'))):
             _v1 += ('na' if _v1.endswith('n')
                     else 'la' if _v1[-1] in ('o', 'u', 'ɔ') else 'ra')
+            # Motion verb in past: check if V_ACT is transitive without object
+            if V_ACT and not O and _xcomp_tok:
+                _xcomp_sc = _xcomp_tok.get('semantic_class', '')
+                if _xcomp_sc not in INTRANS_SC:
+                    return j(S, _v1, O, _com_str, V_ACT, 'kɛ', *_other_obls)
             return j(S, _v1, O, _com_str, V_ACT, *_other_obls)
+        # Motion verb in present/other: check if V_ACT is transitive without object
+        if V_ACT and not O and _xcomp_tok:
+            _xcomp_sc = _xcomp_tok.get('semantic_class', '')
+            if _xcomp_sc not in INTRANS_SC:
+                return j(S, TAM, _v1, O, _com_str, V_ACT, 'la', *_other_obls)
         return j(S, TAM, _v1, O, _com_str, V_ACT, *_other_obls)
 
     if O:

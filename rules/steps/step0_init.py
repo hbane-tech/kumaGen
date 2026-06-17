@@ -145,7 +145,8 @@ def run(T, G_kg):
         ), None)
 
     # Fallback 4 : 'acl' + 'de' infinitive (spaCy uses 'acl' instead of 'xcomp')
-    # "cela vaut la peine incroyable de prendre un fusil" → 'prendre' (dep=acl)
+    # "cela vaut la peine incroyable de prendre un fusil" → 'prendre' (dep=acl, head=peine)
+    # Acl can be child of root verb OR child of root's object noun
     # Treat as verb_serial like xcomp cases (V ka V structure)
     if not xcomp_verb_tok and root_tok:
         _has_de_mark = any(
@@ -153,11 +154,16 @@ def run(T, G_kg):
             and str(t.get('surface', '')).lower() == 'de'
             for t in T)
         if _has_de_mark:
+            # Look for acl verb that is child of root OR child of root's object
+            _root_obj_idx = next((t.get('orig_index') for t in T
+                                  if t.get('dep') == 'obj'
+                                  and t.get('head_index') == root_tok['orig_index']), None)
             xcomp_verb_tok = next((
                 t for t in T
                 if t.get('pos') == 'VERB'
                 and t.get('dep') == 'acl'
-                and t.get('head_index') == root_tok['orig_index']
+                and (t.get('head_index') == root_tok['orig_index']
+                     or (_root_obj_idx and t.get('head_index') == _root_obj_idx))
                 and 'VerbForm=Inf' in str(t.get('morph', ''))
                 and t.get('orig_index') not in _relcl_idx
             ), None)
