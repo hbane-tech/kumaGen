@@ -89,9 +89,13 @@ def render_interrogative(tree, m, S, O, V, TAM, obl_strings, G):
         return j(S, TAM, O, _v_display, *_clean_obls,
                  _alt_tok.get('bm', ''), S, TAM, _conj_o_bm, _conj_v_bm, '?')
 
+    # Check for locative argument (marks motion-like interrogatives)
+    _has_locative = any(t.get('role') == 'locative' or t.get('dep') in ('obl:arg', 'obl')
+                        for t in _tokens if t.get('bm_marker') or t.get('bm'))
     _v_is_motion = next((t for t in _tokens
                          if t.get('is_root') and t.get('semantic_class') == 'motion'), None)
-    if _v_is_motion and _v_display:
+    # Treat verbs with locative arguments as motion-like for word order
+    if (_v_is_motion or (_has_locative and _v_display)):
         _loc_marker = next((t.get('bm_marker', '') for t in _tokens
                             if t.get('role') == 'locative'
                             and t.get('dep') == 'case'
