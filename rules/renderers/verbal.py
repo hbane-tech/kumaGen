@@ -126,6 +126,14 @@ def render_verb_serial(tree, m, S, O, V, V_ACT, TAM, obl_strings, G):
     elif m.get('O_XCOMP'):
         _o_xcomp = m['O_XCOMP']
         return j(S, TAM, V, 'ka', _o_xcomp, V_ACT, _com_str, *_other_obls)
+    elif V_ACT and _xcomp_tok:
+        # V_ACT sans objet : si transitif, ajouter marqueur de fin 'la' (présent) ou 'kɛ' (passé)
+        # ex: "Il va manger" → a bɛ wá dún la (pas a bɛ wá dún)
+        _xcomp_sc = _xcomp_tok.get('semantic_class', '')
+        _is_transitive_act = (_xcomp_sc not in INTRANS_SC)
+        if _is_transitive_act:
+            _end_marker = 'la' if TAM == 'bɛ' else 'kɛ'
+            return j(S, TAM, V, 'ka', V_ACT, _end_marker, _com_str, *_other_obls)
     return j(S, TAM, V, 'ka', V_ACT, _com_str, *_other_obls)
 
 
