@@ -389,10 +389,12 @@ def run(T, tree, m, processed_indices, G_kg, NX_G, root_tok,
                     processed_indices.add(_sa['orig_index'])
                 _s_amod_indices = {a['orig_index'] for a in _s_amods} | {subj_tok['orig_index']}
                 _root_orig = root_tok['orig_index'] if root_tok else -1
+                # Find conjoined nouns: either as children of amods, root, or directly of subject
                 _s_conjs = [x for x in T
                             if x.get('dep') == 'conj'
                             and x['orig_index'] not in processed_indices
                             and (x.get('head_index') in _s_amod_indices
+                                 or x.get('head_index') == subj_tok['orig_index']  # Direct child of subject
                                  or (x.get('head_index') == _root_orig
                                      and x.get('pos') in ('NOUN', 'PROPN')
                                      and x['orig_index'] < _root_orig))]
