@@ -134,7 +134,7 @@ def _lefff_tense(surface: str) -> Optional[str]:
     codes = _lefff_verb_codes().get(surface.lower())
     if not codes:
         return None
-    leadings = {c[0] for c in codes}
+    leadings = {c[0] for c in codes if c}  # Skip empty strings
     for prefix, tense in (('I', 'hab'), ('C', 'fut'), ('F', 'fut'), ('J', 'past')):
         if prefix in leadings:
             return tense
