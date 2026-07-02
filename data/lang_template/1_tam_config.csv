@@ -1,0 +1,18 @@
+tense,neg,bm,description,lang
+# SYSTÈME TAM — Marqueurs Temps-Aspect-Mode
+# tense   : pres | past | fut | hab | plup | prog | cond | imp | sub
+# neg     : false (positif) | true (négatif)
+# bm      : le marqueur dans la langue cible
+# lang    : code ISO 639-3 de la langue cible (ex: wo=Wolof, ff=Fulfulde, ha=Hausa)
+pres,false,REMPLIR,présent positif,XX
+pres,true,REMPLIR,présent négatif,XX
+past,false,REMPLIR,passé positif,XX
+past,true,REMPLIR,passé négatif,XX
+fut,false,REMPLIR,futur positif,XX
+fut,true,REMPLIR,futur négatif,XX
+hab,false,REMPLIR,habituel/imparfait positif,XX
+hab,true,REMPLIR,habituel/imparfait négatif,XX
+plup,false,REMPLIR,plus-que-parfait positif,XX
+plup,true,REMPLIR,plus-que-parfait négatif,XX
+prog,false,REMPLIR,progressif positif,XX
+prog,true,REMPLIR,progressif négatif,XX

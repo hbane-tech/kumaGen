@@ -1,10 +1,10 @@
 """
 rules/rule_engine.py
-RuleEngine : charge la grammaire KG et orchestre build_tree + tree_to_bambara.
+RuleEngine : charge la grammaire KG et orchestre la traduction.
+Les règles sont dans le KG ; build_tree applique la logique de remplissage de slots.
 """
 from rules.core import _GRAMMAR_FALLBACK
 from rules.build_tree import build_tree
-# from rules.tree_to_bambara import tree_to_bambara
 from rules.renderers import tree_to_bambara
 
 class RuleEngine:
@@ -119,7 +119,7 @@ class RuleEngine:
             "MATCH (p:Preposition) WHERE p.role = 'genitive' "
             "RETURN p.bm_marker AS m LIMIT 1")
         g['comitative_marker'] = self._single_marker(
-            "MATCH (f:FunctionWord) WHERE f.role = 'comitative' "
+            "MATCH (f:FunctionWord) WHERE f.role = 'comitative' AND f.bm IS NOT NULL "
             "RETURN f.bm AS m LIMIT 1")
         g['agent_postposition'] = self._single_marker(
             "MATCH (p:Preposition) WHERE p.role = 'agent' "
@@ -152,7 +152,149 @@ class RuleEngine:
         g['existence_loc_marker'] = self._single_marker(
             "MATCH (f:FunctionWord) WHERE f.role = 'existence_loc' "
             "RETURN f.bm AS m LIMIT 1") or 'yàn'
-        
+        g['template_placeholder_prefix'] = self._single_marker(
+            "MATCH (fw:FunctionWord {lang:'bm'}) WHERE fw.role = 'template_placeholder_prefix' "
+            "RETURN fw.bm AS m LIMIT 1") or 'voir'
+        g['template_slot_open'] = self._single_marker(
+            "MATCH (fw:FunctionWord {lang:'bm'}) WHERE fw.role = 'template_slot_open' "
+            "RETURN fw.bm AS m LIMIT 1") or '{'
+
+        g['question_suffix']    = self._single_marker(
+            "MATCH (f:FunctionWord {lang:'bm'}) WHERE f.role = 'question_suffix' "
+            "RETURN f.bm AS m LIMIT 1")
+        g['question_suffix_bare'] = self._single_marker(
+            "MATCH (f:FunctionWord {lang:'bm'}) WHERE f.role = 'question_suffix_bare' "
+            "RETURN f.bm AS m LIMIT 1")
+        g['reflexive_self_marker'] = self._single_marker(
+            "MATCH (f:FunctionWord {lang:'bm'}) WHERE f.role = 'reflexive_self' "
+            "RETURN f.bm AS m LIMIT 1")
+        g['reflexive_pron_default'] = self._single_marker(
+            "MATCH (f:FunctionWord {lang:'bm'}) WHERE f.role = 'reflexive_pron_default' "
+            "RETURN f.bm AS m LIMIT 1")
+        g['f3_separator'] = self._single_marker(
+            "MATCH (f:FunctionWord {lang:'bm'}) WHERE f.role = 'f3_separator' "
+            "RETURN f.bm AS m LIMIT 1")
+        g['question_marker_yala'] = self._single_marker(
+            "MATCH (f:FunctionWord {lang:'bm'}) WHERE f.role = 'question_marker_yala' "
+            "RETURN f.bm AS m LIMIT 1")
+
+        # Listes sémantiques pour la coordination
+        _coord_rule = self._q("MATCH (r:TransformRule {name:'coord_nominalize_intrans_types', lang:'bm'}) RETURN r LIMIT 1")
+        if _coord_rule:
+            _cr = _coord_rule[0]['r']
+            g['coord_intrans_types'] = set((_cr.get('intrans_types') or '').split('|'))
+            g['coord_exclude_sc']    = set((_cr.get('exclude_sc') or '').split('|'))
+            g['coord_intrans_sc']    = set((_cr.get('intrans_sc') or '').split('|'))
+            g['coord_excl_verb_sfx'] = tuple(s for s in (_cr.get('exclude_verb_suffixes') or '').split('|') if s)
+        else:
+            g['coord_intrans_types'] = set()
+            g['coord_exclude_sc']    = set()
+
+        g['biological_sc_name'] = self._single_marker(
+            "MATCH (fw:FunctionWord {lang:'bm'}) WHERE fw.role = 'semantic_class_name' AND fw.name = 'biological_sc_name' "
+            "RETURN fw.bm AS m LIMIT 1") or 'biological'
+        # Règles typographiques depuis KG FunctionWord
+        _typo_from = self._q("MATCH (fw:FunctionWord {lang:'bm'}) WHERE fw.role = 'typo_fix_from' RETURN fw.bm AS bm, fw.name AS name")
+        _typo_to   = self._q("MATCH (fw:FunctionWord {lang:'bm'}) WHERE fw.role = 'typo_fix_to'   RETURN fw.bm AS bm, fw.name AS name")
+        g['typo_rules'] = [(f['bm'], t['bm']) for f, t in
+                           zip(sorted(_typo_from, key=lambda x: x['name']),
+                               sorted(_typo_to,   key=lambda x: x['name']))
+                           if f.get('bm') and t.get('bm')]
+
+        g['pronoun_3pl_coord']  = self._single_marker(
+            "MATCH (fw:FunctionWord {lang:'bm'}) WHERE fw.role = 'pronoun_3pl_coord' "
+            "RETURN fw.bm AS m LIMIT 1")
+        g['pronoun_3sg_default'] = self._single_marker(
+            "MATCH (fw:FunctionWord {lang:'bm'}) WHERE fw.role = 'pronoun_3sg_default' "
+            "RETURN fw.bm AS m LIMIT 1")
+        g['action_pres_suffix'] = self._single_marker(
+            "MATCH (fw:FunctionWord {lang:'bm'}) WHERE fw.role = 'action_pres_suffix' "
+            "RETURN fw.bm AS m LIMIT 1")
+        g['verbal_coord_inf']   = self._single_marker(
+            "MATCH (fw:FunctionWord {lang:'bm'}) WHERE fw.role = 'verbal_coord_inf' "
+            "RETURN fw.bm AS m LIMIT 1")
+        g['infinitive_marker']  = self._single_marker(
+            "MATCH (fw:FunctionWord {lang:'bm'}) WHERE fw.role = 'infinitive_marker' "
+            "RETURN fw.bm AS m LIMIT 1")
+        g['verbal_coordinator'] = self._single_marker(
+            "MATCH (fw:FunctionWord {lang:'bm'}) WHERE fw.role = 'verbal_coordinator' "
+            "RETURN fw.bm AS m LIMIT 1")
+        # Ensemble autonomous_sc depuis KG (advcl)
+        _auto_row = self._q("MATCH (r:TransformRule {name:'advcl_autonomous_sc', lang:'bm'}) RETURN r.autonomous_sc AS sc LIMIT 1")
+        g['autonomous_sc'] = set((_auto_row[0]['sc'] or '').split('|')) if _auto_row and _auto_row[0].get('sc') else set()
+
+        g['locative_suffix'] = self._single_marker(
+            "MATCH (p:Preposition) WHERE p.role = 'locative' "
+            "RETURN p.bm_marker AS m LIMIT 1")
+
+        g['demonstrative_prefix'] = self._single_marker(
+            "MATCH (fw:FunctionWord {lang:'bm'}) WHERE fw.role = 'demonstrative_prefix' "
+            "RETURN fw.bm AS m LIMIT 1")
+        # Surfaces relatives et expletif FR depuis KG
+        _rel_rows = self._q("MATCH (fw:FunctionWord) WHERE fw.role = 'relative_pron_surface' RETURN fw.bm AS bm")
+        g['relative_pron_surfaces'] = {r['bm'].lower() for r in _rel_rows if r.get('bm')}
+        _expl_rows = self._q("MATCH (fw:FunctionWord) WHERE fw.role = 'expletive_fr_surface' RETURN fw.bm AS bm")
+        g['expletive_fr_surfaces'] = {r['bm'].lower() for r in _expl_rows if r.get('bm')}
+        # Lemmes impersonnels depuis ImpersonalRule KG
+        _imp_rows = self._q("MATCH (r:ImpersonalRule {lang:'bm'}) RETURN r.trigger_lemma AS l")
+        g['impersonal_trigger_lemmas'] = {r['l'].lower() for r in _imp_rows if r.get('l')}
+
+        g['plural_noun_suffix']    = self._single_marker(
+            "MATCH (fw:FunctionWord {lang:'bm'}) WHERE fw.role = 'plural_noun_suffix' "
+            "RETURN fw.bm AS m LIMIT 1")
+        g['adj_epith_suffix']      = self._single_marker(
+            "MATCH (fw:FunctionWord {lang:'bm'}) WHERE fw.role = 'adj_epith_suffix' "
+            "RETURN fw.bm AS m LIMIT 1")
+        g['already_pres_marker']   = self._single_marker(
+            "MATCH (fw:FunctionWord {lang:'bm'}) WHERE fw.role = 'already_pres_marker' "
+            "RETURN fw.bm AS m LIMIT 1")
+        g['already_past_marker']   = self._single_marker(
+            "MATCH (fw:FunctionWord {lang:'bm'}) WHERE fw.role = 'already_past_marker' "
+            "RETURN fw.bm AS m LIMIT 1")
+        g['already_neg_marker']    = self._single_marker(
+            "MATCH (fw:FunctionWord {lang:'bm'}) WHERE fw.role = 'already_neg_marker' "
+            "RETURN fw.bm AS m LIMIT 1")
+        g['pron_1sg']              = self._single_marker(
+            "MATCH (fw:FunctionWord {lang:'bm'}) WHERE fw.role = 'pron_1sg' "
+            "RETURN fw.bm AS m LIMIT 1")
+        g['avoir_mal_fr']          = self._single_marker(
+            "MATCH (fw:FunctionWord {lang:'bm'}) WHERE fw.role = 'avoir_mal_fr' "
+            "RETURN fw.bm AS m LIMIT 1")
+        g['plural_fr_ending']      = self._single_marker(
+            "MATCH (fw:FunctionWord {lang:'bm'}) WHERE fw.role = 'plural_fr_ending' "
+            "RETURN fw.bm AS m LIMIT 1")
+        g['interrogative_who']     = self._single_marker(
+            "MATCH (fw:FunctionWord {lang:'bm'}) WHERE fw.role = 'interrogative_who' "
+            "RETURN fw.bm AS m LIMIT 1")
+        # Suffixes adj_man et a_strip_exclusions depuis MorphoRule
+        _adj_rule = g.get('morpho_rules', {}).get('adjective_epithet', {})
+        g['adj_epithet_suffix'] = _adj_rule.get('suffix', '')
+        # Surcharger la constante core.py
+        if g['adj_epithet_suffix']:
+            import rules.core as _core_mod
+            _core_mod._ADJ_EPITH_SUFFIX = g['adj_epithet_suffix']
+        _strip_rule = g.get('morpho_rules', {}).get('a_strip_exclusions', {})
+        g['a_strip_exclusions'] = tuple(s for s in (_strip_rule.get('exclude_endings', '') or '').split('|') if s)
+
+        g['comparative_particle'] = self._single_marker(
+            "MATCH (f:FunctionWord {lang:'bm'}) WHERE f.role = 'comparative_particle' "
+            "RETURN f.bm AS m LIMIT 1")
+        g['coord_verb_marker'] = self._single_marker(
+            "MATCH (f:FunctionWord {lang:'bm'}) WHERE f.role = 'coord_verb' "
+            "RETURN f.bm AS m LIMIT 1")
+        g['coord_action_suffix'] = self._single_marker(
+            "MATCH (f:FunctionWord {lang:'bm'}) WHERE f.role = 'coord_action_suffix' "
+            "RETURN f.bm AS m LIMIT 1")
+        g['privative_verb_marker'] = self._single_marker(
+            "MATCH (f:FunctionWord {lang:'bm'}) WHERE f.role = 'privative_verb_marker' "
+            "RETURN f.bm AS m LIMIT 1")
+
+        # Charger TOUS les FunctionWord bambara comme liste accessible par rôle
+        _fw_bm_rows = self._q(
+            "MATCH (fw:FunctionWord {lang:'bm'}) RETURN fw.role AS role, fw.bm AS bm, fw.name AS name")
+        g['function_words'] = [{'role': r.get('role', ''), 'bm': r.get('bm', ''), 'name': r.get('name', '')}
+                                for r in _fw_bm_rows if r.get('role') and r.get('bm')]
+
         g['demonstrative_surfaces'] = {
             r['s'].lower() for r in self._q(
                 "MATCH (f:FunctionWord) WHERE f.role = 'demonstrative' "
@@ -177,7 +319,7 @@ class RuleEngine:
             g['tam_default']      = ''
             g['tam_future']       = ''
             g['progressive_tams'] = set()
-            print("     TAM: KG vide — fallback _TAM_HARDCODED actif.")
+            print("     TAM: KG vide — valeurs TAM non disponibles.")
 
         # Pronoms et FunctionWords pour content_question (résolution pronoms inversés)
         pron_rows = self._q(
@@ -194,12 +336,186 @@ class RuleEngine:
                           'role': r.get('r', 'content')}
                       for r in fw_rows if r.get('s')}
         
+        # ── Phase 2 : Règles morphologiques ─────────────────────────────────────
+        morpho_rows = self._q(
+            "MATCH (m:MorphoRule) WHERE m.lang = 'bm' "
+            "RETURN m.name AS name, m.suffix AS suffix, "
+            "m.suffix_default AS suffix_default, "
+            "m.suffix_after_n AS suffix_after_n, "
+            "m.suffix_after_vowel AS suffix_after_vowel, "
+            "m.suffix_after_o_u_o AS suffix_after_o_u_o, "
+            "m.trigger_n AS trigger_n, m.trigger_vowel AS trigger_vowel, "
+            "m.pos_support AS pos_support, m.neg_support AS neg_support, "
+            "m.hab_prefix AS hab_prefix, "
+            "m.support AS support, m.condition AS condition")
+        g['morpho_rules'] = {r['name']: r for r in morpho_rows if r.get('name')}
+
+        # Raccourcis — valeurs lues depuis KG, exposées pour les steps
+        _res = g['morpho_rules'].get('resultative', {})
+        g['resultative_trigger_n']     = _res.get('trigger_n', '')
+        g['resultative_trigger_vowel'] = _res.get('trigger_vowel', '')
+        g['resultative_suffix_n']      = _res.get('suffix_after_n', '')
+        g['resultative_suffix_vowel']  = _res.get('suffix_after_vowel', '')
+        g['resultative_suffix']        = _res.get('suffix_default', '')
+        _stat = g['morpho_rules'].get('statif', {})
+        g['statif_suffix']             = _stat.get('suffix', '')
+        g['statif_pos_support']        = _stat.get('pos_support', '')
+        g['statif_neg_support']        = _stat.get('neg_support', '')
+        g['statif_hab_prefix']         = _stat.get('hab_prefix', '')
+        _nom = g['morpho_rules'].get('nominalization_action', {})
+        g['nominalization_suffix']     = _nom.get('suffix', '')
+        g['nominalization_support']    = _nom.get('support', '')
+        g['nominalization_verb_suffix'] = _nom.get('suffix', '')  # alias court
+        g['nominalization_verb_suffix_alt'] = self._single_marker(
+            "MATCH (fw:FunctionWord {lang:'bm'}) WHERE fw.role = 'nominalization_verb_suffix_alt' "
+            "RETURN fw.bm AS m LIMIT 1")
+        g['possession_past_verb'] = self._single_marker(
+            "MATCH (fw:FunctionWord {lang:'bm'}) WHERE fw.role = 'possession_past_verb' "
+            "RETURN fw.bm AS m LIMIT 1")
+        g['refl_serial_postpos'] = self._single_marker(
+            "MATCH (fw:FunctionWord {lang:'bm'}) WHERE fw.role = 'refl_serial_postpos' "
+            "RETURN fw.bm AS m LIMIT 1")
+        _refl_emph = self._q("MATCH (fw:FunctionWord {lang:'bm'}) WHERE fw.role = 'refl_emphasis_surface' RETURN fw.bm AS bm")
+        g['refl_emphasis_surfaces'] = {r['bm'].lower() for r in _refl_emph if r.get('bm')}
+        g['participial_to_suffix'] = self._single_marker(
+            "MATCH (fw:FunctionWord {lang:'bm'}) WHERE fw.role = 'participial_to_suffix' "
+            "RETURN fw.bm AS m LIMIT 1")
+        g['meteo_motion_default'] = self._single_marker(
+            "MATCH (fw:FunctionWord {lang:'bm'}) WHERE fw.role = 'meteo_motion_default' "
+            "RETURN fw.bm AS m LIMIT 1")
+        g['privative_pron_pred'] = self._single_marker(
+            "MATCH (fw:FunctionWord {lang:'bm'}) WHERE fw.role = 'privative_pron_pred' "
+            "RETURN fw.bm AS m LIMIT 1")
+        g['privative_noun_pred'] = self._single_marker(
+            "MATCH (fw:FunctionWord {lang:'bm'}) WHERE fw.role = 'privative_noun_pred' "
+            "RETURN fw.bm AS m LIMIT 1")
+        _tmp_pfx = self._q("MATCH (fw:FunctionWord {lang:'bm'}) WHERE fw.role = 'temporal_prefix_bm' RETURN fw.bm AS bm")
+        g['temporal_prefix_markers'] = {r['bm'] for r in _tmp_pfx if r.get('bm')}
+        _res_vowel = self._single_marker(
+            "MATCH (fw:FunctionWord {lang:'bm'}) WHERE fw.role = 'resultative_vowel_trigger' "
+            "RETURN fw.bm AS m LIMIT 1")
+        g['resultative_vowel_trigger'] = set((_res_vowel or '').split('|')) if _res_vowel else set()
+        # INTRANS_SC depuis KG
+        _intrans_row = self._q("MATCH (r:TransformRule {name:'intrans_sc', lang:'bm'}) RETURN r.intrans_sc AS sc LIMIT 1")
+        if _intrans_row and _intrans_row[0].get('sc'):
+            import rules.core as _core_mod2
+            _core_mod2.INTRANS_SC = frozenset(_intrans_row[0]['sc'].split('|'))
+            g['intrans_sc'] = _core_mod2.INTRANS_SC
+        g['possessive_pron_marker'] = self._single_marker(
+            "MATCH (fw:FunctionWord {lang:'bm'}) WHERE fw.role = 'possessive_pron_marker' "
+            "RETURN fw.bm AS m LIMIT 1")
+        # _AVOIR_LEMMAS depuis KG
+        _avoir_rows = self._q("MATCH (fw:FunctionWord) WHERE fw.role = 'avoir_lemma' RETURN fw.bm AS bm")
+        if _avoir_rows:
+            import rules.core as _core_mod3
+            _core_mod3._AVOIR_LEMMAS = {r['bm'] for r in _avoir_rows if r.get('bm')}
+            g['avoir_lemmas'] = _core_mod3._AVOIR_LEMMAS
+        # Suffixes exclusion adj_man depuis MorphoRule
+        _adj_excl_rule = g.get('morpho_rules', {}).get('adjective_epithet', {})
+        g['adj_exclude_suffixes'] = tuple(s for s in (_adj_excl_rule.get('exclude_suffixes', '') or '').split('|') if s)
+        if g['adj_exclude_suffixes']:
+            import rules.core as _core_excl
+            _core_excl._ADJ_EXCLUDE_SUFFIXES = g['adj_exclude_suffixes']
+
+
+        # ── Phase 3 : Templates de clause ────────────────────────────────────
+        tpl_rows = self._q(
+            "MATCH (t:ClauseTemplate) WHERE t.lang = 'bm' "
+            "RETURN t.clause_type AS ct, t.template AS tpl")
+        g['clause_templates'] = {r['ct']: r['tpl'] for r in tpl_rows if r.get('ct')}
+
+        # ── Phase 4 : Comportements sémantiques ──────────────────────────────
+        # Chargés via traversée SemanticClass -[HAS_BEHAVIOR]-> SemanticBehavior
+        # Garantit la cohérence : un seul endroit pour ajouter un comportement (KG)
+        beh_rows = self._q("""
+            MATCH (sc:SemanticClass)-[:HAS_BEHAVIOR]->(sb:SemanticBehavior {lang:'bm'})
+            RETURN sc.name AS sc,
+                   sb.behavior_type AS bt,
+                   sb.behavior_value AS bv,
+                   sb.extra AS extra
+            UNION
+            MATCH (sb:SemanticBehavior {lang:'bm'})
+            WHERE NOT EXISTS { (:SemanticClass)-[:HAS_BEHAVIOR]->(sb) }
+            RETURN sb.sem_class AS sc, sb.behavior_type AS bt,
+                   sb.behavior_value AS bv, sb.extra AS extra
+        """)
+        g['semantic_behaviors'] = {}
+        for r in beh_rows:
+            if r.get('sc') and r.get('bt'):
+                g['semantic_behaviors'].setdefault(r['sc'], {})[r['bt']] = {
+                    'value': r.get('bv'), 'extra': r.get('extra')}
+
+        # ── Toutes les règles KG : zéro hardcode Python ──────────────────────────
+        def _load_rule_nodes(label):
+            rows = self._q(f"MATCH (r:{label} {{lang:'bm'}}) RETURN r")
+            return [r['r'] for r in rows] if rows else []
+
+        g['kg_pattern_rules']    = _load_rule_nodes('PatternRule')
+        g['kg_slot_fill_rules']  = _load_rule_nodes('SlotFillRule')
+        g['kg_transform_rules']  = _load_rule_nodes('TransformRule')
+        g['kg_coord_rules']      = _load_rule_nodes('CoordRule')
+        g['kg_modal_rules']      = _load_rule_nodes('ModalRule')
+        g['kg_oblique_rules']    = _load_rule_nodes('ObliqueFillRule')
+        g['kg_nominal_rules']    = _load_rule_nodes('NominalChainRule')
+        g['kg_possession_rules'] = _load_rule_nodes('PossessionRule')
+        g['kg_aux_rules']        = _load_rule_nodes('AuxTemporalRule')
+        g['kg_advcl_rules']      = _load_rule_nodes('Advcl_Rule')
+        g['kg_graph_walk_rules'] = _load_rule_nodes('GraphWalkRule')
+        g['kg_privative_rules']  = _load_rule_nodes('PrivativeRule')
+        g['kg_impersonal_rules'] = _load_rule_nodes('ImpersonalRule')
+
+        # ── Graphe de règles complet : FeaturePattern→ConstructionRule→ClauseTemplate
+        rule_rows = self._q("""
+            MATCH (fp:FeaturePattern)-[:TRIGGERS]->(cr:ConstructionRule)
+            OPTIONAL MATCH (cr)-[:USES_TEMPLATE]->(ct:ClauseTemplate)
+            OPTIONAL MATCH (cr)-[:APPLIES_MORPHO]->(mr:MorphoRule)
+            RETURN fp.feature AS feature, fp.value AS value,
+                   fp.context AS context, fp.neg AS neg,
+                   cr.name AS rule_name, cr.priority AS priority,
+                   cr.refl_treatment AS refl_treatment,
+                   cr.motion_verb AS motion_verb,
+                   cr.prefix AS prefix, cr.tam_value AS tam_value,
+                   cr.preserves_clause_type AS preserves_ct,
+                   ct.template AS template, ct.word_order AS word_order,
+                   ct.pos_form AS pos_form, ct.neg_form AS neg_form,
+                   ct.hab_form AS hab_form, ct.past_form AS past_form,
+                   mr.name AS morpho_name,
+                   mr.suffix_default AS morpho_sfx,
+                   mr.suffix_after_n AS morpho_sfx_n,
+                   mr.suffix_after_o_u_o AS morpho_sfx_ou,
+                   mr.pos_support AS morpho_pos_sup,
+                   mr.neg_support AS morpho_neg_sup
+            ORDER BY cr.priority DESC
+        """)
+        # Index par (feature, value) → règle prioritaire
+        g['kg_rules'] = {}
+        for r in rule_rows:
+            key = (r.get('feature', ''), str(r.get('value', '')))
+            ctx = r.get('context') or ''
+            full_key = (key[0], key[1], ctx)
+            if full_key not in g['kg_rules']:
+                g['kg_rules'][full_key] = r
+            # Aussi indexer sans context pour lookup générique
+            if key not in g['kg_rules']:
+                g['kg_rules'][key] = r
+
+        # Index rapide clause_type → template (sans requête Neo4j au moment du rendu)
+        g['clause_type_templates'] = {
+            r.get('value'): r.get('template', '')
+            for r in rule_rows
+            if r.get('feature') == 'clause_type' and r.get('template')
+        }
+
         print(f"  ✅ Grammar loaded from KG — "
               f"loc={len(g['locative_markers'])} "
               f"tmp={len(g['temporal_markers'])} "
               f"gen='{g['genitive_marker']}' "
               f"com='{g['comitative_marker']}' "
-              f"tam='{g['tam_default']}'")
+              f"tam='{g['tam_default']}' "
+              f"morpho={len(g['morpho_rules'])} "
+              f"tpl={len(g['clause_templates'])} "
+              f"behaviors={len(g['semantic_behaviors'])} "
+              f"rules={len(g['kg_rules'])}")
 
     def apply(self, tokens_or_tree, frame):
         if not tokens_or_tree:
@@ -209,7 +525,7 @@ class RuleEngine:
             self._last_tree = tokens_or_tree
             return tree_to_bambara(tokens_or_tree, grammar=self.grammar)
         tree = build_tree(tokens_or_tree, grammar=self.grammar)
-        self._last_tree = tree   # exposé pour l'évaluation
-        if tree.get('local_clause_type') == 'relative_nominal':
+        self._last_tree = tree
+        if tree.get('local_clause_type') in ('relative_nominal', 'impersonal'):
             return tree.get('final_string', '')
         return tree_to_bambara(tree, grammar=self.grammar)

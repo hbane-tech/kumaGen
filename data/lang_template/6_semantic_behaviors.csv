@@ -1,0 +1,23 @@
+sem_class,behavior_type,behavior_value,extra,lang,description
+# COMPORTEMENTS PAR CLASSE SÉMANTIQUE
+# Définit comment chaque classe de verbes se comporte dans la langue cible.
+# sem_class     : classe sémantique française (motion, biological, posture, etc.)
+# behavior_type : reflexive | past_form | relcl_form | construction
+# behavior_value: valeur du comportement (pronominal, resultative, statif_len_don, etc.)
+# extra         : valeur supplémentaire (ex: verbe de mouvement pour météo)
+#
+# COMPORTEMENTS RÉFLEXIFS (avec 'se')
+biological,reflexive,REMPLIR,,XX,"biologique (se réveiller): pronominal=verbe nu / refl_absolute=S+reflexif+V"
+posture,reflexive,REMPLIR,,XX,"posture (s'asseoir): posture=réflexif sans yɛrɛ / pronominal=verbe nu"
+perception,reflexive,REMPLIR,,XX,"perception (se regarder): actif=réflexif avec yɛrɛ"
+spontaneous,reflexive,REMPLIR,,XX,"spontané (se blesser): accidentel=réflexif avec yɛrɛ"
+#
+# COMPORTEMENT AU PASSÉ
+motion,past_form,REMPLIR,,XX,"mouvement passé: resultative=V+sfx / transitive=yé+V"
+motion,relcl_form,REMPLIR,,XX,"mouvement en relative passée: resultative / tam_standard"
+#
+# CONSTRUCTIONS SPÉCIALES
+meteorological,construction,REMPLIR,REMPLIR,XX,"météo: phenomenon_motion=phénomène+TAM+verbe_mouvement (extra=verbe_mouvement)"
+statif_emotionnel,construction,REMPLIR,,XX,"état émotionnel (peur/honte): statif_len_don / autre"
+experiencer_phys,construction,REMPLIR,,XX,"sensation physique (faim/soif): experiencer_la=phénomène+TAM+SUBJ / autre"
+passive,construction,REMPLIR,,XX,"passif FR: statif_len_don / resultative / tam_standard"

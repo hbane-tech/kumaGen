@@ -23,6 +23,14 @@ def run(T, tree, m, processed_indices, G_kg, NX_G, root_tok):
             advcl.handle(tok_item, T, m, processed_indices, G_kg)
             continue
 
+        # acl with temporal SCONJ mark (quand/lorsque on ROOT noun) → temporal clause
+        if (tok_item.get('dep') == 'acl'
+                and any(x.get('dep') == 'mark' and x.get('pos') == 'SCONJ'
+                        and x.get('head_index') == tok_item['orig_index']
+                        for x in T)):
+            advcl.handle(tok_item, T, m, processed_indices, G_kg)
+            continue
+
         # acl:relcl dans la boucle obliques
         if (tok_item.get('dep') == 'acl:relcl'
                 and tok_item['orig_index'] not in processed_indices):
@@ -101,7 +109,9 @@ def run(T, tree, m, processed_indices, G_kg, NX_G, root_tok):
         elif _role == 'comitative':
             comitative.handle(tok_item, T, m, processed_indices, G_kg, NX_G)
 
-        elif _role == 'privative':
+        elif _role == 'privative' and tok_item.get('dep') != 'ROOT':
+            # Privative oblique (ex: "travailler sans argent" → obl + case)
+            # Exclure ROOT : "ce légume est sans cuisson" → copula + privative pred
             privatif.handle(tok_item, T, m, processed_indices, G_kg, dep_case)
 
         elif (_marker_val in _tmp_markers
@@ -111,8 +121,23 @@ def run(T, tree, m, processed_indices, G_kg, NX_G, root_tok):
                   and (tok_item.get('role') in ('temporal', 'temporal_already')
                        or tok_item.get('pos') == 'ADV'))):
             # advmod : role temporal explicite OU ADV (hier, demain, maintenant...)
+            # "pour 20 minutes" : obl:mod + nummod + marker vide → marqueur durée 'yé'
+            if (not _marker_val
+                    and tok_item.get('dep') == 'obl:mod'
+                    and any(x.get('dep') == 'nummod'
+                            and x.get('head_index') == tok_item['orig_index']
+                            for x in T)):
+                _marker_val = G_kg.get('comitative_end_marker', 'yé') or 'yé'
             wagon.append(tok_item, T, m, processed_indices, G_kg, NX_G,
                          'temporal', _marker_val, dep_case)
+
+        elif (dep_case and dep_case.get('role') in ('gerund', 'genitive')
+              and tree.get('venir_source_locatif')
+              and tok_item.get('dep') == 'obl:arg'
+              and tok_item.get('pos') == 'NOUN'):
+            # "venir de [lieu commun]" → locatif 'la' (ex: Je viens de l'école)
+            wagon.append(tok_item, T, m, processed_indices, G_kg, NX_G,
+                         'locative', 'la', dep_case)
 
         elif (dep_case and dep_case.get('dep') == 'case'
               and tok_item.get('dep') in ('obl', 'obl:arg', 'nmod')):

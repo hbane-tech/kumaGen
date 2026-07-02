@@ -41,7 +41,8 @@ from pipeline.frame_parser import FrameParser
 from kg.retriever import KGRetriever
 from embeddings.word2vec_encoder import encode as _embed
 from rules import build_tree, tree_to_bambara, RuleEngine
-from config.settings import LLM_BACKEND, LLM_MODEL, GEMINI_API_KEY, GEMINI_MODEL
+from config.settings import (LLM_BACKEND, LLM_MODEL, GEMINI_API_KEY, GEMINI_MODEL,
+                             OLLAMA_GENERATE_URL)
 import os
 from embeddings.word2vec_encoder import _get_model
 
@@ -67,6 +68,7 @@ class TranslationEngine:
         self._warmup_llm()
         # Inject LLM classifiers into grammar so build_tree steps can call them
         self.rule_engine.grammar['_classify_refl_verb'] = self._classify_refl_verb
+        self.rule_engine.grammar['_classify_privative_noun'] = self._classify_privative_noun
 
     def _warmup_llm(self):
         """Premier appel léger pour charger le modèle en mémoire dès le démarrage.
@@ -79,7 +81,7 @@ class TranslationEngine:
                    'options': {'num_predict': 1}}
         for attempt, wait in enumerate([90, 120], start=1):
             try:
-                r = _req.post("http://localhost:11434/api/generate",
+                r = _req.post(OLLAMA_GENERATE_URL,
                               json=payload, timeout=wait)
                 r.raise_for_status()
                 print(f"✅  LLM Ollama prêt ({model})")
@@ -122,7 +124,7 @@ class TranslationEngine:
             }
             try:
                 r = requests.post(
-                    "http://localhost:11434/api/generate",
+                    OLLAMA_GENERATE_URL,
                     json=payload,
                     timeout=_timeout)
                 return r.json().get("response", "").strip()
@@ -241,9 +243,9 @@ class TranslationEngine:
                 is_match = resp.startswith('Y')
                 if is_match:
                     c['final_score'] = c.get('final_score', 0) + 10
-                    print(f"     [CONTEXT BOOST] '{gloss}' → {context_type}: +10 pts")
-                else:
-                    print(f"     [CONTEXT SKIP] '{gloss}' → {context_type}: no match")
+                    # print(f"     [CONTEXT BOOST] '{gloss}' → {context_type}: +10 pts")
+                # else:
+                    # print(f"     [CONTEXT SKIP] '{gloss}' → {context_type}: no match")
             except Exception as e:
                 print(f"     ⚠️  Context boost failed for '{gloss}': {e}")
 
@@ -385,7 +387,8 @@ class TranslationEngine:
     def _rerank_with_llm(self, token_lemma: str,
                          candidates: list,
                          tok_pos: str = 'NOUN',
-                         context_tokens: list = None) -> list:
+                         context_tokens: list = None,
+                         modifier_lemmas: list = None) -> list:
         """
         Use LLM to pick the best candidate sense (0-100 point scale).
 
@@ -447,7 +450,13 @@ class TranslationEngine:
             return candidates
 
         if all_embed:
-            rerank_pool = candidates
+            # Pool serré pour all_embed : 5 pts max (vs 10 avant).
+            # Un écart de 10 pts inclut des candidats sémantiquement éloignés
+            # (ex: "réellement" → hàáli/très au lieu de bɛ́rɛ/vraiment).
+            rerank_pool = [c for c in candidates
+                           if top_score - c['final_score'] <= 5]
+            if len(rerank_pool) < 2:
+                rerank_pool = candidates[:3]  # fallback : top 3 si pool trop petit
         elif is_context_sensitive:
             rerank_pool = [c for c in candidates
                            if top_score - c['final_score'] <= 15]
@@ -463,21 +472,30 @@ class TranslationEngine:
             for i, c in enumerate(rerank_pool[:10])
         )
 
+        _modifier_hint = (
+            f'This word is modified by: {", ".join(modifier_lemmas)}.\n'
+            f'Prefer the option whose French meaning specifically incorporates '
+            f'these modifiers, even if compound.\n'
+            if modifier_lemmas else ''
+        )
+        _simple_pref = (
+            '' if modifier_lemmas
+            else 'Prefer simple direct meanings over compound or specialized ones.\n'
+        )
         prompt = (
-            f'You are a semantic disambiguation expert.\n\n'
+            f'You are a French-Bambara lexicon expert.\n\n'
             f'Sentence: "{self._current_sentence}"\n'
-            f'Word to translate: "{token_lemma}"\n\n'
-            f'The options below are Bambara translations with their '
-            f'French meanings.\n'
-            f'Choose the one whose French meaning is semantically '
-            f'closest to "{token_lemma}" as used in this sentence.\n\n'
-            f'Consider the full sentence context carefully.\n'
-            f'Prefer simple direct meanings over compound or '
-            f'specialized ones.\n'
-            f'If none match well, choose the semantically '
-            f'closest option.\n\n'
+            f'Word to translate: "{token_lemma}"\n'
+            f'{_modifier_hint}'
+            f'Each option below is a Bambara word with its French gloss.\n'
+            f'Choose the option whose French gloss is the most DIRECT SYNONYM '
+            f'of "{token_lemma}" — same denotation, not just same semantic field.\n'
+            f'Example: "réellement" → prefer "vraiment/effectivement" over "très/tout à fait".\n'
+            f'Example: "rapidement" → prefer "vite/rapidement" over "tôt/bientôt".\n'
+            f'{_simple_pref}'
+            f'If none match well, choose the closest synonym.\n\n'
             f'Options:\n{options}\n\n'
-            f'Reply with ONLY the number (1-10).'
+            f'Reply with ONLY the number (1-{min(10, len(rerank_pool))}).'
         )
 
         try:
@@ -505,36 +523,46 @@ class TranslationEngine:
         """
         Filter out false positives using LLM semantic validation.
 
-        Ultra-simple: Only penalize candidates that are semantically invalid.
-        - Text match or embedding ≥50 pts: validate with LLM
+        Validation threshold: ≥ 20 pts (covers both exact/substring matches
+        and embedding results). Perfect exact (100 pts) is always trusted.
+        No text-bypass: LaBSE + LLM decide, not substring heuristics.
         - Valid: keep as-is
-        - Invalid: penalize -30 pts (drop below 50 pts)
+        - Invalid: penalize → 0 pts
+        - LLM unavailable: penalize → score - 15 pts (conservative)
+
+        FALLBACK: If all top candidates fail validation, restore the best one
+        to 50% of its original score (vs full disqualification at 0 pts).
+        This handles cases like "faire" (bare verb) matched only to "faire X"
+        (compound verbs) — all fail validation but we need a fallback.
         """
         if not candidates or not token_fr:
             return candidates
 
         token_lower = token_fr.lower().strip()
 
-        for c in candidates[:top_k]:
+        # Track invalidated candidates to restore fallback if needed
+        original_scores = {i: c.get('score', 0) for i, c in enumerate(candidates[:top_k])}
+        invalidated_count = 0
+
+        for i, c in enumerate(candidates[:top_k]):
             score = c.get('score', 0)
 
-            # Perfect exact (100 pts) — trust it, no validation needed
+            # Perfect exact (100 pts) — trust it unconditionally
             if score >= 100:
                 continue
 
-            # Composite/substring (50+ pts) — validate with LLM
-            if score >= 50:
+            # Validate all candidates ≥ 20 pts with LLM semantic check
+            if score >= 20:
                 gloss_fr = c.get('fr', '').lower().rstrip('.').strip()
 
-                # Text contains token — trust it
-                if token_lower in gloss_fr or gloss_fr.startswith(token_lower):
-                    print(f"     ✅ Match textuel: '{gloss_fr}' ≈ '{token_lower}' → {c['bm']}")
-                    continue
-
-                # Ask LLM: is gloss semantically valid for token?
+                # Ask LLM: is gloss semantically equivalent to token?
+                # The gloss may be a synonym list ("trop, très, beaucoup")
+                # or a compound noun ("plaque de cuisson").
                 prompt = (
-                    f'Les expressions françaises \"{gloss_fr}\" et \"{token_lower}\" '
-                    f'ont-elles à peu près la même signification?\n'
+                    f'Dans un dictionnaire, la glose d\'un mot bambara est: \"{gloss_fr}\".\n'
+                    f'Le mot français cherché est: \"{token_lower}\".\n'
+                    f'Est-ce que \"{token_lower}\" correspond à l\'une des significations '
+                    f'ou synonymes de cette glose (liste ou expression)?\n'
                     f'Réponds uniquement par OUI ou NON.'
                 )
 
@@ -545,10 +573,11 @@ class TranslationEngine:
                     if is_valid:
                         print(f"     ✅ LLM valide: '{gloss_fr}' ≈ '{token_lower}' → {c['bm']}")
                     else:
-                        # Penalize false positives heavily
-                        c['score'] = max(0, score - 30)
-                        c['final_score'] = c['score']
-                        print(f"     ⚠️  LLM invalide: '{gloss_fr}' ≠ '{token_lower}' → {c['bm']} (-30 pts)")
+                        # Candidate is semantically wrong → disqualify completely
+                        c['score'] = 0
+                        c['final_score'] = 0
+                        invalidated_count += 1
+                        print(f"     ⚠️  LLM invalide: '{gloss_fr}' ≠ '{token_lower}' → {c['bm']} (→ 0 pts)")
 
                 except Exception as e:
                     print(f"     ⚠️  LLM validation failed: {e}")
@@ -556,8 +585,65 @@ class TranslationEngine:
                     c['score'] = max(0, score - 15)
                     c['final_score'] = c['score']
 
+        # FALLBACK: if all EXACT matches were invalidated and KG has no bare match,
+        # restore only if the compound is linguistically very close to the bare token.
+        # E.g., "faire peur" is close to "faire" (1 word apart, same starting word)
+        # but "plaque de cuisson" is far from "cuisson" (2+ words apart, different starting word).
+        # This handles compound verbs without hardcoding.
+        exact_matches = [c for c in candidates[:top_k] if c.get('match') == 'exact']
+        invalid_exact = sum(1 for c in exact_matches if c.get('final_score', 0) == 0)
+
+        if invalid_exact > 0 and invalid_exact == len(exact_matches) and exact_matches:
+            # Find the best exact match by original score
+            best_exact = max(exact_matches, key=lambda c: original_scores.get(candidates.index(c), 0))
+            best_idx = candidates.index(best_exact)
+            best_orig_score = original_scores.get(best_idx, 0)
+            best_gloss = best_exact.get('fr', '').lower()
+
+            # Check linguistic similarity: restore only if compound is very close to bare token
+            # "faire peur" (1 word apart, starts with "faire") → restore
+            # "plaque de cuisson" (2+ words from "cuisson", doesn't start with "cuisson") → don't restore
+            words_in_gloss = [w.rstrip('.,;:!?') for w in best_gloss.split()]
+            word_distance = len(words_in_gloss) - 1  # extra words beyond the token
+            starts_with_token = best_gloss.startswith(token_lower + ' ')
+
+            # Only restore if: (1) gloss contains token, (2) very close (≤1 extra word), (3) starts with token
+            is_close_variant = (
+                token_lower in words_in_gloss
+                and word_distance <= 1
+                and starts_with_token
+            )
+
+            if best_orig_score > 0 and is_close_variant:
+                restore_score = int(best_orig_score * 0.5)  # 50% of original
+                best_exact['score'] = restore_score
+                best_exact['final_score'] = restore_score
+                # Move this restored exact match to the front after re-sorting
+                candidates.remove(best_exact)
+                candidates.insert(0, best_exact)
+                print(f"     ⚠️  [FALLBACK] Restauré exact match à {restore_score} pts "
+                      f"(50% de {best_orig_score}): '{best_gloss}' est proche de '{token_lower}' "
+                      f"(distance={word_distance})")
+
         # Re-sort by score
         candidates.sort(key=lambda x: x.get('final_score', x.get('score', 0)), reverse=True)
+
+        # FINAL FALLBACK: if all exact matches failed validation AND we only have
+        # embedding results left, prefer a placeholder over a weak embedding match.
+        # This prevents "cuisson" from falling back to "jírisi" (menuiserie) just because
+        # it's an embedding match.
+        exact_matches = [c for c in candidates if c.get('match') == 'exact']
+        embed_only = not exact_matches or all(c.get('final_score', 0) == 0 for c in exact_matches)
+        top_is_embed = candidates and candidates[0].get('match') == 'embed'
+        top_score = candidates[0].get('final_score', 0) if candidates else 0
+
+        if embed_only and top_is_embed and top_score < 30:
+            # All exact matches failed validation; only weak embedding remains
+            # Clear candidates to force placeholder fallback downstream
+            print(f"     📭 [NO FALLBACK TO EMBED] All exact matches invalidated & "
+                  f"top embed too weak ({top_score} pts) → use placeholder instead")
+            return []
+
         return candidates
 
     # ------------------------------------------------------------------
@@ -713,39 +799,49 @@ class TranslationEngine:
         if not lemma:
             return 'ABSTRACT'
 
-        # Classification via semantic_class KG si disponible
-        _age_classes = {'time', 'duration', 'age'}
-        _material_classes = {'object', 'tool', 'vehicle', 'building',
-                            'money', 'food_item', 'clothing', 'furniture'}
-        _abstract_classes = {'feeling', 'emotion', 'biological_state',
-                            'sensation', 'mental_state', 'physiological'}
-        _pain_classes = {'pain', 'illness', 'disease', 'symptom'}
+        # Pré-check KG : Sense node avec possession_type → évite appel LLM inutile
+        try:
+            _kg_pt = self.db.query(
+                "MATCH (n:Sense) WHERE toLower(n.fr) = toLower($fr) AND n.possession_type IS NOT NULL "
+                "RETURN n.possession_type AS pt LIMIT 1",
+                {'fr': lemma})
+            if _kg_pt and _kg_pt[0].get('pt'):
+                _pt = str(_kg_pt[0]['pt']).upper()
+                if _pt in ('AGE', 'MATERIAL', 'EXPERIENCER', 'ABSTRACT', 'STATIF'):
+                    print(f"  🔍 [POSS_TYPE KG] '{lemma}' → {_pt}")
+                    return _pt
+        except Exception:
+            pass
 
-        if semantic_class in _age_classes:
-            return 'AGE'
-        if semantic_class in _material_classes:
-            return 'MATERIAL'
-        if semantic_class in _abstract_classes:
-            return 'ABSTRACT'
-        if semantic_class in _pain_classes:
-            return 'PAIN'
-
-        # Fallback LLM
+        # Le LLM classe le nom en utilisant semantic_class comme indice contextuel.
+        # Pas de tables de correspondance en dur : VerbNet ne couvre pas les noms,
+        # donc semantic_class est rarement rempli pour un NOUN ; le LLM reste juge.
+        _sc_hint = f" (classe sémantique disponible : '{semantic_class}')" if semantic_class else ""
         prompt = (
-            f"Le nom français '{lemma}' dans la construction 'avoir + {lemma}' "
-            f"appartient à quelle catégorie ?\n"
-            f"AGE : notion de temps, d'âge, d'années (âge, ans, siècle)\n"
-            f"MATERIAL : objet physique concret possédable (maison, voiture, téléphone, argent, clé)\n"
-            f"ABSTRACT : état interne biologique ou psychologique non palpable "
-            f"(faim, soif, peur, honte, chance, envie, idée, confiance)\n"
-            f"PAIN : douleur physique ou maladie (mal, douleur, fièvre, migraine)\n"
-            f"Réponds UNIQUEMENT par : AGE, MATERIAL, ABSTRACT ou PAIN"
+            f"Le nom français '{lemma}'{_sc_hint} est complément direct de 'avoir'.\n"
+            f"Quelle catégorie lui correspond ?\n"
+            f"AGE : durée ou âge (âge, ans, siècle, heure)\n"
+            f"MATERIAL : objet physique concret qu'on peut tenir ou posséder "
+            f"(voiture, maison, téléphone, argent, clé, vêtement, vélo, sac, outil, arme, couteau, bâton)\n"
+            f"ABSTRACT : possession non physique — relation humaine, lien social, concept "
+            f"ou DISPOSITION VOLITIONNELLE que le sujet peut mobiliser volontairement "
+            f"(frère, ami, enfant, mari, famille, idée, droit, talent, chance, avis, "
+            f"courage, confiance, patience, volonté, détermination, persévérance, orgueil)\n"
+            f"EXPERIENCER : sensation physique externe subie par le corps — la sensation "
+            f"est le sujet grammatical EN BAMBARA (faim, soif, chaud, froid, sommeil, "
+            f"fièvre, nausée, douleur, mal, vertige, fatigue)\n"
+            f"STATIF : état émotionnel PASSIF et INVOLONTAIRE — le sujet ne peut pas "
+            f"le déclencher volontairement (test : 'Sois X!' est impossible ou absurde) "
+            f"— s'exprime en bambara par une forme participiale "
+            f"(peur, honte, joie, colère, jalousie, tristesse, regret, envie, nostalgie)\n"
+            f"Réponds UNIQUEMENT par : AGE, MATERIAL, ABSTRACT, EXPERIENCER ou STATIF"
         )
 
-        for attempt in range(3):
+        for _ in range(3):
             try:
                 result = self._call_llm(prompt, max_tokens=5).strip().upper()
-                if result in ('AGE', 'MATERIAL', 'ABSTRACT', 'PAIN'):
+                if result in ('AGE', 'MATERIAL', 'EXPERIENCER', 'ABSTRACT', 'STATIF'):
+                    print(f"  🔍 [POSS_TYPE] '{lemma}' sc={semantic_class!r} → {result}")
                     return result
             except Exception:
                 continue
@@ -911,7 +1007,7 @@ class TranslationEngine:
             f"Les relations de parenté, de famille, et les relations sociales entre personnes "
             f"sont toujours INALIENABLES (sans 'ka') : père, mère, frère, sœur, fils, fille, "
             f"oncle, tante, cousin, grand-père, grand-mère, mari, femme, enfant, ami, ennemi, "
-            f"voisin, collègue, patron, etc.\n"
+            f"voisin, collègue, patron, maître, chef, roi, dirigeant, responsable, leader, etc.\n"
             f"Les parties du corps sont aussi INALIENABLES (sans 'ka') : tête, bras, jambe, main, etc.\n"
             f"Seuls les objets physiques SÉPARABLES et TRANSFÉRABLES prennent 'ka' (possession ALIÉNABLE) : "
             f"maison, voiture, livre, vêtement, argent, champ, outil, etc.\n"
@@ -934,33 +1030,32 @@ class TranslationEngine:
 
     def _detect_intransitive_type(self, lemma: str, semantic_class: str = '') -> str:
 
-        # ── PRIORITÉ CLASSE SÉMANTIQUE : classes intransitives → ABSOLU ───────
-        # Classes intrinsèquement intransitives (leur sens central ne porte pas
-        # sur un objet direct, même si la grammaire le permet 'perdre ses clés').
-        # On respecte cette classe AVANT d'interroger le LLM.
-        # NB: 'perception' EXCLU — voir/entendre/sentir sont TRANSITIFS
-        #   (voir = a bɛ yéli kɛ ; il l'a vu = a yé a yé). Laisser le LLM
-        #   décider pour ces verbes (il répondra ACTION).
-        _INTRANSITIVE_SC = {'motion', 'biological', 'posture', 'spontaneous',
-                            'meteorological'}
-        if semantic_class in _INTRANSITIVE_SC:
-            print(f"  🔍 [TRANSITIVITY] '{lemma}' class={semantic_class} "
-                  f"→ ABSOLU (classe autonome, LLM ignoré)")
-            return 'ABSOLU'
+        # ── PRIORITÉ CLASSE SÉMANTIQUE : VerbNet détermine la transitivité ────
+        # # Niveau 1 — classes intransitives pures → ABSOLU (jamais de COD).
+        # _INTRANSITIVE_SC = {'motion', 'biological', 'posture', 'spontaneous',
+        #                     'meteorological'}
+        # if semantic_class in _INTRANSITIVE_SC:
+        #     print(f"  🔍 [TRANSITIVITY] '{lemma}' class={semantic_class} "
+        #           f"→ ABSOLU (classe autonome, LLM ignoré)")
+        #     return 'ABSOLU'
 
-        # ── LLM ──────────────────────────────────────────────────────────────
-        # On demande l'usage COURANT (pas la possibilité grammaticale) : 'travailler'
-        # peut grammaticalement avoir un COD (travailler le bois) mais s'emploie
-        # habituellement sans objet → ABSOLU. Les verbes cités sont de simples
-        # exemples illustratifs, pas une liste exhaustive.
+        # # Niveau 2 — classes transitives → ACTION (prennent un COD ; sans COD
+        # # → V+li kɛ / action_noun kɛ dans step7_final). Pas de LLM nécessaire.
+        # _TRANSITIVE_SC = {'consumption', 'preparation', 'action', 'craft', 'perception'}
+        # if semantic_class in _TRANSITIVE_SC:
+        #     print(f"  🔍 [TRANSITIVITY] '{lemma}' class={semantic_class} "
+        #           f"→ ACTION (classe transitive, LLM ignoré)")
+        #     return 'ACTION'
+
+        # ── LLM : présence d'un COD (complément d'objet direct) ──────────────
+        # Note : ne pas inclure la semantic_class dans le prompt — le label 'action'
+        # induit le LLM à répondre ACTION même pour les intransitifs de classe action
+        # (travailler, courir, danser…). La transitivité s'évalue indépendamment.
         prompt = (
-            f"Le verbe français '{lemma}', dans son usage le plus COURANT, "
-            f"s'emploie-t-il avec un objet direct ?\n"
-            f"ACTION = habituellement AVEC un objet direct, "
-            f"par exemple : manger, voir, prendre, lire, boire…\n"
-            f"ABSOLU = habituellement SANS objet, intransitif, "
-            f"par exemple : dormir, travailler, partir, courir, parler…\n"
-            f"Réponds UNIQUEMENT par : ACTION ou ABSOLU"
+            f"Le verbe français '{lemma}' peut-il prendre un COD (complément d'objet direct) ?\n"
+            f"ABSOLU  → jamais de COD (intransitif strict) : courir, dormir, régner, exister\n"
+            f"ACTION  → COD possible (transitif) : manger, couper, aider, donner\n"
+            f"Réponds UNIQUEMENT par ABSOLU ou ACTION."
         )
         _result = None
         _raw = ''
@@ -968,10 +1063,10 @@ class TranslationEngine:
             try:
                 _raw = self._call_llm(prompt, max_tokens=5).strip().upper()
                 print(f"  🔬 [TRANSITIVITY raw] attempt {attempt+1}: {_raw!r}")
-                if 'ACTION' in _raw:
-                    _result = 'ACTION'; break
-                if 'ABSOLU' in _raw:
+                if _raw.startswith('ABSOLU'):
                     _result = 'ABSOLU'; break
+                if _raw.startswith('ACTION'):
+                    _result = 'ACTION'; break
             except Exception:
                 continue
 
@@ -991,7 +1086,7 @@ class TranslationEngine:
                           (classe purement French-specific, absente du
                           VerbNet anglais source).
           SOIN_CORPOREL : toilette/soin du corps, objet réfléchi par défaut.
-                          ≈ VerbeNet floss-41.2.1 (laver, raser) +
+                          ≈ VerbeNet floss-41.2.1 (laver, raser, se préparer,) +
                           braid-41.2.2 (coiffer, maquiller, peigner) +
                           dress-41.1.1 (habiller, vêtir).
           POSTURE       : position/changement de position, pas une action
@@ -1007,7 +1102,7 @@ class TranslationEngine:
                           ≈ VerbeNet hurt-40.8.3 (blesser, brûler, casser,
                           déchirer, écorcher).
           ACTIF         : toute autre action volontaire du sujet sur lui-même
-                          (se préparer, se déguiser, se défendre).
+                          (se déguiser, se défendre..).
 
         Retourne : 'pronominal' | 'soin_corporel' | 'posture' | 'accidentel' | 'actif'
         """
@@ -1015,19 +1110,23 @@ class TranslationEngine:
         # 'actif') se figeait sinon indéfiniment. On rappelle le LLM à chaque
         # fois.
         prompt = (
-            f'Le verbe français "{lemma}" est utilisé à la forme réfléchie (se {lemma}).\n'
-            f'Choisis la catégorie qui correspond le mieux à son comportement :\n\n'
-            f'PRONOMINAL : le verbe n\'existe PAS sans "se" (aucun sens sans la forme réfléchie).\n'
-            f'  Ex : s\'évanouir, se souvenir, se méfier, se taire, s\'abstenir, se repentir.\n\n'
-            f'SOIN_CORPOREL : toilette et soin du corps, l\'action s\'applique par défaut à soi-même.\n'
-            f'  Ex : se laver, se raser, se coiffer, s\'habiller, se maquiller, se peigner.\n\n'
-            f'POSTURE : changement de position du corps, pas une action sur un objet.\n'
-            f'  Ex : s\'asseoir, se lever, se coucher, se pencher, s\'agenouiller.\n\n'
-            f'ACCIDENTEL : le sujet subit un évènement fortuit, involontaire, qui l\'atteint physiquement.\n'
-            f'  Ex : se blesser, se couper, se brûler, se casser (la jambe), s\'écorcher.\n\n'
-            f'ACTIF : toute autre action volontaire du sujet sur lui-même, agent et bénéficiaire.\n'
-            f'  Ex : se préparer, se déguiser, se présenter, se défendre.\n\n'
-            f'Réponds UNIQUEMENT par : PRONOMINAL, SOIN_CORPOREL, POSTURE, ACCIDENTEL ou ACTIF'
+            f'Verbe réfléchi à classer : "{lemma}". Catégorie :\n\n'
+            f'PRONOMINAL : "se" transforme V transitif en son équivalent INTRANSITIF automatique\n'
+            f'  (le sujet subit l\'événement sans agir délibérément sur lui-même),\n'
+            f'  OU verbe impossible sans "se", OU sens différent de V.\n'
+            f'  Ex: réveiller qqn → se réveiller (le réveil arrive), endormir → s\'endormir,\n'
+            f'      fermer → se fermer, évanouir → s\'évanouir, taire → se taire, tromper → se tromper.\n\n'
+            f'SOIN_CORPOREL : action d\'hygiène/toilette ACTIVE et intentionnelle sur son propre corps.\n'
+            f'  Ex: laver, raser, coiffer, maquiller, habiller, brosser.\n\n'
+            f'POSTURE : UNIQUEMENT changement de POSITION PHYSIQUE du corps (où le corps EST).\n'
+            f'  Ex: asseoir (debout→assis), coucher (debout→allongé), pencher, agenouiller.\n'
+            f'  ATTENTION : réveiller et endormir NE SONT PAS des postures (états de conscience).\n\n'
+            f'ACCIDENTEL : blessure ou dommage physique que subit le sujet (volontaire ou non).\n'
+            f'  → blesser, couper, brûler, casser (bras/jambe), écorcher = TOUJOURS ACCIDENTEL.\n\n'
+            f'ACTIF : autre action intentionnelle du sujet sur lui-même.\n'
+            f'  Ex: déguiser, défendre, préparer (mental).\n\n'
+            f'Réponds OBLIGATOIREMENT par UN SEUL MOT parmi : PRONOMINAL, SOIN_CORPOREL, POSTURE, ACCIDENTEL ou ACTIF\n'
+            f'NE répète PAS le verbe.'
         )
 
         _CATS = ('PRONOMINAL', 'SOIN_CORPOREL', 'POSTURE', 'ACCIDENTEL', 'ACTIF')
@@ -1043,12 +1142,53 @@ class TranslationEngine:
                 _hit = next((c for c in _CATS if c in _raw), None)
                 if _hit:
                     _result = _hit.lower(); break
+                # LLM a répété la construction réflexive au lieu d'une catégorie.
+                # Distinguer : blessure physique (ACCIDENTEL) vs pronominal idiomatique.
+                if _raw.strip() == f'SE {lemma.upper()}':
+                    try:
+                        _chk = self._call_llm(
+                            f'Le verbe "{lemma}" décrit-il une blessure ou un dommage physique '
+                            f'(couper, brûler, casser…) ? OUI ou NON',
+                            max_tokens=3, timeout=10).strip().upper()
+                        _result = 'accidentel' if 'OUI' in _chk else 'pronominal'
+                    except Exception:
+                        _result = 'pronominal'
+                    break
             except Exception:
                 continue
 
         cat = _result or 'actif'  # défaut si LLM indisponible
         print(f"  🔄 [REFL_CAT] '{lemma}' → {cat}  [LLM, raw={_raw!r}]")
         return cat
+
+    def _classify_privative_noun(self, lemma: str) -> str:
+        """
+        Classe un nom français pour choisir le marqueur privatif bambara :
+          ACTION : nom d'action/processus dérivé d'un verbe (cuisson, nettoyage,
+                   traitement, construction, réparation, formation...).
+                   → marqueur 'bali' (sans faire l'action).
+          CHOSE  : nom de chose, substance ou état (sel, eau, sucre, argent,
+                   lumière, permission, bruit...).
+                   → marqueur 'tan' (sans la chose).
+        Retourne : 'action' | 'chose'
+        """
+        prompt = (
+            f'Le nom français "{lemma}" est-il un NOM D\'ACTION '
+            f'(dérivé d\'un verbe, représentant un processus ou une activité) '
+            f'ou un NOM DE CHOSE (substance, objet, état) ?\n\n'
+            f'NOM D\'ACTION : cuisson (de cuire), nettoyage (de nettoyer), '
+            f'traitement (de traiter), construction, formation, réparation...\n'
+            f'NOM DE CHOSE : sel, eau, sucre, argent, lumière, permission, bruit...\n\n'
+            f'Réponds UNIQUEMENT par : ACTION ou CHOSE'
+        )
+        _raw = ''
+        try:
+            _raw = self._call_llm(prompt, max_tokens=4, timeout=10).strip().upper()
+            if 'ACTION' in _raw:
+                return 'action'
+        except Exception:
+            pass
+        return 'chose'
 
     def _normalize_verb_to_infinitive(self, verb: str) -> str:
         """Normalise un verbe conjugué à sa forme infinitive.
@@ -1082,46 +1222,76 @@ class TranslationEngine:
         return verb
 
     def _detect_semantic_class(self, lemma: str) -> str:
-        """Détecte la classe sémantique d'un verbe via VerbNet (nltk) en
-        priorité — verbe français -> WOLF -> synsets WordNet -> lemmes
-        anglais -> classes VerbNet (cf embeddings/verbnet_classifier.py),
-        bien plus fiable que le LLM et sans cache (lookups locaux
-        déterministes, pas de risque de figer un verdict périmé). Si VerbNet
-        n'a aucune couverture pour ce verbe (pas dans WOLF), on retombe sur
-        le LLM plutôt que de renvoyer 'other' à l'aveugle."""
-        from embeddings.verbnet_classifier import verbnet_semantic_class
-        cls = verbnet_semantic_class(lemma)
-        if cls:
-            print(f"     🏷️  semantic_class('{lemma}') = {cls}  [VerbNet]")
-            return cls
-
+        """Détecte la classe sémantique d'un verbe via LLM."""
         prompt = (
             f'Quelle est la nature sémantique du verbe français "{lemma}" ?\n\n'
             f'Catégories AUTONOMES (intransitifs, n\'acceptent pas de COD direct):\n'
-            f'  motion=déplacement dans l\'espace (aller, venir, courir, marcher...)\n'
-            f'  biological=processus vital du corps (vivre, mourir, naître, respirer...)\n'
-            f'  posture=position/changement de position (rester, dormir, se lever...)\n'
+            f'  motion=le sujet change de lieu ou se déplace — déplacements, départs, arrivées, directions\n'
+            f'    (aller, venir, courir, marcher, arriver, sortir, entrer, monter, descendre...)\n'
+            f'  biological=processus vital ou TRANSITION D\'ÉTAT corporel ponctuelle :\n'
+            f'    vivre, mourir, naître, respirer, réveiller (rompt le sommeil),\n'
+            f'    lever (oppose la gravité, déclenche le passage couché→debout).\n'
+            f'    Voix active : "lever quelqu\'un" = déclencher un changement d\'état.\n'
+            f'  posture=CONFIGURATION SPATIALE STABLE du corps (état maintenu) :\n'
+            f'    asseoir (place sur un support), coucher (allonge sur une surface),\n'
+            f'    pencher, accroupir. Voix active : "asseoir un enfant" = positionner sur surface.\n'
+            f'    NE PAS classer "lever" en posture : lever = processus transformationnel (biological).\n'
             f'  spontaneous=réaction involontaire (rire, crier, pleurer...)\n'
             f'  perception=voir, entendre, sentir (perception directe)\n'
             f'  meteorological=phénomène atmosphérique (pleuvoir, neiger...)\n'
-            f'  copula=lien attributif (être, sembler, paraître...)\n\n'
+            f'  copula=lien attributif (être, sembler, paraître...)\n'
+            f'  stative_cognitive=ÉTAT MENTAL STATIQUE, atélique, incompatible avec le progressif\n'
+            f'    ("je suis en train de savoir" est impossible) :\n'
+            f'    savoir, connaître, croire, penser, supposer, ignorer, comprendre,\n'
+            f'    reconnaître (au sens de "admettre"), douter, se souvenir, oublier.\n'
+            f'    TEST : l\'état est homogène — on sait ou on ne sait pas, sans transition.\n'
+            f'    EXCLURE les verbes d\'ACTIVITÉ (travailler, jouer, étudier, lire) :\n'
+            f'    "il est en train de travailler" EST possible → c\'est action, pas stative_cognitive.\n'
+            f'    EXCLURE aimer/détester (=psych_emotion) et vouloir/souhaiter (=modal).\n'
+            f'  psych_emotion=ÉTAT AFFECTIF du sujet envers qqch/qqun :\n'
+            f'    aimer, adorer, détester, haïr, apprécier, chérir, craindre, redouter, préférer.\n'
+            f'    EXCLURE vouloir/souhaiter/désirer (=modal) et savoir/croire (=stative_cognitive).\n'
+            f'  modal=VOLITION ou INTENTION du sujet (semi-auxiliaire suivi d\'un infinitif) :\n'
+            f'    vouloir, souhaiter, désirer, oser, prétendre (avoir l\'intention de).\n'
+            f'    EXCLURE aimer/détester (=psych_emotion) et devoir/falloir (=obligation).\n'
+            f'  obligation=NÉCESSITÉ ou OBLIGATION du sujet (semi-auxiliaire) :\n'
+            f'    devoir, falloir, il faut.\n'
+            f'    EXCLURE vouloir/souhaiter (=modal), pouvoir (=autre).\n\n'
             f'Catégories TRANSITIVES (acceptent souvent un COD):\n'
-            f'  action=action intentionnelle (faire, donner, prendre, manger...)\n'
-            f'  consumption=ingestion (manger, boire...)\n'
+            f'  action=ACTIVITÉ INTRANSITIVE par nature (pas de COD habituel) :\n'
+            f'    travailler, courir, marcher, nager, danser, voyager, jouer (sans objet),\n'
+            f'    étudier (intransitif), lire (intransitif).\n'
+            f'    ⚠️ NE PAS classer ici les verbes qui prennent normalement un COD :\n'
+            f'    acheter, vendre, donner, prendre, chercher, trouver → utiliser "other".\n'
+            f'  consumption_liquid=ingestion de LIQUIDE (boire, siroter — jamais consumption pour boire)\n'
+            f'  consumption=ingestion SOLIDE uniquement (manger, croquer, dévorer, avaler qqch de solide — ≠ boire)\n'
             f'  preparation=transformation (cuisiner, préparer...)\n'
             f'  technique=travail spécialisé (construire, réparer...)\n'
             f'  craft=création artistique (peindre, écrire...)\n'
             f'  communication=parole (dire, raconter, demander...)\n'
-            f'  having=possession (avoir, posséder...)\n\n'
-            f'  other=aucune catégorie ne convient.\n\n'
+            f'  having=ÉTAT de POSSESSION STATIQUE uniquement (posséder, détenir, contenir,\n'
+            f'    appartenir, garder, tenir). Avoir = having UNIQUEMENT au sens possessif.\n'
+            f'    ⚠️ acheter ≠ having (acheter = transaction → other)\n'
+            f'  other=verbe transitif direct standard sans catégorie propre :\n'
+            f'    acheter, vendre, donner, prendre, chercher, trouver, voir, rencontrer,\n'
+            f'    envoyer, recevoir, ouvrir, fermer, casser, porter, mettre, garder...\n\n'
             f'Réponds UNIQUEMENT par le nom de la catégorie.'
         )
+        _VALID_SC = {
+            'motion', 'biological', 'posture', 'spontaneous', 'perception',
+            'meteorological', 'copula', 'stative_cognitive', 'psych_emotion', 'modal', 'obligation',
+            'action', 'consumption_liquid', 'consumption',
+            'preparation', 'technique', 'craft', 'communication', 'having', 'other',
+        }
         try:
             import re as _re
             cls_raw = self._call_llm(prompt, max_tokens=15).strip().lower()
-            words   = _re.findall(r'[a-z]+', cls_raw)
-            cls     = words[0] if words else 'other'
-            print(f"     🏷️  semantic_class('{lemma}') = {cls}  [LLM fallback, hors couverture VerbNet]")
+            # Inclure '_' pour préserver 'consumption_liquid' (ne pas split en 'consumption')
+            words   = _re.findall(r'[a-z_]+', cls_raw)
+            # Chercher la première correspondance exacte avec une classe valide
+            cls = next((w for w in words if w in _VALID_SC), 'other')
+
+            print(f"     🏷️  semantic_class('{lemma}') = {cls}  [LLM]")
             return cls
         except Exception as e:
             print(f"     ⚠️  semantic class detection failed: {e}")
@@ -1160,8 +1330,12 @@ class TranslationEngine:
             elif pos == 'VERB' and 'semantic_class' not in tok:
                 # bm pré-assigné (parseur/KG) : détecter quand même la classe
                 # sémantique pour que la transitivité (li kɛ / la / nu) soit juste.
-                # Sans ça, venir (bm='nà' pré-assigné) sortait sans classe →
-                # transitivité LLM=ACTION → 'nàli kɛ' au lieu de 'nà'.
+                # Normaliser d'abord le lemme (forme fléchie → infinitif) pour que
+                # VerbNet trouve le verbe ; sinon 'venue' → VerbNet miss → LLM.
+                _pre_lem = tok['lemma']
+                _pre_inf = self._normalize_verb_to_infinitive(_pre_lem)
+                if _pre_inf and _pre_inf != _pre_lem:
+                    tok['lemma'] = _pre_inf
                 tok['semantic_class'] = self._detect_semantic_class(tok['lemma'])
             return tok, []
 
@@ -1173,7 +1347,12 @@ class TranslationEngine:
         _surf_neg = str(surface).lower().rstrip("'").rstrip('\u2019').rstrip('\u2018')
         _neg_surfs = self.rule_engine.grammar.get('neg_surfaces', set())
         if tok.get('role') == 'negation' or _surf_neg in _neg_surfs:
-            tok['bm'] = ''
+            # N\u00e9gateurs PORTEURS DE CONTENU (plus\u2192bilen, rien\u2192foyi) : on conserve
+            # le bm pos\u00e9 par le parseur depuis le KG, il sera rendu en fin de
+            # clause. N\u00e9gateurs PURS (ne/pas/jamais) : aucun bm KG \u2192 vid\u00e9s pour
+            # ne pas parasiter les obliques. Discrimination par le bm du KG.
+            if not tok.get('bm'):
+                tok['bm'] = ''
             return tok, []
 
         if pos == 'PROPN':
@@ -1206,19 +1385,49 @@ class TranslationEngine:
                     WHERE toLower(n.surface) = toLower($surface)
                        OR toLower(n.lemma)   = toLower($lemma)
                        OR toLower(n.fr)      = toLower($lemma)
-                    RETURN n.bm AS bm
+                       OR toLower(n.fr)      = toLower($lemma) + '.'
+                    RETURN n.bm AS bm, n.pos AS sense_pos, n.semantic_class AS sense_sc
                     ORDER BY
                         CASE WHEN toLower(n.surface) = toLower($surface)
-                             THEN 0 ELSE 1 END
+                             THEN 0 ELSE 1 END,
+                        CASE WHEN toLower(n.fr) = toLower($lemma) THEN 0
+                             WHEN toLower(n.fr) = toLower($lemma) + '.' THEN 1
+                             ELSE 2 END,
+                        CASE WHEN toLower(coalesce(n.pos,'')) IN ['verb','verbe'] AND $pos='VERB'
+                             THEN 0
+                             WHEN toLower(coalesce(n.pos,'')) IN ['noun','nom','n'] AND $pos='NOUN'
+                             THEN 0
+                             WHEN toLower(coalesce(n.pos,'')) IN ['adjective','adj'] AND $pos='ADJ'
+                             THEN 0
+                             ELSE 1 END
                     LIMIT 1
-                """, {'surface': surface, 'lemma': lemma})
+                """, {'surface': surface, 'lemma': lemma, 'pos': pos})
                 if res and res[0].get('bm'):
                     tok['bm'] = res[0]['bm']
+                    _sense_pos = str(res[0].get('sense_pos') or '').lower()
+                    _sense_sc  = res[0].get('sense_sc') or ''
+                    _sense_fr  = str(res[0].get('fr') or res[0].get('bm', '')).strip()
+                    # Lire semantic_class depuis KG si disponible (évite appel LLM nondéterministe)
+                    if _sense_sc and not tok.get('semantic_class'):
+                        tok['semantic_class'] = _sense_sc
+                    # Si spaCy a mal tagué un nom comme ADJ, corriger via le KG
+                    if pos == 'ADJ' and _sense_pos in ('noun', 'n', 'nom'):
+                        tok['pos'] = 'NOUN'
+                        pos = 'NOUN'
                     if pos == 'NOUN' and not tok['bm'].startswith('['):
                         tok['is_relational'] = self._detect_relational_noun(tok['lemma'], tok['bm'])
                     elif pos == 'ADJ':
                         self._classify_adj_state(tok)
-                    return tok, []
+                    # Pour les NOUN avec correspondance KG courte (fr = lemma exact en 1 mot),
+                    # continuer vers le retriever sémantique : le modèle embedding peut trouver
+                    # une traduction plus précise (ex: fille→dénmuso plutôt que mùsoma).
+                    # Si fr contient plusieurs mots ou ponctuation, la correspondance est
+                    # déjà spécifique → retour anticipé justifié.
+                    _kg_fr_words = [w for w in _sense_fr.rstrip('.').split() if w]
+                    if pos == 'NOUN' and len(_kg_fr_words) <= 1:
+                        pass  # continuer vers le retriever sémantique
+                    else:
+                        return tok, []
             except Exception as e:
                 print(f"     ⚠️  KG label query failed ({kg_label}): {e}")
 
@@ -1268,6 +1477,8 @@ class TranslationEngine:
             infinitive = self._normalize_verb_to_infinitive(lemma)
             if infinitive and infinitive != lemma:
                 kg_search_lemma = infinitive
+                tok['raw_lemma'] = lemma   # conserver le lemme spacy original avant normalisation
+                tok['lemma'] = infinitive  # propager l'infinitif → VerbNet/semantic_class/refl utilisent la forme correcte
                 print(f"     🔄 Verbe normalisé: '{lemma}' → '{kg_search_lemma}'")
 
         # Enrich token with grammatical context (LLM analysis)
@@ -1293,6 +1504,27 @@ class TranslationEngine:
             candidates = self._boost_scores_with_context(
                 candidates, tok['context_type'])
 
+        # ── MODIFIER-GLOSS BOOSTING: compound noun sense selection ──
+        # When a noun has nmod/amod modifiers, boost compound senses whose FR gloss
+        # contains the modifier's lemma or surface form. This anchors "patte de devant"
+        # → ɲɛ́sen without needing LLM reranking.
+        _modifier_lemmas = set()
+        if pos == 'NOUN' and all_tokens and candidates:
+            _tok_idx = tok.get('orig_index')
+            for _t in all_tokens:
+                if (_t.get('dep') in ('nmod', 'amod')
+                        and _t.get('head_index') == _tok_idx):
+                    if _t.get('lemma'):
+                        _modifier_lemmas.add(_t['lemma'].lower())
+                    if _t.get('surface'):
+                        _modifier_lemmas.add(_t['surface'].lower())
+            if _modifier_lemmas:
+                for _c in candidates:
+                    _fr = _c.get('fr', '').lower()
+                    if any(_ml in _fr for _ml in _modifier_lemmas):
+                        _c['final_score'] = _c.get('final_score', 0) + 25
+                candidates.sort(key=lambda x: x.get('final_score', 0), reverse=True)
+
         # ── SEMANTIC VALIDATION: Filter out false positives ──
         # LLM checks if candidate gloss actually matches the token semantically
         candidates = self._validate_candidate_semantics(lemma, candidates, top_k=10)
@@ -1309,12 +1541,13 @@ class TranslationEngine:
                 bm_glose = cand.get('bm', '[vide]')
                 fr_sens = cand.get('fr', '[vide]')
                 via_syn = f" (via synonyme: '{cand['via_synonym']}')" if 'via_synonym' in cand else ""
-                
+
                 print(f"        Rang #{idx+1} Score: {score:.1f} pts | Bambara: '{bm_glose}' → Sens FR: \"{fr_sens}\"{via_syn}")
         print("     " + "="*65)
 
         candidates = self._rerank_with_llm(
             lemma, candidates, tok_pos=tok['pos'],
+            modifier_lemmas=list(_modifier_lemmas) if _modifier_lemmas else None,
         )
 
         all_embed = bool(candidates) and all(
@@ -1334,17 +1567,7 @@ class TranslationEngine:
                 # Classifier d'abord : STATIF/PARTICIPE/QUALITE
                 # NOUN fallback disabled — interferes with correct adjective ranking
                 self._classify_adj_state(tok)
-                # if not tok.get('is_participe_passe') and not tok.get('is_statif'):
-                #     _noun_cands = self.retriever.retrieve(
-                #         lemma, frame, spacy_pos='NOUN',
-                #         top_k=TOP_K, lang=lang)
-                #     _noun_cands = self._rerank_by_sens_fr(lemma, _noun_cands)
-                #     if _noun_cands and _noun_cands[0]['final_score'] >= 50:
-                #         _best_n = _noun_cands[0]
-                #         tok['bm'] = _best_n['bm']
-                #         tok['_adj_is_nominal_pred'] = True
-                #         print(f"     🔄 [NOUN fallback] '{lemma}' → '{_best_n['bm']}' ({_best_n['fr']})")
-                #         return tok, _noun_cands
+                
         # Détecter statif/participe AVANT le return
         if tok['pos'] == 'ADJ':
             _clause_toks2 = getattr(self, '_current_clause_tokens', [])
@@ -1398,6 +1621,14 @@ class TranslationEngine:
 
         if tok['pos'] == 'VERB' and tok.get('bm'):
             tok['semantic_class'] = self._detect_semantic_class(tok['lemma'])
+            # Validation linguistique : stative_cognitive exige un sujet Experiencer.
+            # Si context_type='agent' (le sujet fait l'action), c'est une contradiction
+            # → le verbe est une activité dynamique, pas un état cognitif statique.
+            if (tok['semantic_class'] == 'stative_cognitive'
+                    and tok.get('context_type') == 'agent'):
+                tok['semantic_class'] = 'action'
+                print(f"     🏷️  semantic_class('{tok['lemma']}') reclassifié "
+                      f"stative_cognitive→action [context_type=agent]")
             _sc = tok.get('semantic_class', '')
 
             _morph_str = str(tok.get('morph', ''))
@@ -1764,28 +1995,7 @@ class TranslationEngine:
                     _split_start_tok = _after[0]
                     break
 
-        # h) Coordination sans virgule : "S V1 et S V2" (deux clauses
-        #    indépendantes coordonnées sans virgule). Signal structurel : le
-        #    verbe en dep=conj a son propre sujet (nsubj/nsubj:pass) distinct
-        #    de celui du ROOT — sinon c'est une coordination de verbes sur un
-        #    sujet partagé ("il mange et dort"), qu'on ne scinde pas.
-        if not _split_start_tok:
-            for _cc in _sorted_toks:
-                if _cc.get('pos') != 'CCONJ' or _cc.get('dep') != 'cc':
-                    continue
-                _conj_v = next((t for t in _sorted_toks
-                                 if t.get('orig_index') == _cc.get('head_index')
-                                 and t.get('pos') in ('VERB', 'AUX')
-                                 and t.get('dep') == 'conj'), None)
-                if not _conj_v:
-                    continue
-                _has_own_subj = any(
-                    t.get('head_index') == _conj_v['orig_index']
-                    and t.get('dep') in ('nsubj', 'nsubj:pass')
-                    for t in _sorted_toks)
-                if _has_own_subj:
-                    _split_start_tok = _cc
-                    break
+        # h) supprimé — le split se fait uniquement sur virgule.
 
         # Si un split est trouvé : séparer texte + tokens, puis appliquer
         # le dep-split indépendamment dans chaque segment
@@ -1917,26 +2127,25 @@ class TranslationEngine:
             # APRÈS — appelé APRÈS _translate_token (semantic_class rempli)
             tok, candidates = self._translate_token(tok, frame, context_lemmas, tokens)
 
-            # Détection de transitivité aussi sur les verbes advcl/conj (clauses
-            # purposives : 'pour cuisiner et manger') pour que _purp_verb_bm choisisse
-            # la forme correcte (transitif sans COD → V+li kɛ ; intransitif → V nu).
-            if tok.get('pos') == 'VERB' and (tok.get('is_root')
-                                             or tok.get('dep') in ('xcomp', 'advcl', 'conj')):
+            # Détection des dimensions sur TOUT verbe : transitivité, classe sém.,
+            # consumption solid/liquid, volition, agentivité.
+            if tok.get('pos') == 'VERB':
                 # Garantir que la classe sémantique est détectée par le LLM pour
                 # TOUT verbe, quelle que soit l'origine du bm (KG label, retrieve…).
                 # Sans ça, 'venir' (bm='nà' via KG label) sortait sans classe →
                 # transitivité ACTION → 'nàli kɛ' au lieu de 'nà' (motion).
                 if not tok.get('semantic_class'):
                     tok['semantic_class'] = self._detect_semantic_class(tok.get('lemma', ''))
-                if tok.get('action_noun'):
-                    tok['intransitive_type'] = 'support'
-                else:
-                    tok['intransitive_type'] = self._detect_intransitive_type(
-                        tok.get('lemma', ''), tok.get('semantic_class', ''))
+                # Transitité déterminée par VerbNet (via semantic_class) ou
+                # LLM en fallback — jamais court-circuitée par action_noun.
+                # action_noun reste dans le token pour le rendu (step7_final).
+                tok['intransitive_type'] = self._detect_intransitive_type(
+                    tok.get('lemma', ''), tok.get('semantic_class', ''))
             
             # Dans la boucle for tok in tokens, après _translate_token :
             if (tok.get('dep') == 'obj'
-                    and any(t.get('lemma', '').lower() == 'avoir'
+                    and any((t.get('lemma', '').lower() == 'avoir'
+                             or t.get('semantic_class') == 'having')
                             and (t.get('is_root') or t.get('dep') == 'ROOT')
                             for t in tokens)):
                 _ptype = self._detect_possession_type(
@@ -2039,14 +2248,27 @@ class TranslationEngine:
                 'role':       t.get('role', ''),
                 'head_index': t.get('head_index', -1),
                 'orig_index': t.get('orig_index', -1),
+                'bm':         t.get('bm', ''),
+                'sens_fr':    t.get('sens_fr', ''),
             }
             for t in all_tokens
         ]
 
+        # Glose sémantique KG : premier sens FR de chaque token de contenu traduit.
+        # Utilisée pour l'évaluation sémantique sans back-translation.
+        _sens_fr_parts = []
+        for t in all_tokens:
+            if t.get('role') == 'content' and t.get('sens_fr'):
+                _first = t['sens_fr'].split('.')[0].split(',')[0].strip()
+                if _first:
+                    _sens_fr_parts.append(_first)
+        _sens_fr_gloss = ' '.join(_sens_fr_parts)
+
         return {
-            'bambara':  bambara_output,
-            'frame':    frame,
-            'concepts': all_concepts,
-            'tree':     _tree_meta,
-            'tokens':   _tokens_meta,
+            'bambara':       bambara_output,
+            'frame':         frame,
+            'concepts':      all_concepts,
+            'tree':          _tree_meta,
+            'tokens':        _tokens_meta,
+            'sens_fr_gloss': _sens_fr_gloss,
         }

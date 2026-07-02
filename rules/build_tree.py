@@ -17,6 +17,8 @@ from rules.steps import step4_objet       # package
 from rules.steps import step5_obliques    # package
 from rules.steps import step6_copule      # package
 from rules.steps import step7_final
+from rules.steps import step_impersonal
+from rules.kg_gateway import apply_kg_rules, apply_kg_semantic_behaviors, apply_kg_patterns_early
 
 
 def build_tree(tokens, db=None, grammar=None):
@@ -58,6 +60,24 @@ def build_tree(tokens, db=None, grammar=None):
     processed_indices = set()
     tree['_has_question_mark'] = _has_question_mark
 
+    # ══════════════════════════════════════════════════════════════
+    # KG EARLY : PatternRule → clause_type avant step1
+    # Les steps ne font que remplir les slots (S/O/V/TAM/OBL_ALL).
+    # ══════════════════════════════════════════════════════════════
+    apply_kg_patterns_early(tree, T, G_kg)
+
+    # Guard : ROOT NOUN/ADJ + clause_type temporelle/causale/conditionnelle
+    # → le marqueur subordonnant est un modificateur du NOUN, pas la clause principale.
+    # "Malheur quand il cligne" → root=malheur(NOUN), clause_type=temporal (LLM).
+    # Résoudre en 'simple' : le NOUN devient S, l'advcl devient OBL temporel.
+    _SUBORD_TYPES = {'temporal', 'causal', 'conditional', 'concessive'}
+    if (root_tok and root_tok.get('pos') in ('NOUN', 'ADJ')
+            and not _is_copula(root_tok)
+            and not _is_avoir(root_tok)
+            and tree.get('clause_type') in _SUBORD_TYPES):
+        tree['clause_type'] = 'simple'
+        clause_type_init = 'simple'
+
     # Closure locale pour get_bounded_chunk_tokens (capture NX_G, processed_indices)
     def _gbc(head_idx):
         return get_bounded_chunk_tokens(head_idx, NX_G, processed_indices)
@@ -84,6 +104,25 @@ def build_tree(tokens, db=None, grammar=None):
         tree['local_clause_type'] = 'relative_nominal'
         tree['_tokens']           = T
         return tree
+
+    # ══════════════════════════════════════════════════════════════
+    # STEP IMPERSONNEL : il faut/doit, il s'agit de, il arrive,
+    #                    il semble, il manque, il reste
+    # ══════════════════════════════════════════════════════════════
+    _imp_str = step_impersonal.run(T, tree, G_kg, root_tok)
+    if _imp_str is not None:
+        tree['final_string']      = _imp_str
+        tree['clause_type']       = 'impersonal'
+        tree['local_clause_type'] = 'impersonal'
+        tree['_tokens']           = T
+        return tree
+
+    # ══════════════════════════════════════════════════════════════
+    # KG PRE-ANNOTATION : comportements sémantiques KG → annotés sur root_tok
+    # Avant step3 pour que les overrides KG soient disponibles dans les steps.
+    # Remplace progressivement les conditions hardcodées (semantic_class=='biological'…)
+    # ══════════════════════════════════════════════════════════════
+    apply_kg_semantic_behaviors(tree, T, G_kg)
 
     # ══════════════════════════════════════════════════════════════
     # STEP 3 : Verbe ROOT — m['V'], xcomp, négation, prohibitif,
@@ -129,5 +168,50 @@ def build_tree(tokens, db=None, grammar=None):
     tree = step7_final.run(
         T, tree, m, processed_indices, G_kg, NX_G, root_tok,
         get_bounded_chunk_tokens_fn=_gbc)
+
+    # ══════════════════════════════════════════════════════════════
+    # KG GATEWAY : après step7, les règles KG prennent la décision finale.
+    # Les steps ont extrait les features ; le KG choisit la construction.
+    # Règles KG priorité > 60 → override décisions Python.
+    # ══════════════════════════════════════════════════════════════
+    tree = apply_kg_rules(tree, T, G_kg)
+
+    # Post-KG guard : ROOT NOUN/ADJ + clause_type subordonnant
+    # → reset à 'simple' en préservant S et l'OBL temporel construit par advcl.handle.
+    # Ce guard court APRÈS apply_kg_rules pour neutraliser les PatternRules temporelles
+    # qui s'appliquent sur le marqueur subordonnant (quand/si/parce que) même quand
+    # le ROOT est un nom (ex: "Malheur quand il cligne les yeux").
+    _SUBORD_CT = {'temporal', 'causal', 'conditional', 'concessive'}
+    if (root_tok and root_tok.get('pos') in ('NOUN', 'ADJ')
+            and not _is_copula(root_tok)
+            and not _is_avoir(root_tok)
+            and tree.get('clause_type') in _SUBORD_CT):
+        tree['clause_type'] = 'simple'
+        _m = tree.get('main', {})
+        # Supprimer les slots (X1/X2/X3) injectés par le template subordonnant.
+        _m.pop('SLOTS', None)
+        # Supprimer le temporal_marker (évite que le renderer le préfixe au résultat).
+        tree.pop('temporal_marker', None)
+        # L'objet du verbe advcl a été affecté à m['O'] par apply_kg_rules.
+        # Ce n'est pas l'objet de la clause principale — vider O.
+        # advcl verbes avec marqueur subordonnant (SCONJ ou role temporal/causal/…)
+        _subord_advcl_idxs = {
+            a['orig_index'] for a in T
+            if a.get('dep') == 'advcl'
+            and any(mk.get('dep') == 'mark'
+                    and (mk.get('role') in ('temporal','causal','conditional','concessive')
+                         or mk.get('pos') == 'SCONJ')
+                    and mk.get('head_index') == a['orig_index']
+                    for mk in T)
+        }
+        _advcl_bms = {
+            t.get('bm') for t in T
+            if t.get('dep') == 'obj'
+            and t.get('head_index') in _subord_advcl_idxs
+        }
+        _plur = G_kg.get('plural_noun_suffix', '') or 'w'
+        _advcl_bms |= {b + _plur for b in _advcl_bms if b}
+        if _m.get('O') in _advcl_bms:
+            _m['O'] = ''
 
     return tree

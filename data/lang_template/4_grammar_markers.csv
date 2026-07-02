@@ -1,0 +1,25 @@
+role,lang,bm,description
+# MARQUEURS GRAMMATICAUX — FunctionWord spécifiques à la langue cible
+# Chaque marqueur a un rôle fonctionnel précis.
+# bm = la forme dans la langue cible
+relative_marker,XX,REMPLIR,marqueur de proposition relative (bambara: mìn)
+equative_marker,XX,REMPLIR,marqueur équatif (bambara: yé — ex: a yé X yé)
+genitive_marker,XX,REMPLIR,marqueur de possession/génitif (bambara: ka)
+comitative_marker,XX,REMPLIR,marqueur comitatif / avec (bambara: ni)
+dative_marker,XX,REMPLIR,marqueur datif / à (bambara: ma)
+dative_comm,XX,REMPLIR,datif pour verbes de communication (bambara: yé — ex: parler à)
+serial_purpose_marker,XX,REMPLIR,marqueur de but en construction sérielle (bambara: ka)
+optative_marker,XX,REMPLIR,marqueur optatif (bambara: ka)
+prohibitive_marker,XX,REMPLIR,marqueur prohibitif (bambara: kàna)
+interrogative_polar_marker,XX,REMPLIR,marqueur question polaire (bambara: wà)
+reported_intro,XX,REMPLIR,marqueur de citation/discours rapporté (bambara: ko)
+possessive_material,XX,REMPLIR,marqueur possession matérielle (bambara: bóló)
+possessive_abstract,XX,REMPLIR,marqueur possession abstraite/relation (bambara: fɛ)
+age_marker,XX,REMPLIR,marqueur d'âge (bambara: saan — ex: il a X ans)
+statif_pos_support,XX,REMPLIR,support statif positif (bambara: dòn)
+statif_neg_support,XX,REMPLIR,support statif négatif (bambara: tɛ)
+statif_hab_prefix,XX,REMPLIR,préfixe habituel/imparfait statif (bambara: tùn)
+existence_loc,XX,REMPLIR,marqueur d'existence locative (bambara: yàn = ici/là)
+focus_marker,XX,REMPLIR,marqueur de focus (bambara: de)
+deictique_marker,XX,REMPLIR,marqueur présentatif/déictique (bambara: félé)
+demonstrative_suffix,XX,REMPLIR,suffixe démonstratif nominal (bambara: in/o/nin)

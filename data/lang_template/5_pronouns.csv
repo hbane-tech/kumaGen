@@ -1,0 +1,50 @@
+surface,lang,bm,role,person,number,gender,singular
+# SYSTÈME PRONOMINAL
+# surface : forme française du pronom
+# lang    : 'fr' pour français (la source ne change pas)
+# bm      : équivalent dans la langue CIBLE
+# role    : subject | object | possessive | reflexive | relative | demonstrative | interrogative
+# person  : 1 | 2 | 3
+# number  : sg | pl
+# gender  : m | f | n (neutre/non-marqué)
+# singular: true | false
+je,fr,REMPLIR,subject,1,sg,n,true
+me,fr,REMPLIR,object,1,sg,n,true
+moi,fr,REMPLIR,object,1,sg,n,true
+mon,fr,REMPLIR,possessive,1,sg,m,true
+ma,fr,REMPLIR,possessive,1,sg,f,true
+mes,fr,REMPLIR,possessive,1,pl,n,false
+tu,fr,REMPLIR,subject,2,sg,n,true
+te,fr,REMPLIR,object,2,sg,n,true
+toi,fr,REMPLIR,object,2,sg,n,true
+ton,fr,REMPLIR,possessive,2,sg,m,true
+ta,fr,REMPLIR,possessive,2,sg,f,true
+tes,fr,REMPLIR,possessive,2,pl,n,false
+il,fr,REMPLIR,subject,3,sg,m,true
+elle,fr,REMPLIR,subject,3,sg,f,true
+le,fr,REMPLIR,object,3,sg,m,true
+la,fr,REMPLIR,object,3,sg,f,true
+lui,fr,REMPLIR,object,3,sg,m,true
+son,fr,REMPLIR,possessive,3,sg,m,true
+sa,fr,REMPLIR,possessive,3,sg,f,true
+ses,fr,REMPLIR,possessive,3,pl,n,false
+nous,fr,REMPLIR,subject,1,pl,n,false
+nous,fr,REMPLIR,object,1,pl,n,false
+notre,fr,REMPLIR,possessive,1,pl,n,false
+vous,fr,REMPLIR,subject,2,pl,n,false
+vous,fr,REMPLIR,object,2,pl,n,false
+votre,fr,REMPLIR,possessive,2,pl,n,false
+ils,fr,REMPLIR,subject,3,pl,m,false
+elles,fr,REMPLIR,subject,3,pl,f,false
+les,fr,REMPLIR,object,3,pl,n,false
+leur,fr,REMPLIR,object,3,pl,n,false
+leur,fr,REMPLIR,possessive,3,pl,n,false
+on,fr,REMPLIR,subject,3,sg,n,true
+ce,fr,REMPLIR,demonstrative,3,sg,n,true
+cela,fr,REMPLIR,demonstrative,3,sg,n,true
+ça,fr,REMPLIR,demonstrative,3,sg,n,true
+se,fr,REMPLIR,reflexive,3,sg,n,true
+qui,fr,REMPLIR,relative,,,n,
+que,fr,REMPLIR,relative,,,n,
+quoi,fr,REMPLIR,interrogative,,,n,
+qui,fr,REMPLIR,interrogative,,,n,

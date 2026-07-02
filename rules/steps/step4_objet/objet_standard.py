@@ -6,6 +6,9 @@ amod/conj, démonstratif, pluriel, xcomp_adj.
 import networkx as nx
 from rules.core import j, get_bounded_chunk_tokens, adj_man
 
+def _statif_sfx(G_kg: dict) -> str:
+    return G_kg.get('morpho_rules', {}).get('statif', {}).get('suffix', 'len')
+
 
 def _build_genitive_chain(tok, all_toks, G_kg=None):
     nmod  = next((t for t in all_toks if t.get('dep') == 'nmod'
@@ -78,12 +81,41 @@ def run(T, tree, m, processed_indices, G_kg, NX_G,
     from rules.core import relcl_subtree_indices
     _relcl_idx = relcl_subtree_indices(T, NX_G)
 
+    # Exclure les obj des verbes conjoints (dep=conj VERB) : appartiennent à la
+    # 2e clause coordonnée (gérée par tree['conj_clauses']).
+    _conj_verb_idx = {x['orig_index'] for x in T
+                      if x.get('dep') == 'conj' and x.get('pos') == 'VERB'}
+
+    # Exclure les obj des verbes advcl introduits par un marqueur subordonnant
+    # temporal/causal/conditional (quand/parce que/si/bien que…).
+    # Ces objets appartiennent à la clause adverbiale traitée par step5/advcl.handle.
+    # Ex: "Malheur quand il cligne les yeux" → oeil (obj de cligne/advcl/temporal)
+    # ne doit pas devenir l'objet de la clause principale.
+    # Les advcl purposifs ("il va chercher du pain") sont exclus de ce guard :
+    # "chercher" n'a pas de mark subordonnant temporal/causal → pain reste O.
+    _subord_mark_roles = {'temporal', 'causal', 'conditional', 'concessive'}
+    _advcl_subord_idx = {
+        x['orig_index'] for x in T
+        if x.get('dep') == 'advcl'
+        and any(mk.get('dep') == 'mark'
+                and (mk.get('role') in _subord_mark_roles
+                     or mk.get('pos') == 'SCONJ')  # quand/lorsque/parce que/si...
+                and mk.get('head_index') == x['orig_index']
+                for mk in T)
+    }
+
     obj_tok = next((x for x in T if x.get('dep') in ('obj', 'xcomp')
                     and x.get('pos') in ('NOUN', 'PROPN', 'ADJ')
-                    and x.get('orig_index') not in _relcl_idx), None)
+                    and x.get('orig_index') not in _relcl_idx
+                    and x.get('head_index') not in _conj_verb_idx
+                    and x.get('head_index') not in _advcl_subord_idx), None)
     if not obj_tok:
+        # Exclure les ADV interrogatifs ADVERBIAUX (pourquoi, où, quand → dep=advmod) :
+        # ils ne sont pas COD. Garder les ADV quantitatifs (combien → dep=obj).
         obj_tok = next((x for x in T if x.get('dep') in ('obj', 'advmod', 'dep')
-                        and x.get('role') == 'interrogative' and x.get('bm')), None)
+                        and x.get('role') == 'interrogative' and x.get('bm')
+                        and not (x.get('pos') == 'ADV'
+                                 and x.get('dep') == 'advmod')), None)
     if not obj_tok and _phrase_interrog:
         obj_tok = next((x for x in T if x.get('dep') == 'dep'
                         and x.get('pos') == 'PROPN' and x.get('bm')), None)
@@ -105,6 +137,22 @@ def run(T, tree, m, processed_indices, G_kg, NX_G,
             if not _pron_obj.get('bm'):
                 _pron_obj['bm'] = _pron_obj.get('surface', '')
             obj_tok = _pron_obj
+
+    # Pronom clitique impératif : "aide-moi", "donne-le" → spaCy donne dep='dep'
+    # au clitique postverbal. Seulement en contexte impératif (ou prohibitif)
+    # pour ne pas capturer les autres emplois de dep='dep'.
+    if not obj_tok and tree.get('clause_type') in ('imperative', 'prohibitive'):
+        _imp_clitic = next((x for x in T
+                            if x.get('dep') == 'dep'
+                            and x.get('pos') == 'PRON'
+                            and x.get('role') not in ('relative', 'interrogative',
+                                                      'reflexive', 'expletive')
+                            and x.get('head_index') == root_tok.get('orig_index')
+                            and x['orig_index'] not in processed_indices), None)
+        if _imp_clitic:
+            if not _imp_clitic.get('bm'):
+                _imp_clitic['bm'] = _imp_clitic.get('surface', '')
+            obj_tok = _imp_clitic
 
     if obj_tok and obj_tok.get('role') == 'interrogative':
         _interrog_noun = next((x for x in T
@@ -164,7 +212,7 @@ def run(T, tree, m, processed_indices, G_kg, NX_G,
         and x.get('role') not in ('expletive', 'clitic')
         and x.get('pos') in ('PRON', 'NOUN', 'PROPN')
         and str(x.get('surface', '')).lower().rstrip("'").rstrip('’')
-            not in ('ce', 'c', 'ca', 'ça')
+            not in (G_kg.get('expletive_fr_surfaces') or {'ce', 'c', 'ca', 'ça'})
         and x.get('orig_index') != (root_tok['orig_index'] if root_tok else -2)
         for x in T)
     if (not obj_tok and root_tok and root_tok.get('pos') in ('NOUN', 'PROPN')
@@ -173,10 +221,8 @@ def run(T, tree, m, processed_indices, G_kg, NX_G,
         obj_tok = root_tok
         _has_interrog_det = any(x.get('role') == 'interrogative'
                                 and x.get('head_index') == root_tok['orig_index'] for x in T)
-        if _has_interrog_det and _has_question_mark:
-            tree['clause_type'] = 'content_question'
-        elif tree.get('clause_type') not in ('existential_nominal', 'locative'):
-            tree['clause_type'] = 'noun_phrase'
+        if _has_interrog_det or tree.get('clause_type') in ('existential_nominal', 'locative'):
+            obj_tok = None
 
     if not obj_tok or obj_tok['orig_index'] in processed_indices:
         return
@@ -212,6 +258,9 @@ def run(T, tree, m, processed_indices, G_kg, NX_G,
             _tc_cc = next((x for x in T if x.get('dep') == 'cc'
                            and x.get('head_index') == tete_tok['orig_index']), None)
             _cc_bm_tc = _tc_cc.get('bm', '') if _tc_cc and _tc_cc.get('bm') else ''
+            # Coordination nominale sans bm (ex: 'et' CCONJ) → 'ni' par défaut
+            if not _cc_bm_tc and _tc.get('pos') in ('NOUN', 'PROPN'):
+                _cc_bm_tc = G_kg.get('comitative_marker', '')
             _resolved = j(_resolved, _cc_bm_tc, _tc_bm)
             processed_indices.add(_tc['orig_index'])
             if _tc_cc: processed_indices.add(_tc_cc['orig_index'])
@@ -260,7 +309,8 @@ def run(T, tree, m, processed_indices, G_kg, NX_G,
                                or 'Tense=Past' in str(x.get('morph', '')))]
             for _acl in _acl_parts:
                 _acl_bm = _acl.get('bm') or f"[{_acl.get('lemma')}]"
-                _len_form = _acl_bm + 'len' if not _acl_bm.endswith('len') else _acl_bm
+                _sfx = _statif_sfx(G_kg)
+                _len_form = _acl_bm + _sfx if not _acl_bm.endswith(_sfx) else _acl_bm
                 tete_bm = j(tete_bm, _len_form)
                 processed_indices.add(_acl['orig_index'])
 
@@ -341,6 +391,9 @@ def run(T, tree, m, processed_indices, G_kg, NX_G,
                           next((x for x in T if x.get('dep') == 'cc'
                                 and x.get('head_index') == tete_tok['orig_index']), None)
                 _conj_marker = _cc_tok.get('bm', '') if _cc_tok and _cc_tok.get('bm') else ''
+                # Coordination nominale sans bm (ex: 'et' CCONJ) → 'ni' par défaut
+                if not _conj_marker and _c.get('pos') in ('NOUN', 'PROPN'):
+                    _conj_marker = G_kg.get('comitative_marker', '')
                 if _cc_tok: processed_indices.add(_cc_tok['orig_index'])
                 tete_bm = j(tete_bm, _conj_marker, _c_bm)
                 processed_indices.add(_c['orig_index'])
@@ -382,7 +435,7 @@ def run(T, tree, m, processed_indices, G_kg, NX_G,
         objet_elements.insert(0, _temporal_case_marker.get('bm'))
         processed_indices.add(_temporal_case_marker['orig_index'])
 
-    m['O'] = j(*[x for x in objet_elements if str(x).strip() != 'ni'])
+    m['O'] = j(*[x for x in objet_elements if str(x).strip() != (G_kg.get('comitative_marker', '') or 'ni')])
 
     _is_deictique_pres = (tree.get('clause_type') == 'presentative'
                           and any(t.get('role') == 'deictique'

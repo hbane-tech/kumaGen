@@ -20,18 +20,28 @@ def run(T, tree, m, processed_indices, G_kg, root_noun, has_acl, _has_relcl):
     if not (root_noun and _has_acl_only and _acl_on_root):
         return
 
-    if tree.get('clause_type') != 'existential_nominal':
-        tree['clause_type'] = 'noun_phrase'
-
     r_idx     = root_noun['orig_index']
     child_adj = next((x for x in T if x.get('dep') == 'amod'
                       and x.get('head_index') == r_idx), None)
     acl_tok   = next((x for x in T if x.get('dep') == 'acl'
                       and x.get('head_index') == r_idx), None)
 
+    # Finite temporal clause (quand/lorsque + nsubj): treat as existential topic,
+    # not as a participial adjective. step5 will build the temporal OBL.
+    if acl_tok:
+        _temporal_mark = next((x for x in T
+                               if x.get('dep') == 'mark' and x.get('pos') == 'SCONJ'
+                               and x.get('head_index') == acl_tok['orig_index']), None)
+        if _temporal_mark:
+            m['S'] = root_noun.get('bm') or f"[{root_noun.get('lemma')}]"
+            processed_indices.add(root_noun['orig_index'])
+            return
+
     acl_val = acl_tok.get('bm', '') if acl_tok else ''
-    if acl_val and not acl_val.endswith('len'):
-        acl_val += 'len'
+    if acl_val:
+        _sfx = G_kg.get('morpho_rules', {}).get('statif', {}).get('suffix', 'len')
+        if not acl_val.endswith(_sfx):
+            acl_val += _sfx
 
     head_block = j(
         root_noun.get('bm', root_noun.get('surface', '')),

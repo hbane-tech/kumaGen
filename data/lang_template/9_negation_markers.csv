@@ -1,0 +1,11 @@
+surface,lang
+# MARQUEURS DE NÉGATION français à reconnaître
+# Ne rien à remplir ici — c'est la source française, fixe.
+# Ces tokens français déclenchent is_neg=True dans l'analyseur.
+ne,fr
+pas,fr
+jamais,fr
+plus,fr
+rien,fr
+personne,fr
+ni,fr

@@ -1,236 +1,239 @@
 """
 rules/steps/step1_avoir.py
-Étape 1-avoir : détection et traitement du verbe AVOIR (possession + il y a + existential).
-Ne touche pas à ÊTRE — géré dans step6_copule.py.
+Extraction des slots AVOIR : possession, il y a, existential.
+
+Le clause_type est déjà posé par apply_kg_patterns_early (PatternRule KG).
+Ce step remplit uniquement les slots S / O / V et marque processed_indices.
 """
 from rules.core import j, _is_avoir
 
 
 def _resolve_poss_type(obj_tok):
-    """Type de possession pour le marqueur (material→bóló vs abstract→fɛ).
-
-    Basé UNIQUEMENT sur le possession_type posé sur le token objet par
-    _detect_possession_type (LLM) : AGE / MATERIAL / ABSTRACT / PAIN.
-    Aucune liste de mots codée en dur. Marche pour les NOMS (qui n'ont pas de
-    semantic_class). Défaut (non détecté) → abstract (marqueur fɛ).
-    """
+    """Lit le possession_type LLM du token objet → type de marqueur bambara (toujours MAJUSCULE)."""
     _pt = str(obj_tok.get('possession_type', '')).upper()
-    if _pt == 'MATERIAL':
-        return 'material'
-    if _pt == 'AGE':
-        return 'AGE'
-    return 'abstract'  # ABSTRACT, PAIN, ou non détecté → fɛ
+    if _pt in ('MATERIAL', 'AGE', 'EXPERIENCER', 'STATIF', 'STATIF_HAB', 'EXPERIENCER_PAIN'):
+        return _pt
+    return 'ABSTRACT'
+
+
+def _mark_aux(T, processed_indices):
+    for x in T:
+        if x.get('dep') in ('aux:tense', 'aux:pass', 'det', 'fixed'):
+            processed_indices.add(x['orig_index'])
+
+
+def _mark_expletives(T, processed_indices):
+    for x in T:
+        if x.get('dep') in ('expl:subj', 'expl:comp'):
+            processed_indices.add(x['orig_index'])
+
+
+def _mark_det(T, head_idx, processed_indices, deps=('det', 'fixed')):
+    for x in T:
+        if x.get('dep') in deps and x.get('head_index') == head_idx:
+            processed_indices.add(x['orig_index'])
 
 
 def run(T, tree, m, processed_indices, G_kg, root_tok):
-    """
-    Modifie tree/m/processed_indices en place si avoir détecté.
-    Retourne root_tok (inchangé).
-    """
+    """Remplit S/O/V et possession_type selon le clause_type déjà décidé par KG."""
 
-    # EARLY EXIT: Temps composés (passé composé, etc.) → step3 gère avec sɔrɔ
+    ct = tree.get('clause_type', '')
+
+    # ── Passé composé avoir + sensation/émotion : clause spéciale ─────────
+    # (non couvert par PatternRule car condition composite aux + possession_type token)
     _has_composite_aux = any(
         x.get('dep') in ('aux:tense', 'aux:pass') and x.get('pos') == 'AUX'
         for x in T)
-    if _has_composite_aux:
+    if _has_composite_aux and _is_avoir(root_tok):
+        _obj_sens = next((x for x in T
+                          if x.get('dep') == 'obj'
+                          and x.get('possession_type') in ('EXPERIENCER', 'STATIF')
+                          and x.get('bm')), None)
+        if _obj_sens:
+            _subj = next((x for x in T
+                          if x.get('dep') in ('nsubj', 'nsubj:pass') and x.get('bm')), None)
+            m['O'] = _obj_sens.get('bm', '')
+            m['S'] = _subj.get('bm', 'a') if _subj else 'a'
+            m['V'] = ''
+            tree['possession_type'] = str(_obj_sens.get('possession_type', '')).upper()
+            tree['tense'] = 'past'
+            processed_indices.add(root_tok['orig_index'])
+            processed_indices.add(_obj_sens['orig_index'])
+            if _subj:
+                processed_indices.add(_subj['orig_index'])
+            _mark_aux(T, processed_indices)
         return root_tok
 
-    # ── IL Y A (semantic_class='having' hérité, avant fix _is_avoir) ──────────
-    # Exclure temps composés (passé composé, etc.) : aux:tense/aux:pass avant ROOT
-    # → c'est step3 qui doit gérer avec sɔrɔ
-    _is_il_ya_legacy = (
-        root_tok
-        and _is_avoir(root_tok)
-        and root_tok.get('dep') == 'ROOT'
-        and any(x.get('dep') in ('expl:subj', 'expl:comp') for x in T)
-        and not any(x.get('dep') in ('aux:tense', 'aux:pass') and x.get('pos') == 'AUX' for x in T)
-    )
-    if _is_il_ya_legacy:
-        _vrai_subj = next((x for x in T
-                           if x.get('dep') == 'obj'
-                           and x.get('pos') in ('NOUN', 'PROPN')), None)
-        if _vrai_subj:
-            _has_loc = any(
-                x.get('dep') in ('obl', 'obl:mod', 'obl:arg')
-                and any(p.get('dep') == 'case' and p.get('role') == 'locative'
-                        for p in T if p.get('head_index') == x['orig_index'])
-                for x in T)
-            tree['clause_type'] = ('existential_localized' if _has_loc
-                                   else 'existential_absolute')
-            _es_bm = _vrai_subj.get('bm') or f"[{_vrai_subj.get('lemma')}]"
-            if (_vrai_subj.get('is_plural')
-                    or str(_vrai_subj.get('surface', '')).endswith('s')):
-                if not _es_bm.endswith('w'):
-                    _es_bm += 'w'
+    # ── Existential (il y a) — slots : S='', O=nom réel ──────────────────
+    if ct in ('existential_absolute', 'existential_localized'):
+        _real = next((x for x in T
+                      if x.get('dep') == 'obj'
+                      and x.get('pos') in ('NOUN', 'PROPN')), None)
+        if _real:
+            _bm = _real.get('bm') or f"[{_real.get('lemma')}]"
+            if _real.get('is_plural') or str(_real.get('surface', '')).endswith('s'):
+                if not _bm.endswith('w'):
+                    _bm += 'w'
             m['S'] = ''
-            m['O'] = _es_bm
+            m['O'] = _bm
             processed_indices.add(root_tok['orig_index'])
-            processed_indices.add(_vrai_subj['orig_index'])
-            for _expl in T:
-                if _expl.get('dep') in ('expl:subj', 'expl:comp'):
-                    processed_indices.add(_expl['orig_index'])
-            for _dt in T:
-                if (_dt.get('dep') in ('det', 'fixed')
-                        and _dt.get('head_index') == _vrai_subj['orig_index']):
-                    processed_indices.add(_dt['orig_index'])
+            processed_indices.add(_real['orig_index'])
+            _mark_expletives(T, processed_indices)
+            _mark_det(T, _real['orig_index'], processed_indices)
+        return root_tok
 
-    # ── AVOIR POSSESSION (_is_avoir = semantic_class='having') ────────────────
-    _avoir_possession = (
-        root_tok
-        and _is_avoir(root_tok)
-        and root_tok.get('pos') in ('VERB', 'AUX')
-        and root_tok.get('dep') == 'ROOT'
-        and not any(x.get('dep') in ('expl:comp', 'expl:subj') for x in T)
-        and any(x.get('dep') == 'obj' for x in T)
-        and not any(x.get('dep') == 'xcomp' for x in T)
-    )
-    if _avoir_possession:
-        _obj_poss  = next((x for x in T
-                           if x.get('dep') == 'obj'
-                           and x.get('pos') in ('NOUN', 'PROPN')
-                           and x.get('bm')), None)
-        _subj_poss = next((x for x in T
-                           if x.get('dep') == 'nsubj'
-                           and x.get('pos') == 'PRON'
-                           and x.get('bm')), None)
-        if _obj_poss and _subj_poss:
-            _poss_type = _resolve_poss_type(_obj_poss)
-            tree['clause_type']    = 'noun_phrase_have'
-            tree['possession_type'] = _poss_type
-            _obj_bm = _obj_poss.get('bm')
-            if (_obj_poss.get('is_plural')
-                    or str(_obj_poss.get('surface', '')).endswith('s')):
-                if not _obj_bm.endswith('w'):
-                    _obj_bm += 'w'
-            # Conj de l'objet
-            _root_orig_av = root_tok['orig_index'] if root_tok else -1
-            _obj_conjs = [x for x in T
-                          if x.get('dep') == 'conj'
-                          and x['orig_index'] not in processed_indices
-                          and (x.get('head_index') == _obj_poss['orig_index']
-                               or (x.get('head_index') == _root_orig_av
-                                   and x.get('pos') in ('NOUN', 'PROPN')
-                                   and x['orig_index'] > _obj_poss['orig_index']))]
-            for _oc in _obj_conjs:
-                _cc_oc    = (next((x for x in T if x.get('dep') == 'cc'
-                                   and x.get('head_index') == _obj_poss['orig_index']), None)
-                             or next((x for x in T if x.get('dep') == 'cc'
-                                      and x.get('head_index') == _oc['orig_index']), None))
-                _cc_bm_oc = _cc_oc.get('bm', '') if _cc_oc and _cc_oc.get('bm') else ''
-                _oc_bm    = _oc.get('bm') or f"[{_oc.get('lemma', '')}]"
-                _obj_bm   = j(_obj_bm, _cc_bm_oc, _oc_bm)
-                processed_indices.add(_oc['orig_index'])
-                if _cc_oc:
-                    processed_indices.add(_cc_oc['orig_index'])
-            m['S'] = _subj_poss.get('bm')
-            m['O'] = _obj_bm
+    # ── Possession avoir — slots : S=sujet, O=objet possédé ──────────────
+    if ct != 'noun_phrase_have':
+        # LLM classified root as 'having' (posséder, détenir…) but no PatternRule fired
+        if _is_avoir(root_tok):
+            tree['clause_type'] = 'noun_phrase_have'
+        else:
+            return root_tok
+
+    _obj = next((x for x in T
+                 if x.get('dep') == 'obj'
+                 and x.get('pos') in ('NOUN', 'PROPN', 'ADJ')
+                 and x.get('bm')), None)
+    if not _obj:
+        # "tu as combien d'enfants ?" : combien (ADV, dep=obj) + enfant (NOUN, obl:arg)
+        # → utiliser le NOUN pour déterminer possession_type
+        _interrog_qty_tok = next((x for x in T
+                                  if x.get('dep') == 'obj'
+                                  and x.get('role') == 'interrogative'
+                                  and x.get('pos') == 'ADV'), None)
+        if _interrog_qty_tok:
+            _obj = next((x for x in T
+                         if x.get('dep') in ('obl:arg', 'nmod')
+                         and x.get('head_index') == _interrog_qty_tok['orig_index']
+                         and x.get('pos') in ('NOUN', 'PROPN')), None)
+    _subj = next((x for x in T
+                  if x.get('dep') in ('nsubj', 'nsubj:pass')
+                  and x.get('bm')), None)
+    if not (_obj and _subj):
+        return root_tok
+
+    # "avoir mal" → surface 'mal' lu depuis KG
+    _avoir_mal_surf = G_kg.get('avoir_mal_fr', '')
+    _is_avoir_mal = bool(_avoir_mal_surf and (
+        str(_obj.get('surface', '')).lower() == _avoir_mal_surf.lower()
+        or str(_obj.get('lemma', '')).lower() == _avoir_mal_surf.lower()))
+    _poss_type = 'EXPERIENCER' if _is_avoir_mal else _resolve_poss_type(_obj)
+    tree['possession_type'] = _poss_type
+
+    _state_bm = _obj.get('bm') or f"[{_obj.get('lemma', '')}]"
+    _subj_bm  = _subj.get('bm', '')
+
+    if _poss_type == 'STATIF':
+        m['O'] = _state_bm
+        m['S'] = _subj_bm
+        m['V'] = ''
+        processed_indices.add(root_tok['orig_index'])
+        processed_indices.add(_obj['orig_index'])
+        processed_indices.add(_subj['orig_index'])
+        _mark_det(T, _obj['orig_index'], processed_indices, ('det', 'fixed', 'case'))
+        return root_tok
+
+    if _poss_type == 'EXPERIENCER':
+        _body = next((x for x in T
+                      if x.get('dep') in ('obl', 'obl:arg', 'obl:mod', 'iobj')
+                      and x.get('pos') in ('NOUN', 'PROPN')
+                      and x.get('head_index') == root_tok['orig_index']
+                      and x['orig_index'] not in processed_indices), None)
+        processed_indices.add(root_tok['orig_index'])
+        processed_indices.add(_obj['orig_index'])
+        processed_indices.add(_subj['orig_index'])
+        _mark_det(T, _obj['orig_index'], processed_indices, ('det', 'fixed', 'case'))
+        if _body:
+            _body_bm = _body.get('bm') or f"[{_body.get('lemma', '')}]"
+            m['O'] = j(_subj_bm, _body_bm)
+            m['S'] = _subj_bm
             m['V'] = ''
-            processed_indices.add(_obj_poss['orig_index'])
-            processed_indices.add(_subj_poss['orig_index'])
-            processed_indices.add(root_tok['orig_index'])
-            for _dt in T:
-                if (_dt.get('dep') in ('det', 'fixed')
-                        and _dt.get('head_index') == _obj_poss['orig_index']):
-                    processed_indices.add(_dt['orig_index'])
-
-    # ── IL Y A (via _is_avoir) ────────────────────────────────────────────────
-    # Exclure temps composés (passé composé, etc.) : aux:tense/aux:pass avant ROOT
-    _is_il_ya = (
-        root_tok
-        and _is_avoir(root_tok)
-        and root_tok.get('dep') == 'ROOT'
-        and any(x.get('dep') in ('expl:subj', 'expl:comp') for x in T)
-        and not any(x.get('dep') in ('aux:tense', 'aux:pass') and x.get('pos') == 'AUX' for x in T)
-    )
-    if _is_il_ya:
-        _vrai_subj2 = next((x for x in T
-                            if x.get('dep') == 'obj'
-                            and x.get('pos') in ('NOUN', 'PROPN')), None)
-        if _vrai_subj2:
-            _has_loc2 = any(
-                x.get('dep') in ('obl', 'obl:mod', 'obl:arg')
-                and any(p.get('dep') == 'case' and p.get('role') == 'locative'
-                        for p in T if p.get('head_index') == x['orig_index'])
-                for x in T)
-            tree['clause_type'] = ('existential_localized' if _has_loc2
-                                   else 'existential_absolute')
-            _es2_bm = _vrai_subj2.get('bm') or f"[{_vrai_subj2.get('lemma')}]"
-            if (_vrai_subj2.get('is_plural')
-                    or str(_vrai_subj2.get('surface', '')).endswith('s')):
-                if not _es2_bm.endswith('w'):
-                    _es2_bm += 'w'
-            m['S'] = ''
-            m['O'] = _es2_bm
-            processed_indices.add(root_tok['orig_index'])
-            processed_indices.add(_vrai_subj2['orig_index'])
-            for _expl in T:
-                if _expl.get('dep') in ('expl:subj', 'expl:comp'):
-                    processed_indices.add(_expl['orig_index'])
-            for _dt in T:
-                if (_dt.get('dep') in ('det', 'fixed')
-                        and _dt.get('head_index') == _vrai_subj2['orig_index']):
-                    processed_indices.add(_dt['orig_index'])
-
-    # ── AVOIR ROOT possession (fallback semantic_class) ───────────────────────
-    # Exclure temps composés (passé composé, passé antérieur) : aux:tense/aux:pass
-    # avant le ROOT → c'est step3 qui doit gérer avec sɔrɔ
-    _avoir_possession2 = (
-        root_tok
-        and _is_avoir(root_tok)
-        and root_tok.get('pos') in ('VERB', 'AUX')
-        and root_tok.get('dep') == 'ROOT'
-        and not any(x.get('dep') in ('expl:comp', 'expl:subj') for x in T)
-        and any(x.get('dep') == 'obj' for x in T)
-        and not any(x.get('dep') == 'xcomp' for x in T)
-        and not any(x.get('dep') in ('aux:tense', 'aux:pass') and x.get('pos') == 'AUX' for x in T)
-    )
-    if _avoir_possession2:
-        _obj2  = next((x for x in T
-                       if x.get('dep') == 'obj'
-                       and x.get('pos') in ('NOUN', 'PROPN')
-                       and x.get('bm')), None)
-        _subj2 = next((x for x in T
-                       if x.get('dep') in ('nsubj', 'nsubj:pass')
-                       and x.get('bm')), None)
-        if _obj2 and _subj2:
-            _poss_type2 = _resolve_poss_type(_obj2)
-            tree['clause_type']     = 'noun_phrase_have'
-            tree['possession_type'] = _poss_type2
-            _obj_bm2 = _obj2.get('bm')
-            if (_obj2.get('is_plural')
-                    or str(_obj2.get('surface', '')).endswith('s')):
-                if not _obj_bm2.endswith('w'):
-                    _obj_bm2 += 'w'
-            _root_orig2 = root_tok['orig_index'] if root_tok else -1
-            _obj_conjs2 = [x for x in T
-                           if x.get('dep') == 'conj'
-                           and x.get('pos') in ('NOUN', 'PROPN')
-                           and (x.get('head_index') == _obj2['orig_index']
-                                or (x.get('head_index') == _root_orig2
-                                    and x['orig_index'] > _obj2['orig_index']))]
-            for _oc2 in _obj_conjs2:
-                _cc2    = next((x for x in T
-                                if x.get('dep') == 'cc'
-                                and (x.get('head_index') == _obj2['orig_index']
-                                     or x.get('head_index') == _oc2['orig_index'])), None)
-                _cc_bm2 = _cc2.get('bm', '') if _cc2 and _cc2.get('bm') else ''
-                _oc2_bm = _oc2.get('bm') or f"[{_oc2.get('lemma', '')}]"
-                if ((_oc2.get('is_plural') or str(_oc2.get('surface', '')).endswith('s'))
-                        and not _oc2_bm.endswith('w')):
-                    _oc2_bm += 'w'
-                _obj_bm2 = j(_obj_bm2, _cc_bm2, _oc2_bm)
-                processed_indices.add(_oc2['orig_index'])
-                if _cc2:
-                    processed_indices.add(_cc2['orig_index'])
-            m['S'] = _subj2.get('bm')
-            m['O'] = _obj_bm2
+            tree['pain_bm'] = _state_bm
+            tree['possession_type'] = 'EXPERIENCER_PAIN'
+            _mark_det(T, _body['orig_index'], processed_indices, ('det', 'fixed', 'case'))
+            processed_indices.add(_body['orig_index'])
+        else:
+            m['O'] = _state_bm
+            m['S'] = _subj_bm
             m['V'] = ''
-            processed_indices.add(_obj2['orig_index'])
-            processed_indices.add(_subj2['orig_index'])
-            processed_indices.add(root_tok['orig_index'])
-            for _dt in T:
-                if (_dt.get('dep') in ('det', 'fixed')
-                        and _dt.get('head_index') == _obj2['orig_index']):
-                    processed_indices.add(_dt['orig_index'])
+        return root_tok
 
+    # AGE : O = nummod (le nombre), pas l'unité ("ans/saan" est dans le template)
+    _root_idx = root_tok['orig_index'] if root_tok else -1
+    if _poss_type == 'AGE':
+        _nummod = next((x for x in T
+                        if x.get('dep') == 'nummod'
+                        and x.get('head_index') == _obj['orig_index']), None)
+        if _nummod:
+            _num_bm = _nummod.get('bm') or _nummod.get('surface', '')
+            m['S'] = _subj_bm
+            m['O'] = _num_bm
+            m['V'] = ''
+            processed_indices.add(_obj['orig_index'])
+            processed_indices.add(_subj['orig_index'])
+            processed_indices.add(_root_idx)
+            processed_indices.add(_nummod['orig_index'])
+            return root_tok
+        # Pas de nummod → O = bm de l'unité (âge interrogatif: O vide, INTERROG rempli ailleurs)
+        m['S'] = _subj_bm
+        m['O'] = _obj.get('bm', '')
+        m['V'] = ''
+        processed_indices.add(_obj['orig_index'])
+        processed_indices.add(_subj['orig_index'])
+        processed_indices.add(_root_idx)
+        return root_tok
+
+    # MATERIAL / ABSTRACT : O = objet possédé (+ conjoints)
+    _obj_bm = _obj.get('bm', '')
+    if _obj.get('is_plural') or str(_obj.get('surface', '')).endswith('s'):
+        if not _obj_bm.endswith('w'):
+            _obj_bm += 'w'
+    # Nummod sur l'objet (ex: deux haches → jélew fila)
+    _nummod_on_obj = next((x for x in T
+                           if x.get('dep') == 'nummod'
+                           and x.get('head_index') == _obj['orig_index']
+                           and x.get('bm')), None)
+    if _nummod_on_obj:
+        _obj_bm = j(_obj_bm, _nummod_on_obj.get('bm', ''))
+        processed_indices.add(_nummod_on_obj['orig_index'])
+    # Déterminant possessif (ton/mon/son…) sur l'objet haver :
+    # "il eut ton appel" → _obj_bm = 'i ka wéle' (alienable) / 'i wéle' (inalienable)
+    # _mark_det() marque le DET comme traité → step4 ne le verrait plus sinon.
+    _poss_det_avoir = next((x for x in T
+                            if x.get('dep') == 'det'
+                            and x.get('role') in ('pronoun', 'possessive')
+                            and x.get('head_index') == _obj['orig_index']
+                            and x.get('bm')), None)
+    if _poss_det_avoir:
+        _poss_bm_av = _poss_det_avoir.get('bm', '')
+        if _poss_bm_av:
+            _is_rel_av = (_obj.get('is_relational', False)
+                          or _obj_bm in G_kg.get('relational_bms', set()))
+            _gen_av = '' if _is_rel_av else (G_kg.get('genitive_marker', '') or 'ka')
+            _obj_bm = j(_poss_bm_av, _gen_av, _obj_bm)
+    for _oc in T:
+        if (_oc.get('dep') == 'conj'
+                and _oc['orig_index'] not in processed_indices
+                and (_oc.get('head_index') == _obj['orig_index']
+                     or (_oc.get('head_index') == _root_idx
+                         and _oc.get('pos') in ('NOUN', 'PROPN')
+                         and _oc['orig_index'] > _obj['orig_index']))):
+            _cc = (next((x for x in T if x.get('dep') == 'cc'
+                         and x.get('head_index') == _obj['orig_index']), None)
+                   or next((x for x in T if x.get('dep') == 'cc'
+                            and x.get('head_index') == _oc['orig_index']), None))
+            _cc_bm = _cc.get('bm', '') if _cc and _cc.get('bm') else ''
+            _oc_bm = _oc.get('bm') or f"[{_oc.get('lemma', '')}]"
+            _obj_bm = j(_obj_bm, _cc_bm, _oc_bm)
+            processed_indices.add(_oc['orig_index'])
+            if _cc:
+                processed_indices.add(_cc['orig_index'])
+
+    m['S'] = _subj_bm
+    m['O'] = _obj_bm
+    m['V'] = ''
+    processed_indices.add(_obj['orig_index'])
+    processed_indices.add(_subj['orig_index'])
+    processed_indices.add(_root_idx)
+    _mark_det(T, _obj['orig_index'], processed_indices)
     return root_tok

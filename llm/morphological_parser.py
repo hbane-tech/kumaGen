@@ -14,6 +14,7 @@ Result is cached in Neo4j ParseCache node.
 import re
 import json
 import hashlib
+from config.settings import OLLAMA_GENERATE_URL
 
 # ── System prompt ─────────────────────────────────────────────────
 
@@ -220,7 +221,7 @@ def _call_ollama(sentence: str, model: str = 'qwen2.5:3b') -> dict:
     }
     try:
         response = requests.post(
-            'http://localhost:11434/api/generate',
+            OLLAMA_GENERATE_URL,
             json=payload, timeout=60)
         return _parse_response(response.json().get('response', ''))
     except (requests.exceptions.ReadTimeout,

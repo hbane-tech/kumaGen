@@ -1,29 +1,29 @@
 """
 embeddings/word2vec_encoder.py
 
-Uses a pretrained multilingual sentence-transformer model instead of
-a custom Word2Vec. This gives real semantic similarity between French
-words without requiring a large training corpus.
+Multilingual BERT sentence encoder for KG semantic retrieval.
 
-Model: paraphrase-multilingual-MiniLM-L12-v2
-- Free, runs locally, no API key needed
-- 384 dimensions
-- Trained on 50+ languages including French
-- Semantically meaningful: chien ~ canidé, manger ~ nourriture
+Model: LaBSE (Language-agnostic BERT Sentence Embedding)
+- BERT-based architecture, fine-tuned for cross-lingual sentence similarity
+- 768 dimensions (vs 384 for the previous MiniLM model)
+- Supports French and English (needed for French queries + English KG glosses)
+- Trained on 109 languages with translation pairs — strong cross-lingual alignment
+- Runs fully local, no API key
 """
 
 import numpy as np
 from utils.normalize import clean_gloss
 
 _model = None
-MODEL_NAME = "paraphrase-multilingual-MiniLM-L12-v2"
+MODEL_NAME = "sentence-transformers/LaBSE"
+DIM = 768
 
 
 def _get_model():
     global _model
     if _model is None:
         from sentence_transformers import SentenceTransformer
-        print(f"Loading sentence-transformer model '{MODEL_NAME}'...")
+        print(f"Loading BERT sentence encoder '{MODEL_NAME}'...")
         _model = SentenceTransformer(MODEL_NAME)
         print("Model loaded.")
     return _model
@@ -31,16 +31,15 @@ def _get_model():
 
 def encode(text: str) -> np.ndarray:
     """
-    Encode a text string using the multilingual sentence-transformer.
-    Returns a 384-dim float32 vector.
-    Returns a zero vector for empty input.
+    Encode text with LaBSE BERT encoder.
+    Returns a 768-dim float32 vector, or a zero vector for empty input.
     """
     if not isinstance(text, str) or not text.strip():
-        return np.zeros(384, dtype=np.float32)
+        return np.zeros(DIM, dtype=np.float32)
 
     cleaned = clean_gloss(text.strip())
     if not cleaned:
-        return np.zeros(384, dtype=np.float32)
+        return np.zeros(DIM, dtype=np.float32)
 
     model = _get_model()
     vec = model.encode(cleaned, convert_to_numpy=True)
@@ -50,7 +49,7 @@ def encode(text: str) -> np.ndarray:
 def encode_batch(texts: list) -> np.ndarray:
     """
     Encode a list of strings in one efficient batch call.
-    Returns a (N, 384) float32 array.
+    Returns a (N, 768) float32 array.
     """
     cleaned = [clean_gloss(t.strip()) if isinstance(t, str) else "" for t in texts]
     model = _get_model()

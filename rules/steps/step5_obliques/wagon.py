@@ -56,10 +56,19 @@ def append(tok_item, T, m, processed_indices, G_kg, NX_G,
     amod_toks = sorted([x for x in obl_chunk if x.get('dep') == 'amod'],
                        key=lambda x: x['orig_index'])
 
+    # Distributifs : calculés avant compound_toks pour les exclure via _distrib_idx
+    _distrib_surfaces = (set(G_kg.get('distributive_each', {}).keys())
+                       | set(G_kg.get('distributive_one', {}).keys()))
+    _distrib_dets_pre  = [x for x in obl_chunk
+                          if x.get('dep') == 'det'
+                          and str(x.get('surface', '')).lower() in _distrib_surfaces]
+    _distrib_idx = {d['orig_index'] for d in _distrib_dets_pre}
+
     compound_toks = sorted(
         [x for x in obl_chunk
          if x.get('dep') in ('nmod', 'nummod', 'det')
          and x != tok_item
+         and x['orig_index'] not in _distrib_idx
          and x.get('role') not in ('article', 'pronoun', 'demonstrative')
          and not (x.get('pos') == 'DET' and not x.get('bm'))
          and not _nmod_has_loc_adp(x, T, _loc_markers, _tmp_markers)],
@@ -92,14 +101,14 @@ def append(tok_item, T, m, processed_indices, G_kg, NX_G,
     pref_val = ''
     suff_dict_val = ''
     if _demo_det and not demo_tok:
-        pref_val      = 'nin'
-        suff_dict_val = _demo_det.get('bm_suffix') or G_kg.get('demonstrative_suffix', 'in') or 'in'
+        pref_val      = G_kg.get('demonstrative_prefix', '')
+        suff_dict_val = _demo_det.get('bm_suffix') or G_kg.get('demonstrative_suffix', '') or ''
         processed_indices.add(_demo_det['orig_index'])
 
     # purposive sur nom → équatif yé
     if (dep_case and dep_case.get('role') == 'purposive'
             and tok_item.get('pos') in ('NOUN', 'PROPN', 'NUM')):
-        marker_val      = G_kg.get('equative_marker', 'yé') or 'yé'
+        marker_val      = G_kg.get('equative_marker', '') or ''
         clause_type_val = 'simple'
 
     # bm_suffix du verbe ROOT sur le marqueur
@@ -124,8 +133,7 @@ def append(tok_item, T, m, processed_indices, G_kg, NX_G,
     # Quantifier amods (e.g. tous→bɛɛ) postposés directement sur head_base,
     # sans adj_man. Les autres amods ADJ passent par adj_man normalement.
     _quant_amods  = [a for a in clean_amod_toks if a.get('role') == 'quantifier']
-    _distrib_dets = [x for x in obl_chunk
-                     if x.get('dep') == 'det' and x.get('role') == 'distributive_each']
+    _distrib_dets = _distrib_dets_pre  # déjà calculé ci-dessus
     _regular_amods = [a for a in clean_amod_toks if a.get('role') != 'quantifier']
     mod_compiled = j(*[
         adj_man(a.get('bm') or f"[{a.get('lemma')}]",
@@ -140,14 +148,14 @@ def append(tok_item, T, m, processed_indices, G_kg, NX_G,
         head_base = j(head_base, _d_bm, head_base)
 
     if demo_tok and compound_base:
-        suff_val = G_kg.get('demonstrative_suffix', 'in') or 'in'
+        suff_val = G_kg.get('demonstrative_suffix', '')
         if not compound_base.endswith(suff_val):
             compound_base = f"{compound_base} {suff_val}"
-        pref_val      = demo_tok.get('bm') or 'nin'
+        pref_val      = demo_tok.get('bm') or G_kg.get('demonstrative_prefix', '')
         suff_dict_val = ''
     elif demo_tok:
         pref_val      = demo_tok.get('bm') or ''
-        suff_dict_val = G_kg.get('demonstrative_suffix', 'in') or ''
+        suff_dict_val = G_kg.get('demonstrative_suffix', '')
 
     # loc_nmod imbriqués
     loc_nmod_toks = sorted(

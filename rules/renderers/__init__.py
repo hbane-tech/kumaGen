@@ -1,29 +1,25 @@
 """
 rules/renderers/__init__.py
 Point d'entrée unique : tree_to_bambara()
-Remplace rules/tree_to_bambara.py — même interface, même comportement.
 
-Usage (identique à l'ancien fichier) :
-    from rules.renderers import tree_to_bambara
+Moteur de rendu pur — zéro règle linguistique hardcodée.
+Toutes les valeurs bambara viennent du KG :
+  - ClauseTemplate  → ordre des mots
+  - FunctionWord    → marqueurs fixes (ko, wa, kɛ…)
+  - MorphoRule      → suffixes morphologiques
+  - G_kg            → marqueurs dynamiques (genitive_marker, equative_marker…)
 """
 from rules.core import j, _GENITIVE_FALLBACK, _resolve_tam
+from rules.kg_rule_engine import (lookup_clause_template,
+                                   fill_template, apply_morpho_suffix)
 
-from rules.renderers.overrides      import apply_overrides
-from rules.renderers.existential    import (render_existential_nominal,
-                                            render_existential_absolute,
-                                            render_existential_localized)
-from rules.renderers.copula         import (render_statif, render_equative,
-                                            render_identificatory,
-                                            render_presentative, render_qualitative,
-                                            render_locative_existential)
-from rules.renderers.verbal         import (render_verb_serial, render_simple,
-                                            render_conditional,
-                                            render_relative_topic,
-                                            render_comitative_clause, render_misc)
-from rules.renderers.interrogative  import (render_interrogative,
-                                            render_content_question,
-                                            render_noun_phrase_have)
-from rules.renderers.nominal        import render_noun_phrase
+
+def _fw(G, role, fallback=''):
+    """Lit un FunctionWord depuis G_kg par son rôle."""
+    for fw in (G.get('function_words') or []):
+        if fw.get('role') == role:
+            return fw.get('bm', fallback)
+    return fallback
 
 
 def tree_to_bambara(tree, G=None, grammar=None):
@@ -33,52 +29,55 @@ def tree_to_bambara(tree, G=None, grammar=None):
     S   = m.get('S', '') or ''
     O   = m.get('O', '') or ''
     V   = m.get('V', '') or ''
+    if tree.get('_is_privative'):
+        print(f"[RENDER] Privative: S='{S}', O='{O}', V='{V}', ct='{ct}'")
     V_ACT = m.get('V_ACTION', '') or ''
     V_SUF = m.get('V_SUFFIX', '') or ''
     ADV   = m.get('ADV', '')   or ''
     neg   = tree.get('neg', False)
     tn    = tree.get('tense', 'pres')
 
+    # TAM posé par kg_gateway TransformRule — lu depuis tree
     tam_val = tree.get('tam', '')
-    # REFLEXIF ABSOLU: preserve TAM from step3 even if lost in step6
-    if tree.get('clause_type') == 'refl_absolute' and (not tam_val or tam_val.strip() == ''):
-        # Recover TAM based on tense for reflexive clauses
-        tam_val = _resolve_tam(tn, tree.get('neg', False), G)
-    if not tam_val or tam_val.strip() == '':
-        tam_val = 'bɛ'
+    if (not tam_val or tam_val.strip() == '') and not tree.get('_obligation'):
+        # Impératif/prohibitif : TAM vide est intentionnel (verbe nu) — ne pas refill
+        if ct not in ('imperative', 'prohibitive'):
+            tam_val = _resolve_tam(tn, neg, G) or G.get('tam_default', '')
     TAM = tam_val
 
-    # ── Ccomp ────────────────────────────────────────────────────────────────
+    # ── Ccomp : template lu depuis le KG ─────────────────────────────────────
     _ccomp_data = m.get('CCOMP')
     _ccomp_str  = ''
     if isinstance(_ccomp_data, dict):
-        _ko = G.get('reported_intro', 'ko') or 'ko'
-        if _ccomp_data.get('type') == 'comparative':
-            _cs = _ccomp_data.get('S', '')
-            _ca = _ccomp_data.get('adj_bm', '')
-            _cp = _ccomp_data.get('particle', 'ka tɛmɛ')
-            _cr = _ccomp_data.get('ref_bm', '')
-            _cn = 'man' if _ccomp_data.get('neg') else 'ka'
-            _ccomp_str = j(_ko, _cs, _cn, _ca, _cp, _cr, 'kan')
-        elif _ccomp_data.get('type') == 'verbal':
-            # Clause verbale rapportée : ko S TAM (O) V
-            _ccomp_str = j(_ko, _ccomp_data.get('S', ''),
-                           _ccomp_data.get('tam', ''),
-                           _ccomp_data.get('O', ''),
-                           _ccomp_data.get('V', ''))
-        elif _ccomp_data.get('type') == 'qualite':
-            # ccomp ADJ de qualité (la route EST LONGUE) : ko S ka ADJ —
-            # un seul 'ka', pas le redoublement équatif "S yé O yé" du
-            # bloc générique ci-dessous (réservé aux ccomp à tête NOUN).
-            _ccomp_str = j(_ko, _ccomp_data.get('S', ''), 'ka',
-                           _ccomp_data.get('adj_bm', ''))
+        _ko  = G.get('reported_intro', '')
+        _typ = _ccomp_data.get('type', '')
+        _ccomp_slots = {
+            'S':   _ccomp_data.get('S', ''),
+            'O':   _ccomp_data.get('O', ''),
+            'V':   _ccomp_data.get('V', ''),
+            'TAM': _ccomp_data.get('tam', ''),
+            'ADJ': _ccomp_data.get('adj_bm', ''),
+            'REF': _ccomp_data.get('ref_bm', ''),
+            'PARTICLE': _ccomp_data.get('particle',
+                        G.get('comparative_particle') or _fw(G, 'comparative_particle', '')),
+        }
+        if _typ == 'comparative':
+            _tpl_key = 'ccomp_comparative_neg' if _ccomp_data.get('neg') else 'ccomp_comparative_pos'
+            _tpl = lookup_clause_template(_tpl_key, G) or ''
+            _ccomp_str = j(_ko, fill_template(_tpl, _ccomp_slots)) if _tpl else ''
+        elif _typ == 'verbal':
+            _tpl = lookup_clause_template('ccomp_verbal', G) or ''
+            _ccomp_str = j(_ko, fill_template(_tpl, _ccomp_slots)) if _tpl else ''
+        elif _typ == 'qualite':
+            _tpl = lookup_clause_template('ccomp_qualite', G) or ''
+            _ccomp_str = j(_ko, fill_template(_tpl, _ccomp_slots)) if _tpl else ''
         elif _ccomp_data.get('O'):
-            _ccomp_str = j(_ko, _ccomp_data.get('S', ''),
-                           _ccomp_data.get('tam', 'yé'),
-                           _ccomp_data.get('O', ''),
-                           _ccomp_data.get('tam', 'yé'))
+            _eq_mk = G.get('equative_marker') or _fw(G, 'f3_equative', '')
+            _ccomp_slots['TAM'] = _eq_mk
+            _tpl = lookup_clause_template('ccomp_equative', G) or ''
+            _ccomp_str = j(_ko, fill_template(_tpl, _ccomp_slots)) if _tpl else ''
 
-    # ── Wagons obliques ───────────────────────────────────────────────────────
+    # ── Wagons obliques : lecture depuis OBL_ALL, marqueurs depuis KG ────────
     obl_strings = []
     for c in (m.get('OBL_ALL') or []):
         comp   = c.get('COMPOUND', '')
@@ -95,8 +94,7 @@ def tree_to_bambara(tree, G=None, grammar=None):
             elif lct in ('locative', 'temporal'):
                 if pref or suff:
                     noun_base = j(pref, comp, head, suff)
-                    pref = ''
-                    suff = ''
+                    pref = suff = ''
                 else:
                     noun_base = j(comp, head)
             else:
@@ -107,230 +105,277 @@ def tree_to_bambara(tree, G=None, grammar=None):
             noun_base = j(noun_base, mod)
         full_chunk = j(pref, noun_base, suff) if (pref or suff) else noun_base
         if marker:
-            if (lct == 'temporal'
-                    and (c.get('MARKER_IS_PREFIX')
-                         or str(marker).strip().lower() in ('kabini', "k'an bɔ"))):
+            if c.get('MARKER_IS_PREFIX'):
+                # Marqueur préfixe (kabini, k'an bɔ…) : lu depuis OBL_ALL
                 full_chunk = j(marker, full_chunk)
-            elif lct == 'privative' and marker in ('tan', 'bali'):
+            elif lct == 'privative':
+                # Privatif : suffixe collé sans espace (tanli kɛ → tan)
                 full_chunk = full_chunk + marker
             else:
                 full_chunk = j(full_chunk, marker)
         obl_strings.append(full_chunk)
 
-    # ── F6 : past intransitif ─────────────────────────────────────────────────
-    # refl_absolute exclu (comme reciprocal) : il gère sa propre forme
-    # S TAM S yɛrɛ V et garde son TAM (yé/ma) ; ne pas le convertir en V+ra.
+    # ── F6 : passé intransitif → résultatif ──────────────────────────────────
     _o_is_xcomp = m.get('O_IS_XCOMP', False)
-    if (tn == 'past' and not tree.get('is_transitive', True) and not _o_is_xcomp
-            and ct not in ('reciprocal', 'refl_absolute')):
+    if tree.get('_passive_statif'):
+        # Passif statif : S V+len TAM — délégué au dispatch KG générique
+        ct = 'passive_statif'
+        tree['clause_type'] = 'passive_statif'
+
+    if (tn == 'past'
+            and (not tree.get('is_transitive', True) or tree.get('_refl_pronominal_bypass'))
+            and not _o_is_xcomp
+            and ct not in ('reciprocal', 'refl_absolute', 'passive_statif', 'passive_statif_question')):
         if neg:
-            TAM = 'ma'
+            TAM = _resolve_tam('past', True, G) or ''
         else:
             if V:
                 _v_parts = V.split(' ')
                 _root_v  = _v_parts[0]
                 _rest_v  = _v_parts[1:]
-                if not _root_v.endswith('ra') and not _root_v.endswith('na'):
-                    _root_v += 'na' if _root_v.endswith('n') else 'ra'
+                _morpho_res = G.get('morpho_rules', {}).get('resultative', {})
+                if _morpho_res:
+                    _root_v = apply_morpho_suffix(_root_v, _morpho_res)
                 V = j(_root_v, *_rest_v)
             TAM = ''
     else:
         TAM = tam_val
 
-    # ── Debug slots ───────────────────────────────────────────────────────────
-    print(f"DEBUG F6: V={V!r}, TAM={TAM!r}, S={S!r}")
-    print('\n  📦 SLOTS STRUCTURELS FINAUX :')
-    if S:      print(f'     [ S     ] → {S}')
-    if TAM and ct != 'noun_phrase':
-               print(f'     [ TAM   ] → {TAM}')
-    if O:      print(f'     [ O     ] → {O}')
-    if V:      print(f'     [ V     ] → {V}')
-    if V_ACT:  print(f'     [ V_ACT ] → {V_ACT}')
-    if ADV:    print(f'     [ ADV   ] → {ADV}')
-    if V_SUF:  print(f'    [V_SUF  ] -> {V_SUF}')
-    if _ccomp_str: print(f'    [ccomp  ] -> {_ccomp_str}')
-    for _i, _xv in enumerate(obl_strings):
-        _lct = (m['OBL_ALL'][_i].get('local_clause_type', '')
-                if _i < len(m.get('OBL_ALL', [])) else '')
-        print(f'     [ X{_i+1:<3d}   ] → {_xv}  ({_lct})')
-    print(f"  🏷️  clause_type = {ct}")
-
-    # ── Contexte partagé pour overrides ──────────────────────────────────────
     _tokens_ref = tree.get('_tokens', [])
-    _has_real_subj_ttb = any(
-        t.get('dep') in ('nsubj', 'nsubj:pass')
-        and t.get('role') not in ('expletive', 'clitic')
-        and t.get('pos') == 'PRON'
-        and str(t.get('surface', '')).lower().rstrip("'").rstrip('\u2019')
-        not in ('ce', 'c', 'ca', 'ça')
-        for t in _tokens_ref)
-    _has_expletif_ttb = any(
-        t.get('role') == 'expletive'
-        or t.get('dep') in ('expl:subj', 'expl:comp')
-        for t in _tokens_ref)
 
-    # ── OVERRIDES (cas -1 à 3) ────────────────────────────────────────────────
-    _override_result, _handled = apply_overrides(
-        tree, m, S, O, neg, _tokens_ref,
-        _has_real_subj_ttb, _has_expletif_ttb)
-    if _handled:
-        print(f"  ✂️  Clause 1 -> '{_override_result}'")
-        return _override_result.strip()
-
-    # ── F3 : résultatif passé ─────────────────────────────────────────────────
+    # ── F3 : résultatif passé (O_IS_XCOMP) ──────────────────────────────────
     result = ''
-    if (ct in ('simple', 'complex', 'conditional', 'temporal', 'relative_post')
+    _f3_cts = G.get('f3_clause_types', set()) or {'simple', 'complex', 'conditional', 'temporal', 'relative_post'}
+    if (ct in _f3_cts
             and _o_is_xcomp and O and tn == 'past'
             and V and not V.endswith('ra') and not V.endswith('na')):
-        V_past = V + 'ra'
+        _morpho_res = G.get('morpho_rules', {}).get('resultative', {})
+        _f3_sep  = G.get('f3_separator', '')
+        _eq_mk   = G.get('equative_marker', '')
+        _f3_vres = apply_morpho_suffix(V, _morpho_res) if _morpho_res else V
+        _f3_slots = {'S': S, 'V_RES': _f3_vres, 'O': O, 'EQ_MK': _eq_mk,
+                     'OBL': obl_strings[0] if obl_strings else '', 'ADV': ADV}
         if obl_strings or ' ' in S:
-            result = j(S, *obl_strings) + ', o ' + j(V_past, O, 'ye')
+            _tpl_f3 = lookup_clause_template('f3_resultative_obl', G)
+            result  = fill_template(_tpl_f3, _f3_slots) if _tpl_f3 else j(S, *obl_strings) + _f3_sep + j(_f3_vres, O, _eq_mk)
         else:
-            result = j(S, V_past, O, 'ye')
+            _tpl_f3 = lookup_clause_template('f3_resultative', G)
+            result  = fill_template(_tpl_f3, _f3_slots) if _tpl_f3 else j(S, _f3_vres, O, _eq_mk)
 
-    # ── DISPATCH ──────────────────────────────────────────────────────────────
-    elif ct in ('statif', 'statif_past'):
-        result = render_statif(tree, m, S, TAM, neg, obl_strings)
+    # ── Slots pour fill_template ──────────────────────────────────────────────
+    QUAL = m.get('QUAL', '') or ''
+    _obl0 = obl_strings[0] if obl_strings else ''
+    _all_slots = {
+        'S': S, 'O': O, 'V': V, 'TAM': TAM, 'ADV': ADV,
+        'QUAL': QUAL, 'OBL': _obl0, 'V_ACT': V_ACT,
+        'PHENOMENON': tree.get('meteo_bm', ''),
+        'MOTION_VERB': tree.get('meteo_motion', ''),
+        'PROPN':    m.get('PROPN', ''),
+        'DEICTIC_MK':m.get('DEICTIC_MK') or G.get('deictique_marker', ''),
+        'R':        m.get('R', ''),
+        'C':        m.get('C', ''),
+        'V_RES':    m.get('V_RES', ''),
+        'V_NOM':    m.get('V_NOM', ''),
+        'TAM_BASE': m.get('TAM_BASE', ''),
+        'END':      m.get('END', ''),
+        'ADJ':      m.get('ADJ', ''),
+        'MARKER':   m.get('MARKER', ''),
+        'SRC':      m.get('SRC', ''),
+        'RESTRICT_MK': m.get('RESTRICT_MK', '') or G.get('restrictive_exclusive_marker', ''),
+        'ATTR':     m.get('ATTR', ''),
+        'COMPANION':m.get('COMPANION', ''),
+        'CONTRAST': m.get('CONTRAST', ''),
+        'ALREADY':  m.get('ALREADY', ''),
+        'PAIN':     m.get('PAIN', ''),
+        'INTERROG_QTY': m.get('INTERROG_QTY', ''),
+        'O2':       m.get('O_COORD', ''),
+        'Q_INTRO':  m.get('Q_INTRO') or G.get('question_marker_yala', ''),
+        'INTERROG': m.get('INTERROG', ''),
+        'ALT':      m.get('ALT', ''),
+        'O_LOC':    m.get('O_LOC', ''),
+    }
 
-    elif ct == 'existential_nominal':
-        result = render_existential_nominal(tree, m, O, neg, obl_strings)
+    # ── Dispatch KG générique ─────────────────────────────────────────────────
+    # Résidus complexes (logique Python non-triviale)
+    _COMPLEX_CT = {
+        'refl_absolute', 'relative_nominal', 'impersonal',
+    }
 
-    elif ct == 'existential_absolute':
-        result = render_existential_absolute(tree, S, O, neg, obl_strings, G)
+    # ── Relative topic sans prédicat principal (Toi qui...) → juste {S} ────────────
+    # "Toi qui prends l'ennemi vivant" = i mìn bɛ júgu ɲɛ́nama mɔ́n (vocatif/topique)
+    if not result and ct == 'relative_topic' and not V and not O and not V_ACT:
+        result = S
 
-    elif ct == 'existential_localized':
-        result = render_existential_localized(S, O, neg, obl_strings)
+    # ── Relative topic + V_ACT (modal + xcomp : ne peut pas abandonner…) ───────
+    # S contient déjà la relative → utiliser relative_topic_vact ({S}, o TAM V ka O V_ACT)
+    # et non le template générique {S} mìn TAM O V qui doublerait le mìn de S.
+    if not result and ct == 'relative_topic' and V_ACT:
+        _tpl_vact = lookup_clause_template('relative_topic_vact', G) or ''
+        if _tpl_vact and '{' in _tpl_vact:
+            result = fill_template(_tpl_vact, _all_slots)
 
-    elif ct == 'infinitive':
-        result = render_misc(ct, S, O, V, V_ACT, V_SUF, ADV, TAM, neg,
-                             obl_strings, tree, m)
+    # ── Relative topic : verbe principal intransitif passé → relative_topic_intrans ──
+    if not result and ct == 'relative_topic' and tn == 'past' and not neg:
+        if not tree.get('is_transitive', True) and V:
+            _morpho_res = G.get('morpho_rules', {}).get('resultative', {})
+            _v_res = apply_morpho_suffix(V, _morpho_res) if _morpho_res else V
+            _all_slots['V_RES'] = _v_res
+            _tpl_rel = lookup_clause_template('relative_topic_intrans', G) or ''
+            if _tpl_rel and '{' in _tpl_rel:
+                result = fill_template(_tpl_rel, _all_slots)
 
-    elif ct == 'ownership':
-        result = render_misc(ct, S, O, V, V_ACT, V_SUF, ADV, TAM, neg,
-                             obl_strings, tree, m)
-
-    elif ct == 'verb_serial':
-        result = render_verb_serial(tree, m, S, O, V, V_ACT, TAM, obl_strings, G)
-
-    elif ct == 'interrogative':
-        result = render_interrogative(tree, m, S, O, V, TAM, obl_strings, G)
-
-    elif ct == 'equative':
-        result = render_equative(tree, m, S, O, V, TAM, neg, tn,
-                                 obl_strings, _ccomp_str, G, _tokens_ref)
-
-    elif ct == 'identificatory':
-        result = render_identificatory(tree, S, neg, G)
-
-    elif ct == 'presentative':
-        result = render_presentative(tree, S, O, neg, obl_strings, G)
-
-    elif ct == 'noun_phrase':
-        result = render_noun_phrase(tree, m, O, obl_strings)
-
-    elif ct == 'privative_pred':
-        result = render_misc(ct, S, O, V, V_ACT, V_SUF, ADV, TAM, neg,
-                             obl_strings, tree, m)
-
-    elif ct == 'relative_topic':
-        result = render_relative_topic(tree, m, S, O, V, V_ACT, obl_strings)
-
-    elif ct == 'conditional':
-        result = render_conditional(tree, m, S, O, V, V_ACT, TAM, obl_strings, G)
-
-    elif ct in ('simple', 'complex', 'temporal',
-                'relative_post', 'reported_comp', 'comitative'):
-        result = render_simple(tree, m, S, O, V, V_ACT, V_SUF, ADV, TAM, ct,
-                               neg, obl_strings, _ccomp_str, _o_is_xcomp, G)
-
-    elif ct == 'comparative':
-        # ka [ADJ] ka tɛmɛ [référent] kan
-        _comp_particle = m.get('comparative_particle', 'ka tɛmɛ')
-        _comp_ref      = m.get('comparative_ref', '')
-        _comp_neg      = 'man' if neg else 'ka'
-        result = j(S, _comp_neg, V, _comp_particle, _comp_ref, 'kan')
-
-    elif ct == 'refl_absolute':
-        # Réflexif → S TAM S [yɛrɛ] V (forme transitive, pas le passif V+ra).
-        # TAM transitif : passé yé/ma, présent bɛ/tɛ. Verbe NU (pas V+ra).
-        # yɛrɛ (soi-même) seulement pour les agentifs transitifs (se blesser),
-        # pas pour les inhérents posture/soin (s'asseoir, se laver).
-        # Avec V_ACT (se mettre à + V) : S TAM S yɛrɛ V V_ACT postpos
-        _refl_pron  = tree.get('refl_pron', 'a')
-        _refl_v     = tree.get('refl_verb') or V
-        _refl_tam   = TAM  # respecte progressif (bɛ kà), passé (yé/ma), négatif (tɛ/ma)
-        _refl_self  = 'yɛrɛ' if tree.get('refl_yere') else ''
-        _serial_pp  = tree.get('refl_serial_postpos', '')
-        if V_ACT:
-            result = j(S, _refl_tam, _refl_pron, _refl_self, _refl_v, V_ACT, _serial_pp, *obl_strings, ADV)
+    if not result and ct not in _COMPLEX_CT:
+        _polarity = '_neg' if neg else '_pos'
+        # Essayer d'abord une variante tense-spécifique : equative_past_pos, qualitative_hab_neg…
+        _tpl_key = ct + '_' + tn + _polarity
+        _tpl = (lookup_clause_template(_tpl_key, G)
+                or lookup_clause_template(ct + _polarity, G)
+                or lookup_clause_template(ct, G)
+                # quest_ce_que_modal : template pres comme base universelle (TAM slot rempli)
+                or (lookup_clause_template(ct + '_pres' + _polarity, G)
+                    if ct == 'quest_ce_que_modal' else '')
+                or '')
+        _tpl_placeholder = G.get('template_placeholder_prefix', '')
+        _tpl_slot_open   = G.get('template_slot_open', '')
+        if _tpl and (not _tpl_placeholder or not _tpl.startswith(_tpl_placeholder)) and (_tpl_slot_open in _tpl if _tpl_slot_open else '{' in _tpl):
+            result = fill_template(_tpl, _all_slots)
+            # Éviter duplication : obl_strings déjà présents dans le résultat via {ADV}/{OBL}
+            _extra_obls = (obl_strings[1:]) if '{OBL}' in _tpl else obl_strings
+            _extra_obls = [o for o in _extra_obls if o and o not in result]
+            if _extra_obls:
+                # Insérer avant le marqueur de question si présent
+                _q_sfx_obl = _fw(G, 'question_suffix', '')
+                _res_obl = result.rstrip()
+                if _q_sfx_obl and _res_obl.endswith(_q_sfx_obl.rstrip()):
+                    _body_obl = _res_obl[:-(len(_q_sfx_obl.rstrip()))].rstrip()
+                    result = j(_body_obl, *_extra_obls, _q_sfx_obl)
+                elif _res_obl.endswith('?'):
+                    # Template avec '?' hardcodé (quest_ce_que_modal…) : insérer OBL avant ?
+                    _body_obl = _res_obl[:-1].rstrip()
+                    result = j(_body_obl, *_extra_obls, '?')
+                else:
+                    result = j(result, *_extra_obls)
+            # ADV non inclus dans le template → injecter avant le marqueur de question
+            if ADV and '{ADV}' not in _tpl:
+                _q_sfx_adv = _fw(G, 'question_suffix', '')
+                _res_adv = result.rstrip()
+                if _q_sfx_adv and _res_adv.endswith(_q_sfx_adv.rstrip()):
+                    _body_adv = _res_adv[:-(len(_q_sfx_adv.rstrip()))].rstrip()
+                    result = j(_body_adv, ADV, _q_sfx_adv)
+                elif _res_adv.endswith('?'):
+                    result = j(_res_adv[:-1].rstrip(), ADV, '?')
+                else:
+                    result = j(result, ADV)
+            if _ccomp_str:
+                # Insérer ccomp AVANT le marqueur de question (wà ?) si présent
+                _q_sfx = _fw(G, 'question_suffix', '')
+                _res_stripped = result.rstrip()
+                if _q_sfx and _res_stripped.endswith(_q_sfx.rstrip()):
+                    _body = _res_stripped[:-(len(_q_sfx.rstrip()))].rstrip()
+                    result = j(_body, _ccomp_str, _q_sfx)
+                else:
+                    result = j(result, _ccomp_str)
         else:
-            result = j(S, _refl_tam, _refl_pron, _refl_self, _refl_v, *obl_strings, ADV)
+            result = j(S, TAM, O, V, V_ACT, V_SUF, *obl_strings, ADV)
+            result = j(result, _ccomp_str)
 
-    elif ct == 'qualitative':
-        result = render_qualitative(tree, m, S, O, V, TAM, neg, tn,
-                                    obl_strings, _ccomp_str, G)
+    elif not result:
+        if ct == 'refl_absolute':
+            _refl_pron_default = G.get('reflexive_pron_default', '')
+            _refl_self_marker  = G.get('reflexive_self_marker', '')
+            _morpho_res = G.get('morpho_rules', {}).get('resultative', {})
+            _refl_pron  = '' if tree.get('refl_semantic_class') == G.get('biological_sc_name', 'biological') else tree.get('refl_pron', _refl_pron_default)
+            _refl_v     = tree.get('refl_verb') or V
+            _refl_tam   = TAM
+            _refl_self  = _refl_self_marker if tree.get('refl_yere') else ''
+            _serial_pp  = tree.get('refl_serial_postpos', '')
+            _is_bio_past = (tree.get('refl_semantic_class') == G.get('biological_sc_name', 'biological')
+                            and _refl_tam == _resolve_tam('past', False, G))
+            _all_slots.update({'REFL_PRON': _refl_pron, 'REFL_SELF': _refl_self,
+                               'SERIAL_PP': _serial_pp,
+                               'V_RES': apply_morpho_suffix(_refl_v, _morpho_res) if _morpho_res else _refl_v,
+                               'V': _refl_v})
+            if _is_bio_past:
+                _tpl = lookup_clause_template('refl_absolute_bio_past', G)
+                result = fill_template(_tpl, _all_slots) if _tpl else j(S, _all_slots['V_RES'], *obl_strings, ADV)
+            elif V_ACT:
+                _tpl = lookup_clause_template('refl_absolute_vact', G)
+                result = fill_template(_tpl, _all_slots) if _tpl else j(S, _refl_tam, _refl_pron, _refl_self, _refl_v, V_ACT, _serial_pp, *obl_strings, ADV)
+            else:
+                _tpl = lookup_clause_template('refl_absolute_default', G)
+                result = fill_template(_tpl, _all_slots) if _tpl else j(S, _refl_tam, _refl_pron, _refl_self, _refl_v, *obl_strings, ADV)
 
-    elif ct in ('locative', 'existential'):
-        result = render_locative_existential(S, neg, obl_strings)
+        elif ct in ('relative_nominal', 'impersonal'):
+            result = tree.get('final_string', '')
 
-    elif ct == 'passive':
-        result = render_misc(ct, S, O, V, V_ACT, V_SUF, ADV, TAM, neg,
-                             obl_strings, tree, m)
+        else:
+            result = j(S, TAM, O, V, V_ACT, V_SUF, *obl_strings, ADV)
 
-    elif ct in ('imperative', 'prohibitive', 'participial_to', 'focus',
-                'exclamative', 'reciprocal', 'concessive', 'causal',
-                'relative_min', 'topicalised',
-                'participial_len', 'participial_ta', 'participial_bali',
-                'relative_post', 'refl_past',
-                'reported_verb', 'reported_comp', 'reported',
-                'noun_phrase_inh'):
-        result = render_misc(ct, S, O, V, V_ACT, V_SUF, ADV, TAM, neg,
-                             obl_strings, tree, m)
+    # ── Coordination verbale → résultat {wa} clause2 ─────────────────────────
+    _coord_marker = G.get('coord_verb_marker') or _fw(G, 'coord_verb', '')
+    _action_sfx   = G.get('coord_action_suffix') or _fw(G, 'coord_action_suffix', '')
+    if tree.get('conj_clauses') and result:
+        for _cc in tree['conj_clauses']:
+            if _cc.get('cc_role') == 'alternative':
+                # Disjonctive "ou/ou bien" → wàlima S TAM O V, en préservant wà ? final
+                _alt_marker = _cc.get('cc_bm') or 'wàlima'
+                _cc_tam_alt = _cc.get('tam', TAM)
+                _alt_str = j(S, _cc_tam_alt, _cc.get('O', ''), _cc.get('V', ''))
+                if _alt_str:
+                    _q_sfx_alt = G.get('question_suffix', '')
+                    if _q_sfx_alt and result.endswith(_q_sfx_alt.rstrip()):
+                        _body_alt = result[:-(len(_q_sfx_alt.rstrip()))].rstrip()
+                        result = j(_body_alt, _alt_marker, _alt_str, _q_sfx_alt)
+                    else:
+                        result = j(result, _alt_marker, _alt_str)
+                continue
+            _cc_tam = _cc.get('tam', TAM)
+            _cc_o   = _cc.get('O', '')
+            _cc_v   = _cc.get('V', '')
+            _cc_it  = _cc.get('intransitive_type', '')
+            _cc_sc  = _cc.get('semantic_class', '')
+            _cc_liq = _cc.get('is_liquid', False)
+            _coord_nom_types = G.get('coord_intrans_types', set())
+            _coord_excl_sc   = G.get('coord_exclude_sc', set())
+            if (not _cc_o and _cc_v
+                    and _cc_it in _coord_nom_types
+                    and _cc_sc not in G.get('coord_intrans_sc', set())
+                    and not (_cc_sc in _coord_excl_sc and _cc_liq)
+                    and not _cc_v.endswith(tuple(G.get('coord_excl_verb_sfx', ())) + (_action_sfx,) if _action_sfx else tuple(G.get('coord_excl_verb_sfx', ())))):
+                _nom_sfx = G.get('nominalization_verb_suffix', '')
+                _cc_str = j(S, _cc_tam, _cc_v + _nom_sfx, _action_sfx)
+            else:
+                _cc_str = j(S, _cc_tam, _cc_o, _cc_v)
+            if _cc_str:
+                result = j(result, _coord_marker, _cc_str)
 
-    elif ct == 'content_question':
-        result = render_content_question(tree, m, S, O, V, TAM, obl_strings, G)
+    # ── Marqueur conditionnel ─────────────────────────────────────────────────
+    _cond_tok = next((t for t in _tokens_ref
+                      if t.get('dep') == 'mark' and t.get('role') == 'conditional'), None)
+    if _cond_tok and result:
+        _cond_bm = tree.get('conditional_marker') or _cond_tok.get('bm') or G.get('conditional_marker', '')
+        if not result.startswith(_cond_bm):
+            result = j(_cond_bm, result)
 
-    elif ct == 'noun_phrase_have':
-        result = render_noun_phrase_have(tree, S, O, neg, obl_strings, G)
-
-    elif ct == 'comitative':
-        result = render_comitative_clause(tree, S, V, TAM, obl_strings)
-
-    elif ct == 'relative_nominal':
-        result = tree.get('final_string', '')
-
-    elif ct == 'restrictive':
-        # Rule 6: ne...que restrictive → S TAM [cop] foyi yé ni ATTR tɛ
-        # TAM tient compte du temps du copule (serais=cond → tɛ na, est=pres → tɛ)
-        _attr = tree.get('restrictive_attr', '')
-        _rest_tense = tree.get('cop_tense') or tn
-        _rest_tam = _resolve_tam(_rest_tense, bool(tree.get('restrictive_neg')), G) or 'bɛ'
-        _cop_bm = (tree.get('cop_bm', '') or
-                   (f"[{tree.get('cop_lemma', '')}]" if tree.get('cop_lemma') else ''))
-        result = j(S, _rest_tam, _cop_bm, 'foyi', 'yé', 'ni', _attr, 'tɛ')
-
-    elif ct == 'quest_ce_que':
-        # Rule 7: Qu'est-ce que → mún [S] TAM VERB(modal) ka [XCOMP_SUBJ] VERB(action) [XCOMP_OBJ] [obliques]
-        # Example: "Qu'est-ce qu'il pourrait t'arriver ?" → mún [_] bɛ se ka i sé [_] yèn ?
-        # SOV order: question word + [empty subject] + TAM + modal verb + 'ka' + xcomp subject + action verb + obliques
-        # Don't repeat O (interrogative word) — use XCOMP_SUBJ from xcomp, not O from root verb
-        _quest_word = m.get('QUEST_WORD', 'mún')
-        _xcomp_subj = m.get('XCOMP_SUBJ', '')
-        result = j(_quest_word, S, TAM, V, 'ka', _xcomp_subj, V_ACT, *obl_strings)
-
-    else:
-        result = j(S, TAM, O, V, V_ACT, V_SUF, *obl_strings, ADV)
-
-    # ── Marqueur temporel antéposé (quand/lorsque → tuma min, position FR) ────
-    # Pas de garde sur ct=='temporal' : clause_type est souvent réécrit par
-    # des étapes plus tardives et plus spécifiques (passif, statif,
-    # équative...) qui ignorent temporal_marker — le garder sur ct=='temporal'
-    # uniquement perdait le marqueur dès qu'une de ces étapes s'appliquait
-    # (ex: "Quand cela fut fait" → ct='statif_past'/'simple', 'tuma min' jamais
-    # réinjecté). temporal_marker n'est posé qu'à un seul endroit
-    # (step3_verbe.py) et consommé qu'ici → aucun risque de double-préfixage.
+    # ── Marqueur temporel ─────────────────────────────────────────────────────
     if tree.get('temporal_marker') and result:
         result = j(tree['temporal_marker'], result)
 
-    print(f"  ✂️  Clause 1 -> '{result}'")
-    return result.strip().replace(' ,', ',').replace('« ', '«').replace(' »', '»')
+    # ── Négateur porteur de contenu ───────────────────────────────────────────
+    _cont = tree.get('neg_continuative_bm')
+    if _cont and result and _cont not in result.split():
+        _q_sfx   = G.get('question_suffix', '')
+        _q_sfx_b = G.get('question_suffix_bare', '')
+        _suffixes = ((_q_sfx, ' ' + _q_sfx_b, _q_sfx_b) if _q_sfx
+                     else ())
+        for _suf in _suffixes:
+            if _suf and result.endswith(_suf):
+                result = result[:-len(_suf)] + ' ' + _cont + _suf
+                break
+        else:
+            result = j(result, _cont)
+
+    result = result.strip()
+    for _from, _to in (G.get('typo_rules') or []):
+        result = result.replace(_from, _to)
+    return result

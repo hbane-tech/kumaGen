@@ -4,7 +4,8 @@ Post-traitement acl:relcl sur l'objet (après la boucle objet principale)
 + pré-marquage ccomp.
 """
 import networkx as nx
-from rules.core import j, _resolve_tam
+from rules.core import j, _resolve_tam, INTRANS_SC
+from rules.kg_rule_engine import apply_morpho_suffix, apply_statif_morpho
 
 
 def run(T, tree, m, processed_indices, G_kg, NX_G):
@@ -38,7 +39,23 @@ def run(T, tree, m, processed_indices, G_kg, NX_G):
         _rel_o2_bm = _rel_obj2.get('bm', '') if _rel_obj2 else ''
         if _rel_o2_amod:
             _rel_o2_bm = j(_rel_o2_bm, _rel_o2_amod.get('bm', ''))
-        _rel_tam = _resolve_tam(_rt.get('tense', 'pres'), False, G_kg)
+        _rel_tense_rp  = _rt.get('tense', 'pres')
+        _rel_intrans_rp = (_rt.get('intransitive_type') == 'ABSOLU'
+                           or _rt.get('semantic_class') in INTRANS_SC)
+        _morpho_res  = G_kg.get('morpho_rules', {}).get('resultative', {})
+        _morpho_stat = G_kg.get('morpho_rules', {}).get('statif', {})
+
+        if _rel_tense_rp == 'past' and _rel_intrans_rp:
+            _rel_tam = ''
+            if _rel_v_bm:
+                _rel_v_bm = apply_morpho_suffix(_rel_v_bm, _morpho_res)
+        elif _rt.get('is_statif'):
+            _statif_rp = _rt.get('statif_root') or _rel_v_bm
+            _rel_v_bm  = apply_statif_morpho(_statif_rp, _morpho_stat,
+                                              neg=bool(_rt.get('is_neg')))
+            _rel_tam = ''
+        else:
+            _rel_tam = _resolve_tam(_rel_tense_rp, False, G_kg)
         _rel_obls = []
         if _rel_xcomp:
             for _robl in sorted(T, key=lambda x: x['orig_index']):
@@ -74,7 +91,12 @@ def run(T, tree, m, processed_indices, G_kg, NX_G):
         })
         processed_indices.update(nx.descendants(NX_G, _rt['orig_index']) | {_rt['orig_index']})
 
-    # Pré-marquage ccomp
-    for _cc in T:
-        if _cc.get('dep') == 'ccomp' and _cc['orig_index'] not in processed_indices:
-            processed_indices.update(nx.descendants(NX_G, _cc['orig_index']) | {_cc['orig_index']})
+    # Pré-marquage ccomp — empêche step5 de traiter les tokens internes à un ccomp
+    # (step7 les prend en charge via sa propre logique).
+    # Exception : est-ce que → step7 promeut le ccomp en verbe principal ; step5
+    # doit pouvoir traiter les advmods (bien, souvent…) du ccomp avant que step7
+    # ne finalise la structure.
+    if not tree.get('est_ce_que'):
+        for _cc in T:
+            if _cc.get('dep') == 'ccomp' and _cc['orig_index'] not in processed_indices:
+                processed_indices.update(nx.descendants(NX_G, _cc['orig_index']) | {_cc['orig_index']})

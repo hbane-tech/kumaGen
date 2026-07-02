@@ -1,0 +1,22 @@
+surface,lang,bm_marker,role,is_suffix,description
+# PRÉPOSITIONS FRANÇAISES → Marqueurs dans la langue cible
+# surface    : préposition française
+# bm_marker  : marqueur postpositionnel ou prépositionnel dans la langue cible
+# role       : locative | temporal | genitive | dative | agent | gerund | comitative | purposive
+# is_suffix  : true si le marqueur se place APRÈS le nom (postposition)
+à,fr,REMPLIR,locative,REMPLIR,à + lieu
+dans,fr,REMPLIR,locative,REMPLIR,dans + lieu
+sur,fr,REMPLIR,locative,REMPLIR,sur + surface
+sous,fr,REMPLIR,locative,REMPLIR,sous
+chez,fr,REMPLIR,locative,REMPLIR,chez quelqu'un
+de,fr,REMPLIR,genitive,REMPLIR,de possession / origine
+du,fr,REMPLIR,genitive,REMPLIR,de + le (contraction)
+avec,fr,REMPLIR,comitative,REMPLIR,avec quelqu'un
+pour,fr,REMPLIR,purposive,REMPLIR,pour + but
+par,fr,REMPLIR,agent,REMPLIR,agent du passif
+depuis,fr,REMPLIR,temporal,REMPLIR,depuis + temps
+avant,fr,REMPLIR,temporal,REMPLIR,avant
+après,fr,REMPLIR,temporal,REMPLIR,après
+quand,fr,REMPLIR,temporal,REMPLIR,quand / lorsque
+de (infinitif),fr,REMPLIR,gerund,REMPLIR,de + infinitif (venir de manger)
+à (infinitif),fr,REMPLIR,purposive,REMPLIR,à + infinitif (commencer à)

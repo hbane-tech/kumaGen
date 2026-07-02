@@ -1,0 +1,52 @@
+fr,bm,lang,semantic_class,role,notes
+# LEXIQUE PRINCIPAL — Mappings FR → Langue cible
+# fr            : mot français (lemme ou expression)
+# bm            : équivalent dans la langue CIBLE (champ 'bm' = target language form)
+# lang          : code ISO de la langue cible
+# semantic_class: classe sémantique du mot (motion/action/consumption/biological/etc.)
+# role          : content | function | possessive | etc.
+# notes         : sens plus précis, contexte d'utilisation
+#
+# EXEMPLES DE STRUCTURE — Remplacer les formes cibles
+aller.,REMPLIR,XX,motion,content,verbe de déplacement de base
+venir.,REMPLIR,XX,motion,content,
+partir.,REMPLIR,XX,motion,content,
+manger.,REMPLIR,XX,consumption,content,
+boire.,REMPLIR,XX,consumption_liquid,content,
+parler.,REMPLIR,XX,communication,content,
+voir.,REMPLIR,XX,perception,content,
+savoir.,REMPLIR,XX,stative_cognitive,content,
+avoir.,REMPLIR,XX,having,content,possession
+être.,REMPLIR,XX,copula,content,copule
+faire.,REMPLIR,XX,action,content,verbe support
+donner.,REMPLIR,XX,action,content,
+prendre.,REMPLIR,XX,action,content,
+pouvoir.,REMPLIR,XX,action,content,modal de capacité
+vouloir.,REMPLIR,XX,action,content,modal de volonté
+devoir.,REMPLIR,XX,action,content,modal d'obligation
+chercher.,REMPLIR,XX,action,content,
+trouver.,REMPLIR,XX,perception,content,
+entendre.,REMPLIR,XX,perception,content,
+travailler.,REMPLIR,XX,action,content,
+habiter.,REMPLIR,XX,posture,content,
+dormir.,REMPLIR,XX,biological,content,
+mourir.,REMPLIR,XX,biological,content,
+naître.,REMPLIR,XX,biological,content,
+aimer.,REMPLIR,XX,stative_cognitive,content,
+avoir peur.,REMPLIR,XX,spontaneous,content,état émotionnel
+avoir faim.,REMPLIR,XX,biological,content,sensation physique
+avoir soif.,REMPLIR,XX,biological,content,sensation physique
+pleuvoir.,REMPLIR,XX,meteorological,content,impersonnel météo
+# NOMS COURANTS
+homme.,REMPLIR,XX,,content,
+femme.,REMPLIR,XX,,content,
+enfant.,REMPLIR,XX,,content,
+père.,REMPLIR,XX,,content,relation inalienable
+mère.,REMPLIR,XX,,content,relation inalienable
+maison.,REMPLIR,XX,,content,
+eau.,REMPLIR,XX,,content,
+pain.,REMPLIR,XX,,content,
+riz.,REMPLIR,XX,,content,
+ami.,REMPLIR,XX,,content,
+village.,REMPLIR,XX,,content,
+marché.,REMPLIR,XX,,content,

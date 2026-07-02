@@ -1,0 +1,26 @@
+name,lang,trigger_n,trigger_vowel,suffix_after_n,suffix_after_vowel,suffix_default,suffix,pos_support,neg_support,hab_prefix,description
+# RÈGLES MORPHOLOGIQUES
+#
+# RÉSULTATIF (passé intransitif) : ex bambara len finale → na / voyelle finale → la / sinon → ra
+# trigger_n       : phonème final qui déclenche suffix_after_n (ex: 'n')
+# trigger_vowel   : voyelles qui déclenchent suffix_after_vowel, séparées par | (ex: 'o|u|ɔ')
+# suffix_after_n  : suffixe si le verbe se termine par trigger_n
+# suffix_after_vowel : suffixe si le verbe se termine par une des trigger_vowel
+# suffix_default  : suffixe par défaut (toutes autres fins)
+resultative,XX,REMPLIR,REMPLIR,REMPLIR,REMPLIR,REMPLIR,,,,,forme résultative passé intransitif
+#
+# STATIF (état intérieur : avoir peur, être bloqué) : ex bambara → V+len dòn
+# suffix      : suffixe ajouté au verbe (ex: 'len')
+# pos_support : mot support positif (ex: 'dòn')
+# neg_support : mot support négatif (ex: 'tɛ')
+# hab_prefix  : préfixe pour l'habituel/imparfait (ex: 'tùn')
+statif,XX,,,,,,REMPLIR,REMPLIR,REMPLIR,REMPLIR,état statif (V+sfx support)
+#
+# NOMINALISATION (action sans COD : V+li kɛ en bambara)
+# suffix  : suffixe de nominalisation (ex: 'li')
+# support : verbe support (ex: 'kɛ')
+nominalization_action,XX,,,,,,REMPLIR,,,,nominalisation d'action sans objet
+#
+# PLURIEL NOMINAL : ex bambara → N+w
+# suffix : suffixe de pluriel (ex: 'w')
+plural_noun,XX,,,,,,REMPLIR,,,,pluriel nominal

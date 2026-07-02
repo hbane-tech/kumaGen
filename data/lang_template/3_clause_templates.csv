@@ -1,0 +1,27 @@
+clause_type,lang,template,word_order,description
+# TEMPLATES DE CONSTRUCTION PAR TYPE DE CLAUSE
+# Slots disponibles : {S}=sujet  {TAM}=marqueur temporel  {O}=objet  {V}=verbe  {ADV}=adverbe
+# Slots spéciaux  : {V}len=verbe+suffixe_statif  {dòn|tɛ}=support_pos|support_neg
+# word_order      : description courte de l'ordre (SOV, SVO, VSO, etc.)
+simple,XX,REMPLIR,REMPLIR,clause déclarative standard
+equative_pos,XX,REMPLIR,REMPLIR,équatif positif (il est médecin)
+equative_neg,XX,REMPLIR,REMPLIR,équatif négatif (il n'est pas médecin)
+optative,XX,REMPLIR,REMPLIR,optatif/jussif (Que la paix règne)
+prohibitive,XX,REMPLIR,REMPLIR,prohibitif (ne mange pas)
+passive_statif,XX,REMPLIR,REMPLIR,passif = statif (est bloqué → V+sfx support)
+passive_statif_question,XX,REMPLIR,REMPLIR,passif + question (pourquoi est-il bloqué ?)
+interrogative,XX,REMPLIR,REMPLIR,question polaire (mange-t-il ?)
+content_question,XX,REMPLIR,REMPLIR,question de contenu (qui, quoi, pourquoi, comment)
+relative_obj,XX,REMPLIR,REMPLIR,relative sur objet (le pain que j'ai acheté)
+relative_subj,XX,REMPLIR,REMPLIR,relative sur sujet (l'homme qui mange)
+serial_motion,XX,REMPLIR,REMPLIR,sérielle mouvement+but (il va chercher → aller+chercher)
+reciprocal,XX,REMPLIR,REMPLIR,réciproque (ils se voient)
+meteorological,XX,REMPLIR,REMPLIR,météorologique (il pleut → phénomène + motion)
+imperative_2sg,XX,REMPLIR,REMPLIR,impératif 2e singulier (tu)
+imperative_2pl,XX,REMPLIR,REMPLIR,impératif 2e pluriel (vous)
+imperative_1pl,XX,REMPLIR,REMPLIR,impératif 1e pluriel inclusif (nous)
+avoir_statif,XX,REMPLIR,REMPLIR,avoir+émotion (avoir peur → V+sfx support)
+avoir_experiencer,XX,REMPLIR,REMPLIR,avoir+sensation physique (avoir faim → phénomène SUBJ)
+avoir_experiencer_past,XX,REMPLIR,REMPLIR,avoir+sensation passé (il a eu faim)
+resultative,XX,REMPLIR,REMPLIR,résultatif passé intransitif (il est parti → V+sfx)
+relcl_motion,XX,REMPLIR,REMPLIR,relative mouvement passé (l'homme qui est parti)

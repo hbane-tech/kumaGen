@@ -1,0 +1,356 @@
+#,categorie,phrase_fr,bambara_attendu,bambara_obtenu,statut,french_pos_tree,bambara_pos_tree
+1,equative_sing,Je suis enseignant,n yé karamɔgɔ yé,n yé kàramɔgɔkɛ yé,FAIL,,PRON AUX NOUN AUX
+2,equative_sing,il est professeur,a yé porofesɛri yé,a yé porofesɛri yé,PASS,,PRON AUX NOUN AUX
+3,equative_sing,Musa est un chasseur,Musa yé donso yé,Musa yé dònso yé,FAIL,,PROPN AUX NOUN AUX
+4,equative_sing,je suis étudiant,n yé kalandenba yé,n ka fárin,FAIL,,PRON AUX NOUN
+5,equative_sing,tu es mon ami,i yé n terikɛ yé,i yé n téri yé,FAIL,,PRON AUX PRON NOUN AUX
+6,equative_sing,elle est médecin,a yé dɔkɔtɔrɔ yé,a bólolangolen dòn,FAIL,,PRON NOUN ADP
+7,equative_plur,nous sommes des paysans,anw yé dugukɔlɔsibagaw yé,anw yé wúlakɔnɔmɔgɔ yé,FAIL,,PRON AUX NOUN AUX
+8,equative_plur,Ils sont étudiants,ùw yé kalandenw yé,u yé kàlandenba yé,FAIL,,PRON AUX NOUN AUX
+9,equative_plur,vous êtes des enseignants,aw yé karamɔgɔw yé,aw yé kàramɔgɔkɛ yé,FAIL,,PRON AUX NOUN AUX
+10,equative_neg,il n'est pas professeur,a tɛ porofesɛri yé,a tɛ porofesɛri yé,PASS,,PRON AUX NOUN AUX
+11,equative_neg,il n'est pas un professeur,a tɛ porofesɛri yé,a tɛ porofesɛri yé,PASS,,PRON AUX NOUN AUX
+12,equative_neg,il n'est pas un étudiant,a tɛ kàlandenba yé,a tɛ kàlandenba yé,PASS,,PRON AUX NOUN AUX
+13,equative_neg,je ne suis pas enseignant,n tɛ karamɔgɔ yé,n tɛ kàramɔgɔkɛ yé,FAIL,,PRON AUX NOUN AUX
+14,equative_neg_nothing,Il n'est rien,a tɛ foyi yé,a tɛ foyi yé,PASS,,PRON AUX CCONJ AUX
+15,equative_neg,ce n'est pas vrai,o tɛ tiɲɛ yé,bɛ́rɛ tɛ,FAIL,,NOUN AUX
+16,equative_past,il était professeur,a tùn yé porofesɛri yé,a tùn yé porofesɛri yé,PASS,,PRON AUX AUX NOUN AUX
+17,equative_past,j'étais étudiant,n tùn yé kalandenba yé,n tùn yé kàlandenba yé,FAIL,,PRON AUX AUX NOUN AUX
+18,equative_past_neg,il n'était pas étudiant,a tùn tɛ kalandenba yé,a tùn ma kègun,FAIL,,PRON AUX AUX NOUN
+19,locative,Je suis en route,n bɛ sìra la,n bɛ síraden la,FAIL,,PRON AUX NOUN ADP
+20,locative,Musa est au village,Musa bɛ dugu kɔnɔ,Musa bɛ dùgu la,FAIL,,PROPN AUX NOUN ADP
+21,locative_plur,Les enfants sont en route,dɔgɔw bɛ sìra la,dén bɛ síraden la,FAIL,,NOUN AUX NOUN ADP
+22,locative_plur,Ils sont aux portes,u bɛ bóndaw la,u bɛ bóndaw la,PASS,,PRON AUX NOUN ADP
+23,locative,je suis à la maison,n bɛ so la,n bɛ só la,FAIL,,PRON AUX NOUN ADP
+24,locative_plur,nous sommes au marché,anw bɛ súgu la,anw bɛ súgu la,PASS,,PRON AUX NOUN ADP
+25,locative,il est au champ,a bɛ foro la,a bɛ fòro la,FAIL,,PRON AUX NOUN ADP
+26,locative,elle est à l'école,a bɛ lakɔli la,a bɛ kàlankɛyɔrɔ la,FAIL,,PRON AUX NOUN ADP
+27,locative_neg,il n'est pas à la maison,a tɛ so la,a tɛ só la,FAIL,,PRON AUX NOUN ADP
+28,locative_neg,je ne suis pas au marché,n tɛ súgu la,n tɛ súgu la,PASS,,PRON AUX NOUN ADP
+29,qualitative,je suis belle,n ka ɲuman,n ka ɲùman,FAIL,,PRON AUX NOUN
+30,qualitative,le cheval est rapide,sòn ka téliman,nkólonso ka téli,FAIL,,NOUN AUX VERB
+31,qualitative,La maison est loin,so ka jàn,só ka póroo,FAIL,,NOUN AUX NOUN
+32,qualitative_plur,Les maisons sont loin,sow ka jàn,sów ka póroo,FAIL,,NOUN AUX NOUN
+33,qualitative,l'eau est chaude,jí ka bɛ̀lɛ,jí ka gòni,FAIL,,NOUN AUX NOUN
+34,qualitative,la route est longue,sìra ka télé,síraden ka búlubulu,FAIL,,NOUN AUX NOUN
+35,qualitative_neg,tu n'es pas bien,i mán ɲuman,i man kóɲuman,FAIL,,PRON NOUN NOUN
+36,qualitative_neg,la maison n'est pas grande,so mán bàrika,só man bòn,FAIL,,NOUN NOUN NOUN
+37,qualitative_past,la route était longue,sìra tùn ka télé,síraden tùn ka búlubulu,FAIL,,NOUN AUX AUX NOUN
+38,qualitative_past_neg,il n'était pas bien,a tùn mán ɲuman,a tùn ma kóɲuman,FAIL,,PRON AUX AUX NOUN
+39,statif,je suis sûre de ça,n lalen dòn à la,n [sûr]len dòn o o in la,FAIL,,PRON NOUN ADP PRON PRON NOUN ADP
+40,statif_plur,Les maisons sont sûres,sow lalen dòn,sów [sûr]len dòn,FAIL,,NOUN NOUN ADP
+41,past_intransitive,C'est cuit,o mɔnna,o jàlanna,FAIL,,PRON VERB
+42,past_intransitive_plur,Les viandes sont cuites,sɔgɔw mɔnna,sògow bàsabasalen dòn,FAIL,,NOUN NOUN ADP
+43,past_intransitive,il est parti,o fáɲira,a táara,FAIL,,PRON VERB
+44,past_intransitive,elle est tombée,a bɛnna,a wɔ̀lɔwɔlɔra,FAIL,,PRON VERB
+45,past_intransitive_plur,ils sont arrivés,ùw sera,u séra,FAIL,,PRON VERB
+46,past_transitive,Musa a mangé le riz,Musa yé màlo dún,Musa yé iri dún,FAIL,,PROPN AUX NOUN NOUN
+47,past_transitive,J'ai acheté des pagnes,n yé fìníw sàn,n yé kɔ̀baw sàn,FAIL,,PRON AUX NOUN NOUN
+48,past_transitive,tu as vu l'homme,i yé cɛ yé,i yé mɔ̀gɔ yé,FAIL,,PRON AUX NOUN AUX
+49,past_transitive,elle a bu de l'eau,a yé jí mìn,a yé jí jí,FAIL,,PRON AUX NOUN NOUN
+50,past_transitive_plur,nous avons mangé le riz,anw yé màlo dún,anw yé iri dún,FAIL,,PRON AUX NOUN NOUN
+51,past_transitive_plur,ils ont construit la maison,ùw yé so lá,u yé só màsègin,FAIL,,PRON AUX NOUN NOUN
+52,relative_topic,L'homme que tu as vu hier est parti,"i yé cɛ mìn yé kúnùn, o fáɲira","i yé mɔ̀gɔ mìn yé kúnùn, o táara",FAIL,,PRON AUX NOUN NOUN AUX NOUN PRON VERB
+53,noun_phrase_have_material,J'ai de l'argent,wárí bɛ n bóló,wári bɛ n fɛ,FAIL,,NOUN AUX PRON NOUN
+54,noun_phrase_have_material,il a une voiture,[voiture] bɛ a bóló,wátiri bɛ a bóló,FAIL,,NOUN AUX PRON NOUN
+55,noun_phrase_have_material_plur,Ils ont des voitures,móbiliw bɛ ùw bóló,wátiriw bɛ u bóló,FAIL,,NOUN AUX PRON NOUN
+56,noun_phrase_have_material,tu as un couteau,mùru bɛ i bóló,pága bɛ i bóló,FAIL,,NOUN AUX PRON NOUN
+57,noun_phrase_have_age,Quel âge as-tu ?,sán jóli bɛ i bóló  ?,i bɛ saan jùmɛn la ?,FAIL,,PRON AUX NOUN NOUN ADP
+58,noun_phrase_have_material_neg,elle n'a pas d'argent,wárí tɛ a bóló,wári tɛ a fɛ,FAIL,,NOUN AUX PRON NOUN
+59,noun_phrase_have_abstract,J'ai un frère,bálimakɛ bɛ n fɛ,bálimakɛ bɛ n fɛ,PASS,,NOUN AUX PRON NOUN
+60,noun_phrase_have_abstract,J'ai une sœur,bálimamuso bɛ n fɛ,bɔ́lɔ bɛ n fɛ,FAIL,,NOUN AUX PRON NOUN
+61,noun_phrase_have_abstract_plur,J'ai des frères et sœurs,bálimaw bɛ n fɛ,bálimakɛw ni Bátàw bɛ n fɛ,FAIL,,NOUN ADP PROPN AUX PRON NOUN
+62,volitif,J'aime manger,n bɛ dún fɛ,n bɛ kànuya ka dúnli kɛ,FAIL,,PRON AUX NOUN AUX VERB ADP
+63,noun_phrase_have_abstract,il a de la chance,diyaɲɔgɔnya bɛ a fɛ,tère bɛ a fɛ,FAIL,,NOUN AUX PRON NOUN
+64,noun_phrase_have_abstract_neg,elle n'a pas de frère,bálimakɛ tɛ a fɛ,bálimakɛ tɛ a fɛ,PASS,,NOUN AUX PRON NOUN
+65,existential_absolute,Il y'a du pain,búuru bɛ,búuru bɛ,PASS,,NOUN AUX
+66,existential_absolute,il y a un problème,[problème] bɛ,gìrigara bɛ,FAIL,,VERB AUX
+67,existential_absolute,il y a du travail,baaraw bɛ,báara bɛ,FAIL,,VERB AUX
+68,existential_absolute_neg,il n'y a pas de pain,búuru tɛ,búuru tɛ,PASS,,NOUN AUX
+69,existential_localized_neg,il n'y a personne dans le village,mɔgɔ tɛ dugu kɔnɔ,[personne] tɛ dùgu la,FAIL,,NOUN AUX NOUN ADP
+70,existential_localized,Il y a de l'eau dans la bouteille,jí bɛ bútèli kɔnɔ,jí bɛ bútèli la,FAIL,,NOUN AUX VERB ADP
+71,existential_localized,Il y a des gens ici,mɔgɔw bɛ yàn,bìdenw bɛ yàn,FAIL,,NOUN AUX NOUN
+72,existential_localized_neg,Il n'y a personne ici,mɔgɔw tɛ yàn,[personne] tɛ yàn,FAIL,,NOUN AUX NOUN
+73,existential_localized,il y a des enfants dans la maison,dɔgɔw bɛ so kɔnɔ,dénw bɛ só la,FAIL,,NOUN AUX NOUN ADP
+74,existential_localized_neg,il n'y a pas d'eau dans la bouteille,jí tɛ bútèli kɔnɔ,jí tɛ bútèli la,FAIL,,NOUN AUX VERB ADP
+75,identificatory,C'est moi,n dòn,n dòn,PASS,,PRON ADP
+76,identificatory_appos,C'est moi Hawa,n de Hawa yé,Hawa dòn,FAIL,,PROPN ADP
+77,identificatory_neg,Ce n'est pas moi,n tɛ,o tɛ n yé,FAIL,,PRON AUX PRON AUX
+78,presentative,c'est Musa,Musa dòn,Musa dòn,PASS,,PROPN ADP
+79,presentative_plur,Ce sont mes frères et sœurs,n bálimaw dòn,n bálimakɛ ni Bátà dòn,FAIL,,PRON NOUN ADP PROPN ADP
+80,identificatory,c'est lui,a dòn,a dòn,PASS,,PRON ADP
+81,identificatory_neg,ce n'est pas lui,a tɛ,o tɛ yé,FAIL,,PRON AUX AUX
+82,identificatory,c'est nous,anw dòn,o yé anw yé,FAIL,,PRON AUX PRON AUX
+83,deictique,Voilà la voiture,[voiture] félé,wátiri félé,FAIL,,NOUN NOUN
+84,deictique_plur,Voilà les voitures,[voiture]w félé,wátiri félé,FAIL,,NOUN NOUN
+85,deictique,Voilà Musa,Musa félé,Musa félé,PASS,,PROPN NOUN
+86,deictique,Voilà l'eau,jí félé,jí félé,PASS,,NOUN NOUN
+87,interrogative,Parles-tu bambara ?,i bɛ bambara kúma wà ?,i bɛ bambara kúma wà ?,PASS,,PRON AUX VERB NOUN CCONJ
+88,interrogative_motion,Allez-vous au marché ?,[vous] bɛ wá súgu la wà ?,aw bɛ wá súgu la wà ?,FAIL,,PRON AUX NOUN NOUN ADP CCONJ
+89,interrogative_question_marker,Est-ce que ça va vraiment bien ?,o bɛ wá kóɲuman nɛ̀fɛ wà ?,Yala o bɛ wá yɛ̀rɛ kóɲuman wà ?,FAIL,,PROPN PRON AUX NOUN NOUN NOUN CCONJ
+90,interrogative_question_marker,Est-ce que tes frères et sœurs sont ici ?,Yala i bálimakɛw ni i balimamusow bɛ yàn wà ?,Yala i bálimakɛw ni bádenmaw bɛ yàn wà ?,FAIL,,PROPN PRON NOUN ADP NOUN AUX NOUN CCONJ
+91,interrogative_alternative,Tu veux du poisson ou bien tu veux de la viande ?,i bɛ jɛ́gɛ ŋàniya wàwá i bɛ sògo ŋàniya ?,i bɛ jɛ́gɛ ŋàniya wàlima i bɛ sògo ŋàniya ?,FAIL,,PRON AUX NOUN NOUN NOUN PRON AUX NOUN NOUN
+92,interrogative_alternative,Tu veux des arachides ou bien tu veux des patates douces ?,i bɛ tìgan ŋàniya wàwá i bɛ [patate douce] ŋàniya ?,i bɛ kàntìgɛw ŋàniya wàlima i bɛ wóso sánujilama ŋàniya ?,FAIL,,PRON AUX NOUN NOUN NOUN PRON AUX NOUN NOUN NOUN
+93,interrogative,il mange ?,a bɛ dún wà ?,a bɛ dúnli kɛ wà ?,FAIL,,PRON AUX VERB ADP CCONJ
+94,interrogative,tu as de l'argent ?,wárí bɛ i bóló wà ?,wári bɛ i fɛ wà ?,FAIL,,NOUN AUX PRON NOUN CCONJ
+95,interrogative,elle est à la maison ?,a bɛ so la wà ?,a bɛ só wà ?,FAIL,,PRON AUX NOUN CCONJ
+96,interrogative_modal_xcomp,peut-il manger de la viande ?,a bɛ se ka sògo dún wà ?,a bɛ se ka sògo dún wà ?,PASS,,PRON AUX NOUN AUX NOUN NOUN CCONJ
+97,content_question_who,Qui fait la bagarre ?,jɔn bɛ bìlen dími ?,jɔn bɛ káta bùnaki ?,FAIL,,NOUN AUX NOUN NOUN
+98,content_question_who_inversion,Qui aimez-vous ?,[vous] bɛ jɔn kànu ?,aw bɛ jɔn kànuya ?,FAIL,,PRON AUX NOUN NOUN
+99,content_question_who_inversion,Qui aiment-ils ?,[ils] bɛ jɔn kànu ?,u bɛ jɔn kànuya ?,FAIL,,PRON AUX NOUN NOUN
+100,content_question_what,Tu manges quoi ?,i bɛ mún dún ?,i bɛ mún dún ?,PASS,,PRON AUX NOUN NOUN
+101,content_question_what,Tu veux quoi ?,i bɛ mún ŋàniya ?,i bɛ mún ŋàniya ?,PASS,,PRON AUX NOUN NOUN
+102,content_question_what,il mange quoi ?,a bɛ mún dún ?,a bɛ mún dún ?,PASS,,PRON AUX NOUN NOUN
+103,content_question_where,Où allez-vous ?,[vous] bɛ wá mín ?,aw bɛ wá mín ?,FAIL,,PRON AUX NOUN NOUN
+104,content_question_where,où est Musa ?,Musa bɛ mín ?,Musa bɛ mín ?,PASS,,PROPN AUX NOUN
+105,content_question_when,Quand viens-tu ?,i bɛ nà túma jùmɛn ?,i bɛ nà túma jùmɛn ?,PASS,,PRON AUX NOUN NOUN NOUN
+106,content_question_when,quand pars-tu ?,i bɛ táa túma jùmɛn ?,i bɛ táa túma jùmɛn ?,PASS,,PRON AUX NOUN NOUN NOUN
+107,content_question_why,Pourquoi pleures-tu ?,i bɛ kàsi mún kósɔn ?,i bɛ kàsi mún kósɔn ?,PASS,,PRON AUX NOUN NOUN NOUN
+108,content_question_why,pourquoi il mange ?,a bɛ dún mún kósɔn ?,a bɛ dúnli kɛ mún kósɔn ?,FAIL,,PRON AUX VERB ADP NOUN NOUN
+109,content_question_how,Comment t'appelles-tu ?,i bɛ kánbìla cógo dǐ ?,i bɛ kánbìla cógo dǐ ?,PASS,,PRON AUX NOUN NOUN NOUN
+110,content_question_how,Comment cela se fait-il ?,o bɛ dími cógo dǐ ?,a bɛ kùnnasìri cógo dǐ ?,FAIL,,PRON AUX NOUN NOUN NOUN
+111,content_question_which_noun,Quelle femme ?,númanfɛlaka jùmɛn ?,númanfɛlaka jùmɛn ?,PASS,,NOUN NOUN
+112,content_question_which,Tu veux quelle maison ?,i bɛ só jùmɛn ŋàniya ?,i bɛ só jùmɛn ŋàniya ?,PASS,,PRON AUX NOUN NOUN NOUN
+113,content_question_how_much,Ça coûte combien ?,wárí jóli bɛ à la ?,o bɛ jóli jàte ?,FAIL,,PRON AUX VERB NOUN
+114,content_question_how_much,tu as combien d'enfants ?,dɔgɔ jóli bɛ i fɛ ?,dénw jóli bɛ i fɛ ?,FAIL,,NOUN VERB AUX PRON NOUN
+115,simple,je mange du riz,n bɛ màlo dún,n bɛ iri dún,FAIL,,PRON AUX NOUN NOUN
+116,simple,tu bois de l'eau,i bɛ jí mìn,i bɛ jí jí,FAIL,,PRON AUX NOUN NOUN
+117,simple,il parle bambara,a bɛ bambara kúma,a bɛ bambara kúma,PASS,,PRON AUX VERB NOUN
+118,simple,elle chante,a bɛ donkili dón,a bɛ lábalimali kɛ,FAIL,,PRON AUX VERB ADP
+119,simple_plur,nous travaillons,anw bɛ báara la,anw bɛ báara la,PASS,,PRON AUX VERB ADP
+120,simple_plur,ils mangent du riz,ùw bɛ màlo dún,u bɛ iri dún,FAIL,,PRON AUX NOUN NOUN
+121,simple_neg,je ne mange pas,n tɛ dún,n tɛ dúnli kɛ,FAIL,,PRON AUX VERB ADP
+122,simple_neg,il ne parle pas bambara,a tɛ bambara kúma,a tɛ bambara kúma,PASS,,PRON AUX VERB NOUN
+123,volitif,je veux manger,n bɛ dún fɛ,n bɛ ŋàniya ka dúnli kɛ,FAIL,,PRON AUX NOUN AUX VERB ADP
+124,volitif,il veut partir,a bɛ táa fɛ,a bɛ ŋàniya ka táa,FAIL,,PRON AUX NOUN AUX NOUN
+125,volitif_neg,je ne veux pas manger,n tɛ dún fɛ,n tɛ ŋàniya ka dúnli kɛ,FAIL,,PRON AUX NOUN AUX VERB ADP
+126,progressif,je suis en train de manger,n bɛ kà dún,n bɛ kà dúnli kɛ,FAIL,,PRON AUX AUX VERB ADP
+127,progressif,il est en train de parler,a bɛ kà kúma,a bɛ kà kúma,PASS,,PRON AUX AUX NOUN
+128,futur,je vais manger,n bɛ na dún,n bɛ na dúnli kɛ,FAIL,,PRON AUX AUX VERB ADP
+129,futur,il va partir,a bɛ na táa,a bɛ na táa,PASS,,PRON AUX AUX NOUN
+130,futur_neg,je n'irai pas,n tɛ na táa,n tɛ na wá,FAIL,,PRON AUX AUX NOUN
+131,past_neg,je n'ai pas mangé,n ma màlo dún,n ma dúnli kɛ,FAIL,,PRON AUX VERB ADP
+132,past_neg,il n'a pas parlé,a ma kúma,a ma kúma,PASS,,PRON AUX NOUN
+133,habitude,il mangeait du riz,a tùn bɛ màlo dún,a tùn bɛ iri dún,FAIL,,PRON AUX AUX NOUN NOUN
+134,habitude,je travaillais,n tùn bɛ báara la,n tùn bɛ báara la,PASS,,PRON AUX AUX VERB ADP
+135,simple_purposive_coordinated,Je te donne de l'argent pour cuisiner et manger,n bɛ wárí di i ma walasa ka [cuisiner] ani ka dún,n bɛ wári di i ma walasa ka bɛ̀rɛbɛrɛli kɛ ani ka dúnli kɛ,FAIL,,PRON AUX NOUN NOUN PRON AUX NOUN AUX VERB ADP NOUN AUX VERB ADP
+136,complex_comitative_relative,Je veux manger avec mon mari et ma fille qui est malade,n bɛ ŋàniya ka dún ni n fúrucɛ ni n mùsona jànkarotɔ,n bɛ ŋàniya ka dúnli kɛ ni n fúrucɛ yé minw jànkarotɔlen dòn,FAIL,,PRON AUX NOUN AUX VERB ADP ADP PRON NOUN AUX NOUN NOUN ADP
+137,verb_serial_dative,il donne le livre à l'enfant,a bɛ kitabu di dɔgɔ ma,a bɛ kìtabu di dén la,FAIL,,PRON AUX NOUN NOUN NOUN ADP
+138,privative_pron,sans moi,n kɔ,n kɔ,PASS,,PRON NOUN
+139,privative_clause,"sans moi, tu ne pourras pas partir","n kɔ, i tɛ na se ka táa",i tɛ na se ka táa n kɔ,FAIL,,PRON AUX AUX NOUN AUX NOUN PRON NOUN
+140,privative_noun,Ce légume est sans cuisson,[légume] [cuisson]tan dòn,nin lègimu in yé jèniyɔrɔtan yé,FAIL,,NOUN NOUN NOUN AUX NOUN AUX
+141,privative_verb,il est parti sans avertir,a fáɲira [avertir]bali,a táara k'a sɔrɔ a ma lásɔ̀mi,FAIL,,PRON VERB NOUN NOUN PRON AUX NOUN
+142,privative_noun,sans eau,jítan,jítan,PASS,,NOUN
+143,privative_noun,sans argent,wárítan,wáritan,FAIL,,NOUN
+144,relative_topic_neg,Une femme qui a eu un enfant ne peut pas abandonner son enfant,"númanfɛlaka mìn yé dén sɔrɔ, o tɛ se ka a dén láfìli","númanfɛlaka mìn yé dén sɔrɔ, o tɛ se ka a dén láfìli",PASS,,NOUN NOUN AUX NOUN NOUN PRON AUX NOUN AUX PRON NOUN VERB
+145,equative_relative,Les djihadistes montrent clairement qu'ils sont les maîtres du jeu,djihadistew bɛ jàbi ko ùw yé [jeu] ka kuntigɛw yé,Mújawow bɛ ɲási fɛ́rɛtɛtɛ ko u yé npári ka mɛtiriw yé,FAIL,,PROPN AUX NOUN NOUN ADP PRON AUX NOUN AUX NOUN AUX
+146,comitative,je suis avec mon mari,n ni n cɛ dòn,n ni n fúrucɛ dòn,FAIL,,PRON ADP PRON NOUN ADP
+147,comitative_genitive,Je suis avec la fille du frère de mon ami,n ni n terikɛ balimakɛ denmuso dòn,n ni n téri bálimakɛ ka mùsoma dòn,FAIL,,PRON ADP PRON NOUN NOUN AUX NOUN ADP
+148,comitative_action,je mange avec mon ami,n bɛ dún ni n terikɛ,n bɛ dúnli kɛ ni n téri yé,FAIL,,PRON AUX VERB ADP ADP PRON NOUN AUX
+149,reciprocal,nous nous aimons,an bɛ ɲɔgɔn kànu,anw bɛ ɲɔgɔn kànuya,FAIL,,PRON AUX NOUN NOUN
+150,reciprocal,ils se battent,ùw bɛ ɲɔgɔn fàli,u bɛ ɲɔgɔn gòsi,FAIL,,PRON AUX NOUN NOUN
+151,reciprocal,nous nous parlons,anw bɛ ɲɔgɔn kúma,anw bɛ ɲɔgɔn kúma,PASS,,PRON AUX NOUN NOUN
+152,imperative,mange !,dún,dúnli kɛ,FAIL,,VERB ADP
+153,imperative,pars !,táa,táa,PASS,,NOUN
+154,imperative,viens !,nà,nà,PASS,,NOUN
+155,imperative,parle bambara !,bambara kúma,bambara kúma,PASS,,VERB NOUN
+156,prohibitive,ne mange pas !,kàna dún,kàna dúnli kɛ,FAIL,,VERB VERB ADP
+157,prohibitive,ne pars pas !,kàna táa,kàna táa,PASS,,VERB NOUN
+158,prohibitive,ne parle pas !,kàna kúma,kàna kúma,PASS,,VERB NOUN
+159,ownership,ce sac est pour ma fille,nin jɔ̀bɔrɔ in yé n mùsoma de ta ye,o jɔ̀bɔrɔ in yé n mùsoma de ta ye,FAIL,,PRON NOUN NOUN AUX PRON NOUN NOUN NOUN NOUN
+160,ownership_pron,Ce sac est pour moi,nin jɔ̀bɔrɔ in yé n ta ye,o jɔ̀bɔrɔ in yé n ta ye,FAIL,,PRON NOUN NOUN AUX PRON NOUN NOUN
+161,noun_phrase_alienable,la maison de mon ami,n terikɛ ka so,n téri ka só,FAIL,,PRON NOUN AUX NOUN
+162,noun_phrase_coord,la participation citoyenne et démocratique,angageman sosiyali ani lademokarasi,jàmaden demokaratiki ni demokaratiki,FAIL,,NOUN NOUN ADP NOUN
+163,noun_phrase_genitive,La décision finale de la constitution du Mali,Mali dácogo làtigɛ [final],Mali ka dácogo ka làtigɛ kɔ́dan,FAIL,,PROPN AUX NOUN AUX NOUN NOUN
+164,noun_phrase_genitive,le champ du vieux,kɔrɔba ka foro,màakɔrɔlama ka fòro,FAIL,,NOUN AUX NOUN
+165,noun_phrase_genitive,la mère de l'enfant,dɔgɔ ba,dén bámuso,FAIL,,NOUN NOUN
+166,noun_phrase_genitive,la maison de Musa,Musa ka so,Musa ka só,FAIL,,PROPN AUX NOUN
+167,infinitive,Promouvoir le bambara et les autres langues nationales,ka bambara wɛ́rɛ nɛ̀n Nasiyonali kìsɛya,ka bambara ni Nasiyonali nɛ̀n wɛ́rɛ nùgumɛ,FAIL,,AUX VERB ADP PROPN NOUN NOUN NOUN
+168,infinitive,manger du riz,ka màlo dún,ka iri dún,FAIL,,AUX NOUN NOUN
+169,infinitive,parler bambara,ka bambara kúma,ka bambara kúma,PASS,,AUX VERB NOUN
+170,infinitive_neg,ne pas manger,kàna dún,ka dúnli kɛ,FAIL,,AUX VERB ADP
+171,infinitive_list,"Promouvoir le bambara et les autres langues nationales, inclusion sociale, meilleure circulation de l'information","ka bambara wɛ́rɛ nɛ̀n Nasiyonali kìsɛya, [inclusion] sosiyali, kùnnafoni fìsamannci ka sírakankasaara",ka bambara ni Nasiyonali nɛ̀n wɛ́rɛ ni sírakankasaara nùgumɛ tílali sosiyaliman kùnnafoni,FAIL,,AUX VERB ADP PROPN NOUN NOUN ADP VERB NOUN VERB NOUN NOUN
+172,complex_relative,"Mais la situation reste très incertaine au Mali, qui s'enfonce toujours plus dans le chaos","nka dábolo bɛ [incertain] lámàra Mali kɔnɔ, min bɛ ɲàgàmi fɔlɔ kɔfɛ cànla la","nka dábolo bɛ tó [incertain] ndére Mali la, jɔn tɛ ɲɔgɔn pénpe kádawuw háwujaw la",FAIL,,NOUN NOUN AUX NOUN NOUN NOUN PROPN ADP NOUN AUX NOUN NOUN NOUN NOUN ADP
+173,existential_nominal_complex,Il existe un frein politique lié aux logiques de pouvoir des élites qui veulent maintenir la masse populaire à l'écart de la gouvernance,"[frein] [politique] bɛ, min bɛ [élite]w ka [logique]w la, minw bɛ ŋàniya ka [masse populaire] bìla [gouvernance] kɔrɔ","nɛ̀njuru hàlala sìrilen sémako báaritala míiriw la bɛ, min bɛ ŋàniya ka dísi popilɛri lámìnɛ gófɛrɛnaman nkànfulori la",FAIL,,NOUN NOUN NOUN NOUN NOUN NOUN ADP AUX ADP AUX NOUN AUX NOUN NOUN NOUN NOUN NOUN ADP
+174,complex_noun_phrase,"Chercheur associé à l'Institut français des relations internationales, Thierry Vircoulon revient pour 20 Minutes sur la situation explosive au Mali","Thierry Vircoulon, IFRIw la kùndafɔrɔ, bɛ segin 20 Minutes ma Mali dábolo [explosif] kan","ɲíninikɛla jɛ̀len cɛ́sira Institut faransɛman ɛntɛrinasiyɔnali la, Thierry Vircoulon bɛ nà [20] mínitiw ye Mali la dábolo bàlawumaman kan",FAIL,,NOUN NOUN VERB PROPN NOUN VERB ADP PROPN PROPN AUX NOUN NOUN NOUN NOUN PROPN ADP NOUN NOUN NOUN
+175,complex_purposive,"L'université de Kumamoto recrute actuellement des participants pour le Programme d'apprentissage coopératif japonais, ainsi que des étudiants japonais pour la soutenir","Kumamoto lakɔli bɛ kàlandenw wele sísàn japɔnikan [coopératif] kàlanso la, ani japɔni kalandenw ka a dɛmɛ","Kumamoto ka iniwɛrisite bɛ sélikɛlaw kùnbɛ̀n hálisà dègeli pòrogaramu nɛ̀rɛmuguma nɛ̀njanman ye, ka fara kàlandenbaw jàsiranbaatɔ kan walasa ka a dòndo",FAIL,,PROPN AUX NOUN AUX NOUN NOUN NOUN VERB NOUN NOUN NOUN NOUN AUX VERB NOUN NOUN NOUN NOUN AUX PRON NOUN
+176,locative_adv,les gens sont ici,ɲàmakalaw bɛ yàn,bìdenw bɛ yàn,FAIL,,NOUN AUX NOUN
+177,locative_adv,il est là,a bɛ yèn,a bɛ yèn,PASS,,PRON AUX NOUN
+178,nummod_subject,deux hommes sont partis,mɔ̀gɔw fila fáɲira,mɔ̀gɔw fila táara,FAIL,,NOUN NOUN VERB
+179,nummod_subject,trois enfants mangent du riz,dénw saba bɛ iri dún,dénw saba bɛ iri dún,PASS,,NOUN NOUN AUX NOUN NOUN
+180,nummod_locative,cinq femmes sont ici,númanfɛlakaw duuru bɛ yàn,númanfɛlakaw duuru bɛ yàn,PASS,,NOUN NOUN AUX NOUN
+181,nummod_object,j'ai acheté deux livres,n yé kìtabuw fila sàn,n yé kìtabuw fila sàn,PASS,,PRON AUX NOUN NOUN NOUN
+182,intrans_action_progressif,je suis en train de travailler,n bɛ kà báara kɛ,n bɛ kà báara kɛ,PASS,,PRON AUX AUX VERB ADP
+183,intrans_action_present_neg,je ne travaille pas,n tɛ báara la,n tɛ báara la,PASS,,PRON AUX VERB ADP
+184,intrans_action_passe_pos,j'ai travaillé,n yé báara kɛ,n yé báara kɛ,PASS,,PRON AUX VERB ADP
+185,intrans_action_passe_neg,je n'ai pas travaillé,n ma báara kɛ,n ma báara kɛ,PASS,,PRON AUX VERB ADP
+186,intrans_action_hab_neg,je ne travaillais pas,n tùn tɛ báara la,n tùn tɛ báara la,PASS,,PRON AUX AUX VERB ADP
+187,intrans_action_futur,je travaillerai,n bɛ na báara kɛ,n bɛ na báara kɛ,PASS,,PRON AUX AUX VERB ADP
+188,temporal_subordinator,quand il vient,tuma min a bɛ nà,tuma min a bɛ nà,PASS,,NOUN ADP PRON AUX NOUN
+189,reported_comparative,les bambara disent que la raison de la venue de quelqu'un est plus importante que soi-même,bambaraw bɛ fɔ ko mɔ̀gɔ dɔ jɔ̀kun ka kólogirinman ka tɛmɛ yɛrɛ kan,bambaraw ko mɔ̀gɔ dɔ ka nàkun ka kólogirinman ka tɛmɛ yɛrɛ kan,FAIL,,NOUN ADP NOUN NOUN AUX NOUN AUX NOUN AUX NOUN NOUN NOUN
+190,optatif,que tu viennes,i ka nà,i ka nà,PASS,,PRON AUX NOUN
+191,optatif,que Moussa mange,Moussa ka dún,Moussa ka dúnli kɛ,FAIL,,PROPN AUX VERB ADP
+192,optatif_coi,que Dieu t'aide,Ala ka i dɛmɛ,Dieu ka bólodɛ̀mɛ kɛ i ma,FAIL,,PROPN AUX NOUN ADP PRON AUX
+193,venir_de_propn,Je viens de Bamako,n bɔra Bamako,n bɛ bɔ Bamako,FAIL,,PRON AUX NOUN PROPN
+194,venir_de_noun,Je viens de l'école,n bɔra kàlankɛyɔrɔ la,n bɛ bɔ kàlankɛyɔrɔ la,FAIL,,PRON AUX NOUN NOUN ADP
+195,venir_de_verbe,Je viens de manger,n bɔra ka dumuni kɛ,n bɔra ka dumuni kɛ,PASS,,PRON VERB AUX NOUN ADP
+196,venir_de_verbe,Il vient de partir,a bɔra ka táa,a bɔra ka táa,PASS,,PRON VERB AUX NOUN
+197,conj_avec_locatif,elle alla au village et demande des infos,a yé wá dùgu la wa a yé ɛnfo ɲɛ́juguya,a wára wa a yé ɛnfo ɲɛ́juguya dùgu la,FAIL,,PRON VERB NOUN PRON AUX NOUN NOUN NOUN ADP
+198,verb_serial_conj,elle alla trouver et demande des informations,a táara ɲɛ́sɔ̀rɔ wa a yé kùnnafoniw ɲɛ́juguya,a wára ɲɛ́sɔ̀rɔli kɛ wa a bɛ kùnnafoni ɲɛ́juguya,FAIL,,PRON VERB VERB ADP NOUN PRON AUX NOUN NOUN
+199,comitative_motion,il est venu avec moi,a nàra ni n yé,a nàra ni n yé,PASS,,PRON VERB ADP PRON AUX
+200,comitative_travail,elle travaille avec lui,a bɛ báara ni a yé,a bɛ báara la ni a yé,FAIL,,PRON AUX VERB ADP ADP PRON AUX
+201,comitative_adj,Il est venu avec une dentition complète,a nàra ni dákolon dafaleninman yé,a nàra ni dákolon kɔ́nbilen yé,FAIL,,PRON VERB ADP NOUN NOUN AUX
+202,temporal_np_depuis,Depuis quelques mois,kabini sélidenninkalow dɔw,kabini sélidenninkalow damadɔw,FAIL,,NOUN NOUN NOUN
+203,temporal_np_depuis,depuis quelques jours,kabini tilew dɔw,kabini dóngòw damadɔw,FAIL,,NOUN NOUN NOUN
+204,temporal_np_depuis,depuis quelques années,kabini sanw dɔw,kabini sànw damadɔw,FAIL,,NOUN NOUN NOUN
+205,ccomp_interrogative,sais-tu que je suis un enfant ?,i bɛ dɔ́n ko n yé dén yé wà ?,i bɛ dɔ́n ko n yé dén yé wà ?,PASS,,PRON AUX NOUN ADP PRON AUX NOUN AUX CCONJ
+206,ccomp_savoir,je sais que tu es mon ami,n bɛ dɔ́n ko i yé n terikɛ yé,n bɛ dɔ́n ko i yé téri yé,FAIL,,PRON AUX NOUN ADP PRON AUX NOUN AUX
+207,ccomp_savoir_locatif,ils savent que nous sommes ici,ùw bɛ dɔ́n ko anw bɛ yàn,u bɛ dɔ́n ko anw bɛ yàn,FAIL,,PRON AUX NOUN ADP PRON AUX NOUN
+208,ccomp_dire,il dit qu'il mange,a ko a bɛ dún,a ko a bɛ dúnli kɛ,FAIL,,PRON ADP PRON AUX VERB ADP
+209,ccomp_dire_qualitative,ils disent que la route est longue,ùw ko sìra ka télé,u ko síraden ka búlubulu,FAIL,,PRON ADP NOUN AUX NOUN
+210,ccomp_dire_passe,elle a dit que Musa est parti,a yé fɔ ko Musa fáɲira,a láfɔra ko Musa táara,FAIL,,PRON VERB ADP PROPN VERB
+211,modal_pouvoir,nous pouvons partir,anw bɛ se ka táa,anw bɛ se ka táa,PASS,,PRON AUX NOUN AUX NOUN
+212,modal_pouvoir_neg,il ne peut pas manger,a tɛ se ka dún,a tɛ se ka dúnli kɛ,FAIL,,PRON AUX NOUN AUX VERB ADP
+213,modal_pouvoir,elle peut venir,a bɛ se ka nà,a bɛ se ka nà,PASS,,PRON AUX NOUN AUX NOUN
+214,modal_pouvoir_neg,tu ne peux pas partir,i tɛ se ka táa,i tɛ se ka táa,PASS,,PRON AUX NOUN AUX NOUN
+215,past_intransitive_neg,ils ne sont pas arrivés,ùw ma se,u ma sé,FAIL,,PRON AUX NOUN
+216,past_intransitive_neg,il n'est pas tombé,a ma bɛn,a ma wɔ̀lɔwɔlɔ,FAIL,,PRON AUX NOUN
+217,past_intransitive_neg,elle n'est pas venue,a ma nà,a ma nà,PASS,,PRON AUX NOUN
+218,habitude_neg,elle ne mangeait pas,a tùn tɛ dún,a tùn tɛ dúnli kɛ,FAIL,,PRON AUX AUX VERB ADP
+219,habitude_neg_plur,nous ne parlions pas bambara,anw tùn tɛ bambara kúma,anw tùn tɛ bambara kúma,PASS,,PRON AUX AUX VERB NOUN
+220,passe_anterieur_neg,il n'avait pas mangé,a tùn ma dún,a tùn ma dúnli kɛ,FAIL,,PRON AUX AUX VERB ADP
+221,rule1_conditional_question,"Si j'ai du courage, saurait-on ?","n bɛ gara dun, a mán se dun ?","ní dùsukolo bɛ n fɛ, a bɛ na dɔ́n wà ?",FAIL,,ADP NOUN AUX PRON NOUN PRON AUX AUX NOUN CCONJ
+222,rule2_prohibitive_object,Ne mange pas le riz,kàna iri dún,kàna iri dún,PASS,,VERB NOUN NOUN
+223,rule3_temporal_avoir_possessive,quand il eut ton appel,tuma min a yé i ka wéle ɲóro,tuma min a yé i wéle sɔrɔ,FAIL,,NOUN ADP PRON AUX PRON NOUN NOUN
+224,rule4_temporal_passive,Quand cela fut fait,tuma min o tùn yògorolen dòn,tuma min o kùnnasìrira,FAIL,,NOUN ADP PRON VERB
+225,rule5_fixed_phrase,Ainsi donc,ola sa,ola sa,PASS,,NOUN NOUN
+226,rule6_restrictive,tu ne serais qu'un pleutre,i tɛ foyi yé ni sègɛ tɛ,i tɛ na kɛ foyi yé ni sègɛ tɛ,FAIL,,PRON AUX AUX ADP CCONJ AUX ADP NOUN AUX
+227,rule7_quest_ce_que,Qu'est-ce qu'il pourrait t'arriver là-bas ?,mún bɛ ka sé i ma yèn jùkɔ́rɔw,mún bɛ se ka i sé yèn jùkɔ́rɔw ?,FAIL,,NOUN AUX NOUN AUX PRON NOUN NOUN NOUN
+228,rule7_quest_ce_que_real_subject,Qu'est-ce qu'il peut faire ?,A bɛ se ka mun kɛ ?,a bɛ se ka mún lámákùn ?,FAIL,,PRON AUX NOUN AUX NOUN NOUN
+229,rule8_relative_splitting,Toi qui prends l'ennemi vivant,i bɛ júgu ɲɛ́nama,i mìn bɛ júgu ɲɛ́nama mɔ́n,FAIL,,PRON NOUN AUX NOUN NOUN NOUN
+230,rule9_valoir_peine_sov,cela vaut la peine de prendre un fusil,o bɛ buntu cɛ wà ka sàn,o bɛ sɛ̀gɛn fìnya ka gàtan mɔ́n,FAIL,,PRON AUX NOUN NOUN AUX NOUN NOUN
+231,rule6_restrictive_adj,tu ne serais que jaloux,i tɛ foyi yé ni jiliya tɛ,i tɛ na kɛ foyi yé ni kèle tɛ,FAIL,,PRON AUX AUX ADP CCONJ AUX ADP NOUN AUX
+232,refl_actif_passe,il s'est lavé,a yé a jó,a yé a jó,PASS,,PRON AUX PRON NOUN
+233,refl_actif_present,elle se lave,a bɛ a jó,a bɛ a jó,PASS,,PRON AUX PRON NOUN
+234,refl_actif_emphase,il s'est lavé lui même,a yé a yɛrɛ jó,a yé a yɛrɛ jó,PASS,,PRON AUX PRON NOUN NOUN
+235,refl_accidentel_passe,il s'est blessé,a yé a yɛrɛ màjógin,a yé a yɛrɛ màjógin,PASS,,PRON AUX PRON NOUN NOUN
+236,refl_posture_passe,il s'est assis,a yé a sìgi,a yé a sìgi,PASS,,PRON AUX PRON NOUN
+237,refl_idiom_locatif,il s'est mis à pleurer,a yé a yɛrɛ bìla kàsi la,a yé a yɛrɛ bìla kàsi la,PASS,,PRON AUX PRON NOUN NOUN NOUN ADP
+238,simple_iobj_present,Il me parle,a bɛ kúma n yé,a bɛ kúma n yé,PASS,,PRON AUX NOUN PRON AUX
+239,verb_serial_dative_me,elle me donne un livre,a bɛ kìtabu di n ma,a bɛ kìtabu kelen di n ma,FAIL,,PRON AUX NOUN NOUN NOUN PRON AUX
+240,content_question_modal_xcomp,Qu'est-ce qu'il pourrait faire ?,a bɛ se ka mún kɛ ?,a bɛ na se ka mún lámákùn ?,FAIL,,PRON AUX AUX NOUN AUX NOUN NOUN
+241,future_have_material,Tu auras une voiture,móbili bɛ na i bóló,i bɛ na wátiri sɔrɔ,FAIL,,PRON AUX AUX NOUN NOUN
+242,future_have_material,Elle aura de l'argent,wárí bɛ na a bóló,a bɛ na wári sɔrɔ,FAIL,,PRON AUX AUX NOUN NOUN
+243,future_have_abstract,J'aurai un frère,bálimakɛ bɛ na n fɛ,n bɛ na bálimakɛ sɔrɔ,FAIL,,PRON AUX AUX NOUN NOUN
+244,future_have_abstract,Il aura du succès,[succès] bɛ na a fɛ,a bɛ na táɲɛ sɔrɔ,FAIL,,PRON AUX AUX NOUN NOUN
+245,future_have_abstract_plur,Nous aurons des enfants,dénw bɛ na anw fɛ,anw bɛ na dénw sɔrɔ,FAIL,,PRON AUX AUX NOUN NOUN
+246,future_have_material_neg,ils n'auront pas de voiture,móbili tɛ na ùw bóló,u tɛ na wátiri sɔrɔ,FAIL,,PRON AUX AUX NOUN NOUN
+247,past_transitive_avoir_eu,j'ai eu un mari,n yé cɛ sɔrɔ,n yé fúrucɛ sɔrɔ,FAIL,,PRON AUX NOUN NOUN
+248,past_transitive_avoir_eu_plur,elle a eu des enfants,a yé dénw sɔrɔ,a yé dénw sɔrɔ,PASS,,PRON AUX NOUN NOUN
+249,past_transitive_avoir_eu,tu as eu de la chance,i yé diyaɲɔgɔnya sɔrɔ,i yé tère sɔrɔ,FAIL,,PRON AUX NOUN NOUN
+250,past_transitive_avoir_eu,il a eu un problème,a yé [problème] sɔrɔ,a yé báasi sɔrɔ,FAIL,,PRON AUX NOUN NOUN
+251,past_transitive_avoir_eu_plur,nous avons eu des difficultés,anw yé [difficulté]w sɔrɔ,anw yé màgɛlɛyaw sɔrɔ,FAIL,,PRON AUX NOUN NOUN
+252,past_have_material,j'avais une voiture,móbili tùn bɛ n bóló,wátiri tùn bɛ n bóló,FAIL,,NOUN AUX AUX PRON NOUN
+253,past_have_material,il avait de l'argent,wárí tùn bɛ a bóló,wári tùn bɛ a fɛ,FAIL,,NOUN AUX AUX PRON NOUN
+254,past_have_abstract_neg,elle n'avait pas de frère,bálimakɛ tùn tɛ a fɛ,bálimakɛ tùn tɛ a fɛ,PASS,,NOUN AUX AUX PRON NOUN
+255,past_have_material_plur,nous avions un champ,foro tùn bɛ anw bóló,fòro tùn bɛ anw fɛ,FAIL,,NOUN AUX AUX PRON NOUN
+256,past_have_abstract,tu avais de la chance,diyaɲɔgɔnya tùn bɛ i fɛ,tère tùn bɛ i fɛ,FAIL,,NOUN AUX AUX PRON NOUN
+257,optatif_plur,Que Dieu vous bénisse,Ala ka aw dɛmɛ,Dieu ka aw dùbabu,FAIL,,PROPN AUX PRON NOUN
+258,optatif,Qu'il vienne,a ka nà,a ka nà,PASS,,PRON AUX NOUN
+259,optatif_plur,Qu'ils partent,ùw ka táa,u ka táa,FAIL,,PRON AUX NOUN
+260,optatif_abs,Que la paix règne,lafiɲa ka kɛ,hɛ́rɛ ka wó,FAIL,,NOUN AUX NOUN
+261,optatif,Que tu réussisses,i ka dɔngɛ,i ka ɲɛ̀,FAIL,,PRON AUX NOUN
+262,optatif_plur,Que nous mangions ensemble,anw ka dún ɲɔgɔn fɛ,anw ka dúnli kɛ ánsanbulu,FAIL,,PRON AUX VERB ADP NOUN
+263,conj_verb_present,il mange et boit,a bɛ dún wa a bɛ mìn,a bɛ dúnli kɛ wa jí,FAIL,,PRON AUX VERB ADP NOUN NOUN
+264,conj_verb_present,elle chante et danse,a bɛ donkili dón wa a bɛ [danser],a bɛ lábalimali kɛ wa a bɛ dɔ̀n la,FAIL,,PRON AUX VERB ADP NOUN PRON AUX NOUN ADP
+265,conj_verb_passe,il est venu et a mangé,a nàra wa a yé dún,a nàra wa a yé dúnli kɛ,FAIL,,PRON VERB NOUN PRON AUX VERB ADP
+266,modal_pouvoir,tu peux manger,i bɛ se ka dún,i bɛ se ka dúnli kɛ,FAIL,,PRON AUX NOUN AUX VERB ADP
+267,modal_pouvoir_neg,nous ne pouvons pas venir,anw tɛ se ka nà,anw tɛ se ka nà,PASS,,PRON AUX NOUN AUX NOUN
+268,modal_pouvoir_plur,elles peuvent travailler,ùw bɛ se ka báara kɛ,u bɛ se ka báara kɛ,FAIL,,PRON AUX NOUN AUX VERB ADP
+269,modal_pouvoir_past,il pouvait partir,a tùn bɛ se ka táa,a tùn bɛ se ka táa,PASS,,PRON AUX AUX NOUN AUX NOUN
+270,modal_pouvoir_interrogative,peut-elle partir ?,a bɛ se ka táa wà ?,a bɛ se ka táa wà ?,PASS,,PRON AUX NOUN AUX NOUN CCONJ
+271,modal_pouvoir_past_neg,il ne pouvait pas manger,a tùn tɛ se ka dún,a tùn tɛ se ka dúnli kɛ,FAIL,,PRON AUX AUX NOUN AUX VERB ADP
+272,verb_serial_dative,il me donne de l'argent,a bɛ wárí di n ma,a bɛ wári di n ma,FAIL,,PRON AUX NOUN NOUN PRON AUX
+273,simple_iobj,elle lui parle,a bɛ kúma a yé,a bɛ kúma a yé,FAIL,,PRON AUX NOUN
+274,verb_serial_dative_plur,nous leur donnons du riz,anw bɛ màlo di ùw ma,anw bɛ iri di u ma,FAIL,,PRON AUX NOUN NOUN PRON AUX
+275,verb_serial_dative,je te donne un livre,n bɛ kìtabu di i ma,n bɛ kìtabu kelen di i ma,FAIL,,PRON AUX NOUN NOUN NOUN PRON AUX
+276,simple_iobj_plur,il nous parle,a bɛ kúma anw yé,a bɛ kúma anw yé,PASS,,PRON AUX NOUN PRON AUX
+277,refl_posture_present,il se lève,a bɛ a tín,a bɛ láyɛ̀lɛn,FAIL,,PRON AUX PRON NOUN
+278,refl_posture_passe,il s'est levé,a yé a tín,a láyɛ̀lɛnna,FAIL,,PRON AUX PRON NOUN
+279,refl_accidentel_passe,elle s'est trompée,a yé a yɛrɛ tɔn,a ŋànamura,FAIL,,PRON VERB
+280,refl_idiom_locatif,il s'est mis à travailler,a yé a yɛrɛ bìla báara la,a yé a yɛrɛ bìla báara la,PASS,,PRON AUX PRON NOUN NOUN VERB ADP
+281,refl_actif_present,elle se regarde,a bɛ a yɛrɛ lajé,a bɛ a yɛrɛ fílɛ,FAIL,,PRON AUX PRON NOUN NOUN
+282,refl_actif_present_plur,nous nous préparons,anw bɛ anw yɛrɛ labɛn,anw bɛ anw yɛrɛ fìri,FAIL,,PRON AUX PRON NOUN NOUN
+283,refl_posture_present,elle se réveille,a bɛ a wuli,a bɛ màkúnu,FAIL,,PRON AUX PRON NOUN
+284,imperative_locative,viens ici !,nà yàn,nà yàn,PASS,,NOUN NOUN
+285,prohibitive_dem,ne fais pas ça !,kàna o kɛ,kàna o kùnnasìri,FAIL,,VERB PRON NOUN
+286,imperative_iobj,aide-moi !,n dɛmɛ,n bólodɛ̀mɛ,FAIL,,PRON NOUN
+287,prohibitive,ne pleure pas !,kàna kàsi,kàna kàsi,PASS,,VERB NOUN
+288,imperative_adv,mange vite !,dún joona,dúnli kɛ súwɛ,FAIL,,VERB ADP NOUN
+289,prohibitive_object,ne bois pas l'eau !,kàna jí mìn,kàna jí jí,FAIL,,VERB NOUN NOUN
+290,prohibitive_object,ne mange pas la viande !,kàna sògo dún,kàna sògo dún,PASS,,VERB NOUN NOUN
+291,interrogative_est_ce_que,Est-ce qu'il mange ?,Yala a bɛ dún wà ?,Yala a bɛ dúnli kɛ wà ?,FAIL,,PROPN PRON AUX VERB ADP CCONJ
+292,interrogative_est_ce_que,Est-ce qu'elle travaille ?,Yala a bɛ báara la wà ?,a bɛ ko a bɛ báara kɛ wà ?,FAIL,,PRON AUX ADP PRON AUX VERB ADP CCONJ
+293,interrogative_passe,a-t-il mangé ?,a yé dún wà ?,a yé dúnli kɛ wà ?,FAIL,,PRON AUX VERB ADP CCONJ
+294,interrogative,Travailles-tu ?,i bɛ báara la wà ?,i bɛ báara la wà ?,PASS,,PRON AUX VERB ADP CCONJ
+295,interrogative_past_intrans,est-il venu ?,a nàra wà ?,a nàra wà ?,PASS,,PRON VERB CCONJ
+296,interrogative_est_ce_que_passe,Est-ce qu'ils sont arrivés ?,Yala ùw sera wà ?,Yala u séra wà ?,FAIL,,PROPN PRON VERB CCONJ
+297,content_question_who_equative,Qui est-il ?,a yé jɔn yé ?,a yé jɔn yé ?,PASS,,PRON AUX NOUN AUX
+298,content_question_what,Qu'est-ce que tu fais ?,i bɛ mún kɛ ?,i bɛ mún lámákùn ?,FAIL,,PRON AUX NOUN NOUN
+299,content_question_when_passe,Quand est-il parti ?,a fáɲira túma jùmɛn ?,a táara túma jùmɛn ?,FAIL,,PRON VERB NOUN NOUN
+300,content_question_why_neg,Pourquoi ne viens-tu pas ?,i tɛ nà mún kósɔn ?,i tɛ nà mún kósɔn ?,PASS,,PRON AUX NOUN NOUN NOUN
+301,content_question_how_much,Combien coûte ce livre ?,wárí jóli bɛ nin kìtabu la ?,nin kìtabu in bɛ fàlen jóli ?,FAIL,,NOUN NOUN NOUN AUX NOUN VERB
+302,content_question_who_passe,Qui a mangé ?,jɔn yé dún ?,jɔn yé dúnli kɛ ?,FAIL,,NOUN AUX VERB ADP
+303,relative_subject,La femme qui mange,númanfɛlaka mìn bɛ dún,númanfɛlaka mìn bɛ dúnli kɛ,FAIL,,NOUN NOUN AUX VERB ADP
+304,relative_object,Le livre que j'ai acheté,kìtabu mìn n yé sàn,n yé kìtabu mìn sàn,FAIL,,PRON AUX NOUN NOUN NOUN
+305,relative_subject_past,L'homme qui est parti,mɔ̀gɔ mìn fáɲira,mɔ̀gɔ mìn táara,FAIL,,NOUN NOUN VERB
+306,relative_subject_present,L'enfant qui pleure,dén mìn bɛ kàsi,dén mìn bɛ kàsi,PASS,,NOUN NOUN AUX NOUN
+307,relative_object_past,La maison que nous avons construite,so mìn anw yé lá,anw yé só mìn dílan,FAIL,,PRON AUX NOUN NOUN NOUN
+308,ccomp_interrogative_passe,tu sais qu'il est parti ?,i bɛ dɔ́n ko a fáɲira wà ?,i bɛ dɔ́n ko a táara wà ?,FAIL,,PRON AUX NOUN ADP PRON VERB CCONJ
+309,ccomp_dire_futur,elle dit qu'elle partira,a ko a bɛ na táa,a ko a bɛ na táa,PASS,,PRON ADP PRON AUX AUX NOUN
+310,ccomp_locatif,nous savons qu'il est là,anw bɛ dɔ́n ko a bɛ yèn,anw bɛ dɔ́n ko a bɛ yèn,PASS,,PRON AUX NOUN ADP PRON AUX NOUN
+311,ccomp_dire_neg,il dit qu'il ne mange pas,a ko a tɛ dún,a ko a tɛ dúnli kɛ,FAIL,,PRON ADP PRON AUX VERB ADP
+312,ccomp_locatif,je sais que tu es là,n bɛ dɔ́n ko i bɛ yèn,n bɛ dɔ́n ko i bɛ yèn,PASS,,PRON AUX NOUN ADP PRON AUX NOUN
+313,ccomp_dire_passe_ccomp,ils disent qu'il est venu,ùw ko a nàra,u ko a nàra,FAIL,,PRON ADP PRON VERB
+314,ccomp_dire_passe_root,il a dit qu'il mangeait,a yé fɔ ko a bɛ dún,a yé láfɔ ko a tùn bɛ dúnli kɛ,FAIL,,PRON AUX NOUN ADP PRON AUX AUX VERB ADP
+315,ccomp_dire_passe_root_plur,ils ont dit qu'il était parti,ùw yé fɔ ko a fáɲira,u tùn yé láfɔ ko a táara,FAIL,,PRON AUX AUX NOUN ADP PRON VERB
+316,venir_de_noun_plur,Ils viennent du marché,u bɛ bɔ súgu la,u bɛ bɔ súgu la,PASS,,PRON AUX NOUN NOUN ADP
+317,venir_de_noun,Elle vient de la mosquée,a bɛ bɔ sìlamɛdiinɛ la,a bɛ bɔ sìlamɛdiinɛ la,PASS,,PRON AUX NOUN NOUN ADP
+318,venir_de_propn_plur,Nous venons de Bamako,anw bɛ bɔ Bamako,anw bɛ bɔ Bamako,PASS,,PRON AUX NOUN PROPN
+319,venir_de_verbe,Elle vient de travailler,a bɔra ka báara kɛ,a bɔra ka báara kɛ,PASS,,PRON VERB AUX VERB ADP
+320,venir_de_interrogative,tu viens d'où ?,i bɛ bɔ mín ?,i bɛ bɔ mín ?,PASS,,PRON AUX NOUN NOUN
+321,comitative_plur_noun,il est venu avec ses enfants,a nàra ni a dénw yé,a nàra ni a ka dén yé,FAIL,,PRON VERB ADP PRON AUX NOUN AUX
+322,comitative_action,je mange avec ma famille,n bɛ dún ni n dakɔrɔbaw yé,n bɛ dúnli kɛ ni n dénbaya yé,FAIL,,PRON AUX VERB ADP ADP PRON NOUN AUX
+323,comitative_passe,il est parti avec ses amis,a fáɲira ni a terilaw yé,a táara ni a ka téri yé,FAIL,,PRON VERB ADP PRON AUX NOUN AUX
+324,comitative_travail,elle travaille avec son mari,a bɛ báara ni a cɛ yé,a bɛ báara la ni a ka fúrucɛ yé,FAIL,,PRON AUX VERB ADP ADP PRON AUX NOUN AUX
+325,rule2_prohibitive_object,Ne bois pas le lait,kàna nɔnɔ mìn,kàna nɔ́nɔ jí,FAIL,,VERB NOUN NOUN
+326,rule2_prohibitive_dem,Ne prends pas ça,kàna o ta,kàna o mɔ́n,FAIL,,VERB PRON NOUN
+327,rule6_restrictive,tu n'es qu'un enfant,i tɛ foyi yé ni dén tɛ,i tɛ kɛ foyi yé ni dén tɛ,FAIL,,PRON AUX ADP CCONJ AUX ADP NOUN AUX
+328,rule6_restrictive,il n'est qu'un lâche,a tɛ foyi yé ni sègɛ tɛ,a tɛ kɛ foyi yé ni [lâche] tɛ,FAIL,,PRON AUX ADP CCONJ AUX ADP NOUN AUX
+329,rule6_restrictive_adj,elle n'est que belle,a tɛ foyi yé ni ɲuman tɛ,a tɛ kɛ foyi yé ni bólolango tɛ,FAIL,,PRON AUX ADP CCONJ AUX ADP NOUN AUX
+330,content_question_past,Qu'est-ce qu'il a fait ?,a yé mún kɛ ?,a yé mún kùnnasìri ?,FAIL,,PRON AUX NOUN NOUN
+331,rule7_quest_ce_que_plur,Qu'est-ce que vous voulez ?,mún aw bɛ ŋàniya ?,aw bɛ mún ŋàniya ?,FAIL,,PRON AUX NOUN NOUN
+332,rule8_relative_topic,L'homme que tu vois est mon ami,"i bɛ cɛ mìn yé, o yé n terikɛ yé","i bɛ mɔ̀gɔ mìn yé , o yé n téri yé",FAIL,,PRON AUX NOUN NOUN AUX PRON AUX PRON NOUN AUX
+333,rule9_valoir_peine_neg,cela ne vaut pas la peine,o tɛ buntu cɛ wà,o tɛ sɛ̀gɛn lèle,FAIL,,PRON AUX NOUN NOUN
+334,experiencer_faim,J'ai faim,kɔngɔ bɛ n la,kɔ́ngɔ bɛ n la,FAIL,,NOUN AUX PRON ADP
+335,experiencer_soif,J'ai soif,jáabi bɛ n la,jíminnɔgɔ bɛ n la,FAIL,,NOUN AUX PRON ADP
+336,experiencer_peur,il a peur,siran bɛ a la,a jàpapalen dòn,FAIL,,PRON NOUN ADP
+337,experiencer_honte,elle a honte,maloya bɛ a la,a màlolen dòn,FAIL,,PRON NOUN ADP
+338,experiencer_sommeil,j'ai sommeil,sùn bɛ n la,sùnɔgɔ bɛ n la,FAIL,,NOUN AUX PRON ADP
+339,experiencer_froid,nous avons froid,sɛgi bɛ an la,nɛ́nɛ bɛ anw la,FAIL,,NOUN AUX PRON ADP
+340,experiencer_chaud,tu as chaud,teliman bɛ i la,gòni bɛ i la,FAIL,,NOUN AUX PRON ADP
+341,experiencer_faim_neg,je n'ai pas faim,kɔngɔ tɛ n la,kɔ́ngɔ tɛ n la,FAIL,,NOUN AUX PRON ADP
+342,experiencer_peur_neg,il n'a pas peur,siran tɛ a la,a jàpapalen tɛ,FAIL,,PRON NOUN AUX
+343,experiencer_pain_tete,j'ai mal à la tête,n horon bɛ n dimi,n kùn bɛ n dádigi,FAIL,,PRON NOUN AUX PRON NOUN
+344,experiencer_pain_ventre,elle a mal au ventre,a kɔnɔ bɛ a dimi,a nàga bɛ a dádigi,FAIL,,PRON NOUN AUX PRON NOUN
+345,experiencer_pain_pied,il a mal aux pieds,a sew bɛ a dimi,a jɔ̀lan bɛ a dádigi,FAIL,,PRON NOUN AUX PRON NOUN
+346,freq_tous_les_jours,tous les jours,dón bɛɛ,dóngòw bɛɛ,FAIL,,NOUN NOUN
+347,freq_chaque_jour,chaque jour,dón bɛɛ,dóngò ò dóngò,FAIL,,NOUN NOUN NOUN
+348,freq_chaque_mois,chaque mois,kalo kelen kelen,sélidenninkalo ò sélidenninkalo,FAIL,,NOUN NOUN NOUN
+349,freq_chaque_semaine,chaque semaine,dɔgɔkun kelen kelen,dɔ́gɔfurancɛ ò dɔ́gɔfurancɛ,FAIL,,NOUN NOUN NOUN
+350,freq_chaque_annee,chaque année,san kelen kelen,sàn ò sàn,FAIL,,NOUN NOUN NOUN
+351,freq_tous_les_matins,tous les matins,sɔgɔma bɛɛ,sɔ̀gɔmàw bɛɛ,FAIL,,NOUN NOUN
+352,freq_tous_les_soirs,tous les soirs,wùlafɛ bɛɛ,fìtirimagɛnw bɛɛ,FAIL,,NOUN NOUN
+353,freq_vient_tous_les_jours,il vient tous les jours,a bɛ nà dón bɛɛ,a bɛ nà dóngòw bɛɛ,FAIL,,PRON AUX NOUN NOUN NOUN
+354,freq_mange_chaque_matin,elle mange chaque matin,a bɛ dún sɔgɔma bɛɛ,a bɛ dúnli kɛ ò sɔ̀gɔmà ò sɔ̀gɔmà,FAIL,,PRON AUX VERB ADP NOUN NOUN NOUN NOUN
+355,freq_travaille_chaque_semaine,nous travaillons chaque semaine,an bɛ báara kɛ dɔgɔkun kelen kelen,anw bɛ báara la ò dɔ́gɔfurancɛ ò dɔ́gɔfurancɛ,FAIL,,PRON AUX VERB ADP NOUN NOUN NOUN NOUN

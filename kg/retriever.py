@@ -100,9 +100,16 @@ def _gloss_match_score(fr_raw: str, token: str) -> float:
     if fr == t:
         return 100.0
 
-    # Composite: first segment or extension
-    # "ami intime", "ami, bien-aimé", "ami, camarade" all score 70
+    # Generic lemma entry with period (e.g. "faire." for lemma "faire").
+    if fr == t + '.':
+        return 80.0
+
+    # Composite list (comma-separated) where first element = token :
+    # "fille, nièce", "ami, camarade" — plus spécifique qu'exact 1-mot générique.
+    # Extension phrase ("ami intime", "eau de mer") → score standard.
     first_segment = fr.split(',')[0].strip()
+    if first_segment == t and ',' in fr:
+        return 70.0
     if first_segment == t or fr.startswith(t + ' ') or fr.startswith(t + '.'):
         return 70.0
 
@@ -207,9 +214,12 @@ class KGRetriever:
                 if candidates:
                     return candidates[:top_k]
 
-            # If no match for full word, split by hyphen and retrieve parts
+            # Si pas de correspondance directe, tenter le split par trait-d'union
+            # SEULEMENT si les parties ont elles-mêmes des correspondances KG utiles
+            # (évite que 'week-end' → 'end' → 'endroit' par faux ami linguistique).
             parts = token.split('-')
             combined_results = []
+            _all_parts_have_match = True
             for part in parts:
                 if part.strip():
                     part_results = self.retrieve(
@@ -220,18 +230,24 @@ class KGRetriever:
                         context_tokens=context_tokens,
                         is_verbal_noun=is_verbal_noun
                     )
-                    if part_results:
-                        combined_results.append(part_results[0])  # Take best match for each part
+                    if part_results and part_results[0].get('score', 0) >= 40:
+                        combined_results.append(part_results[0])
+                    else:
+                        _all_parts_have_match = False
 
-            if combined_results:
-                # Combine translations (space-separated)
+            # N'utiliser le résultat combiné que si TOUTES les parties ont
+            # une correspondance fiable (score ≥ 40) — sinon laisser le
+            # retriever embedding traiter le composé entier.
+            if combined_results and _all_parts_have_match:
                 combined_bm = ' '.join(r['bm'] for r in combined_results)
                 return [{
                     'bm': combined_bm,
                     'fr': '-'.join(parts),
-                    'score': 50,  # Fallback score for split words
+                    'score': 50,
                     'pos': 'Combined'
                 }]
+            # Pas de split fiable → laisser tomber dans le retriever embedding
+            # avec le token complet (ex: 'week-end' → embedding → dɔ́gɔkun)
 
         norm = normalize_token(token)
         if not norm:
@@ -305,8 +321,8 @@ class KGRetriever:
         for r in results:
             base = _gloss_match_score(r['fr'], norm)  # 0-100 pts
             # DEBUG: Show all exact match attempts
-            if base > 0:
-                print(f"     [GLOSS SCORE] '{r['fr']}' → {base} pts (bm={r['bm']})")
+            # if base > 0:
+                # print(f"     [GLOSS SCORE] '{r['fr']}' → {base} pts (bm={r['bm']})")
             if base == 0.0:
                 continue
             if r['bm'] in seen_bm:
@@ -359,11 +375,14 @@ class KGRetriever:
                s.pos AS pos, s.embedding AS emb
         """, {"allowed_pos": allowed_pos})
 
+        query_dim = query_vec.shape[0]
         candidates = []
         for r in results:
             if r['bm'] in exclude_bm:
                 continue
             stored_vec = np.array(r['emb'], dtype=np.float32)
+            if stored_vec.shape[0] != query_dim:
+                continue  # stale embedding from previous model (different dim)
             if not same_embedding_space(query_vec, stored_vec):
                 continue
             # Cosine similarity (0-1) → scale to 0-40 pts

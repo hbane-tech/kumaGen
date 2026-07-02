@@ -1,440 +1,317 @@
-"""rules/steps/step6_copule/__init__.py — orchestrateur copule/être."""
-from rules.steps.step6_copule import etre_root
-from rules.steps.step6_copule import presentative
-from rules.steps.step6_copule import statif
-from rules.steps.step6_copule import participes
-from rules.steps.step6_copule import equatif
-from rules.steps.step6_copule import qualitative
-from rules.steps.step6_copule import identificatoire
-from rules.steps.step6_copule import participial_to
-from rules.core import _is_copula, _resolve_tam
+"""rules/steps/step6_copule/__init__.py
+Extraction structurelle uniquement : copule → slots S / O / V / QUAL / OBL_ALL / ADV.
+Aucune décision de clause_type ou TAM — délégué à kg_gateway après step7.
+"""
+from rules.core import j, _is_copula
+
+
+def _extract_cop_tense(tok):
+    t = tok.get('tense', '')
+    if not t:
+        m = str(tok.get('morph', ''))
+        if 'Tense=Fut'  in m: return 'fut'
+        if 'Tense=Imp'  in m: return 'hab'
+        if 'Tense=Past' in m: return 'past'
+    return t
 
 
 def run(T, tree, m, processed_indices, G_kg, root_tok,
         _has_expletive, aux_tense_tok, clause_type_init):
 
-    # Simultané -tɔ (indépendant de la copule)
-    participial_to.run(T, tree, m, processed_indices, G_kg, root_tok)
-
+    # ── 0. Transitivité structurelle (extraction, pas une règle) ─────────
+    # Utilisé par le bloc F6 du renderer pour le résultatif passé intransitif
+    # Guard head_index : ne regarder QUE les auxiliaires directs du ROOT principal.
+    # Sans ça, un copule dans un ccomp subordonné ("elle a dit que Musa est parti")
+    # déclenchait _has_aux_cop=True → is_transitive=False → fɔla au lieu de yé fɔ.
+    _root_idx_s6 = root_tok['orig_index'] if root_tok else -1
     _has_obj      = any(x.get('dep') == 'obj' for x in T)
-    _has_aux_pass = any(x.get('dep') == 'aux:pass' for x in T)
-    _has_aux_cop  = any(x.get('dep') in ('aux', 'aux:tense') and _is_copula(x) for x in T)
-    tree['is_transitive'] = True if _has_obj else (
-        False if (_has_aux_pass or _has_aux_cop) else True)
+    _has_aux_pass = any(x.get('dep') in ('aux:pass',) and x.get('pos') == 'AUX'
+                        and x.get('head_index') == _root_idx_s6 for x in T)
+    _has_aux_cop  = any(x.get('dep') in ('aux', 'aux:tense') and _is_copula(x)
+                        and x.get('head_index') == _root_idx_s6 for x in T)
+    if 'is_transitive' not in tree:
+        tree['is_transitive'] = True if _has_obj else (
+            False if (_has_aux_pass or _has_aux_cop) else True)
 
-    copula_tok = next((x for x in T
-                       if x.get('dep') in ('cop', 'aux:pass') and _is_copula(x)), None)
-    # Stocker le tense de la copule dans tree pour tree_to_bambara
+    # ── 1. Participe simultané (-tɔ) : extraction pure par rôle ──────────
+    _part_to = next((x for x in T
+                     if x.get('role') == 'participial_to' and x.get('bm')), None)
+    if _part_to:
+        _s = (next((x.get('bm') for x in T if x.get('dep') == 'nsubj'), None)
+              or next((x.get('bm') for x in T if x.get('role') == 'pronoun'), None)
+              or '')
+        _participial_to_sfx = G_kg.get('participial_to_suffix', 'tɔ') or 'tɔ'
+        m['ADV'] = j(_s, _part_to.get('bm', '') + _participial_to_sfx)
+        processed_indices.add(_part_to['orig_index'])
+
+    _root_idx = root_tok['orig_index'] if root_tok else -1
+    _root_bm  = (root_tok.get('bm') or f"[{root_tok.get('lemma', '')}]") if root_tok else ''
+    _root_pos = root_tok.get('pos', '') if root_tok else ''
+    _morph    = str(root_tok.get('morph', '')) if root_tok else ''
+
+    # ── 2. Trouver la copule dans la clause principale ────────────────────
+    copula_tok = next(
+        (x for x in T
+         if x.get('dep') in ('cop', 'aux:pass') and _is_copula(x)
+         and not any(y.get('orig_index') == x.get('head_index')
+                     and y.get('dep') in ('ccomp', 'advcl', 'acl:relcl', 'xcomp', 'parataxis')
+                     for y in T)),
+        None)
+
+    # Être ROOT lui-même = copule (pas de cop séparée, pas d'interrogatif ni locatif)
+    if (not copula_tok and root_tok and _is_copula(root_tok)
+            and _root_pos in ('VERB', 'AUX')
+            and not any(x.get('role') == 'interrogative' for x in T)
+            and not any(x.get('dep') == 'case' and x.get('role') == 'locative' for x in T)
+            and not any(x.get('is_loc') for x in T)):
+        copula_tok = root_tok
+
+    # aux:pass sans être-cop (passif synthétique)
+    _aux_pass = next((x for x in T
+                      if x.get('dep') == 'aux:pass'
+                      and x.get('head_index') == _root_idx), None)
+
+    if not copula_tok and not _aux_pass:
+        return
+
+    # ── 3. Signaux structurels de la copule ──────────────────────────────
     if copula_tok:
-        _cop_tense = copula_tok.get('tense', '')
-        # Fallback : lire depuis morph spaCy (Tense=Fut, Tense=Imp...)
-        if not _cop_tense:
-            _morph_cop = str(copula_tok.get('morph', ''))
-            if 'Tense=Fut' in _morph_cop:
-                _cop_tense = 'fut'
-            elif 'Tense=Imp' in _morph_cop:
-                _cop_tense = 'hab'
-            elif 'Tense=Past' in _morph_cop:
-                _cop_tense = 'past'
-        tree['cop_tense'] = _cop_tense
-        tree['cop_lemma'] = copula_tok.get('lemma', '')
-        tree['cop_bm']    = copula_tok.get('bm', '')
-        # Si cop_tense vide, chercher dans T_tenses directement
-        if not tree.get('cop_tense'):
-            for _t in T:
-                if _t.get('dep') == 'cop' and _t.get('tense') == 'fut':
-                    tree['cop_tense'] = 'fut'
-                    break
-    has_with   = any(x.get('role') == 'comitative' for x in T)
-    _root_idx  = root_tok['orig_index'] if root_tok else -1
+        tree['cop_tense'] = _extract_cop_tense(copula_tok)
+        tree['_has_cop']  = True
+        if copula_tok != root_tok:
+            processed_indices.add(copula_tok['orig_index'])
+    if _aux_pass:
+        processed_indices.add(_aux_pass['orig_index'])
 
-    # être ROOT sans copule séparée
-    copula_tok = etre_root.detect(T, root_tok, copula_tok, m, processed_indices, G_kg)
+    # ── 4. Passif (être + participe passé) ────────────────────────────────
+    # Slot : m['V'] = bm du verbe passif (kg_gateway ajoutera -len ou -ra)
+    _is_pass_participle = (root_tok
+                           and root_tok.get('is_passive')
+                           and ('VerbForm=Part' in _morph or 'Voice=Pass' in _morph))
+    _is_aux_pass_on_root = bool(_aux_pass and _aux_pass.get('head_index') == _root_idx)
 
-    # Statif via aux:pass
-    _cop_is_on_root = copula_tok and copula_tok.get('head_index') == _root_idx
-    if not _cop_is_on_root and root_tok and (
-            root_tok.get('is_statif')
-            or (root_tok.get('is_passive')
-                and 'VerbForm=Part' in str(root_tok.get('morph', ''))
-                and 'Voice=Pass' in str(root_tok.get('morph', '')))
-            or (root_tok.get('pos') == 'ADJ'
-                and any(x.get('dep') == 'aux:pass'
-                        and x.get('head_index') == _root_idx for x in T))):
-        _aux_pass_cop = next((x for x in T if x.get('dep') == 'aux:pass'
-                              and x.get('head_index') == _root_idx), None)
-        if _aux_pass_cop:
-            copula_tok      = _aux_pass_cop
-            _cop_is_on_root = True
-            # Marquer comme participe passé pour tree_to_bambara
-            root_tok['is_participe_passe'] = True
-            tree['is_participe_passe'] = True
-            tree['participe_bm'] = root_tok.get('bm') or f"[{root_tok.get('lemma')}]"
+    if _is_pass_participle or _is_aux_pass_on_root:
+        m['V'] = _root_bm
+        tree['_is_passive']    = True
+        tree['is_participe_passe'] = True
+        tree['participe_bm']   = _root_bm
+        processed_indices.add(_root_idx)
+        return
 
-    print(f"DEBUG _statif_is_past check: aux_tense_tok={aux_tense_tok}, "
-          f"tree_tense={tree.get('tense')}")
+    # ── 5. Statif / potential : m['QUAL'] = base (sans suffixe) ──────────
+    # kg_gateway ajoute 'len' (statif) ou 'ta' (potential) selon clause_type
+    _is_statif = bool(root_tok and (
+        root_tok.get('is_statif')
+        or root_tok.get('is_potential')
+        or root_tok.get('statif_root')
+        or root_tok.get('semantic_class') in ('statif', 'state', 'physical_state')
+        or ('VerbForm=Part' in _morph and root_tok.get('is_participe_passe'))))
 
-    # ── CAS SPECIAL : expletif + ADJ is_valeur → présentatif ────────────
-    # C'est vrai → bɛ́rɛ dòn  (comme C'est Hawa → Hawa dòn)
-    # La valeur abstraite est présentée comme un fait, pas une équation
-    if not _cop_is_on_root and _has_expletive and root_tok:
-        _valeur_adj = next((x for x in T
-                            if x.get('pos') == 'ADJ'
-                            and x.get('is_valeur') is True
-                            and x.get('bm')), None)
-        if _valeur_adj:
-            # Identificatoire : bɛ́rɛ dòn (S + dòn, comme C'est Hawa → Hawa dòn)
-            tree['clause_type'] = 'identificatory'
-            m['S'] = _valeur_adj.get('bm') or f"[{_valeur_adj.get('lemma')}]"
-            m['O'] = ''
-            m['V'] = ''
-            tree['tam'] = 'tɛ' if tree.get('neg') else 'dòn'
-            processed_indices.add(_valeur_adj['orig_index'])
-            for _ex in T:
-                if _ex.get('role') == 'expletive':
-                    processed_indices.add(_ex['orig_index'])
+    if _is_statif and _root_pos == 'ADJ':
+        _base = root_tok.get('statif_root') or _root_bm
+        # Retirer le -a final instable avant le suffixe (-len / -ta)
+        if (_base.endswith('a')
+                and not any(_base.endswith(s) for s in ('ba', 'ma', 'ka'))):
+            _base = _base[:-1]
+        m['QUAL'] = _base
+        tree['_is_statif'] = True
+        processed_indices.add(_root_idx)
+        return
 
-    if _cop_is_on_root:
-        if tree.get('clause_type') in ('identificatory', 'ownership', 'locative', 'restrictive'):
-            if tree.get('clause_type') == 'restrictive' and root_tok:
-                processed_indices.add(root_tok['orig_index'])
+    # ── 5b. Privative ROOT : "ce légume est sans cuisson" → [légume] [cuisson]tan dòn ──
+    # Détecté après step5 (du fait qu'on a exclu privative ROOT de step5_obliques)
+    _priv_case = next((x for x in T if x.get('dep') == 'case'
+                       and x.get('role') == 'privative'
+                       and x.get('head_index') == _root_idx), None)
+    if _priv_case and root_tok and not _is_statif:
+        # Construire le prédicat privatif avec suffixe -tan (ou -bali pour verbes)
+        # Suffixe collé sans espace (c'est une morphologie bambara)
+        from rules.steps.step5_obliques.privatif import _get_marker
+        _priv_marker = _get_marker(root_tok, T, G_kg)
+        m['O'] = (_root_bm + _priv_marker) if _priv_marker else _root_bm
 
-        elif (root_tok and root_tok.get('is_passive')
-              and 'VerbForm=Part' in str(root_tok.get('morph', ''))
-              and 'Voice=Pass' in str(root_tok.get('morph', ''))):
-            # Les verbes de mouvement (sortir, partir...) → résultatif -ra
-            # même s'ils sont classés statif : le mouvement donne un résultat
-            # Posture/statif (asseoir, coucher, lever…) : is_statif=True prime sur
-            # intransitive_type='absolute' — seuls les vrais verbes de mouvement
-            # (semantic_class='motion') passent par le résultatif.
-            _is_motion_verb = (
-                root_tok.get('semantic_class') == 'motion'
-                or (str(root_tok.get('intransitive_type', '')).lower() == 'absolute'
-                    and not root_tok.get('is_statif')))
-            # Statif passé (j'étais assis) → statif_past
-            if root_tok.get('is_statif') and not _is_motion_verb:
-                statif.run(T, tree, m, processed_indices, G_kg, root_tok, aux_tense_tok)
-            # REFLEXIF ABSOLU : ne pas vider le TAM (S TAM S yɛrɛ V)
-            elif tree.get('clause_type') == 'refl_absolute':
-                # Reflexive clauses keep the TAM — handled by renderer with refl_tam
-                pass
+        # Cherche le sujet : peut être nsubj du ROOT ou de la copule (être)
+        # Ex: "Ce légume est sans cuisson" → sujet='légume' est nsubj de 'être', pas de 'cuisson'
+        _subj_priv = next((x for x in T
+                          if x.get('dep') == 'nsubj'
+                          and (x.get('head_index') == _root_idx
+                               or (copula_tok and x.get('head_index') == copula_tok.get('orig_index')))), None)
+        if _subj_priv and _subj_priv.get('bm'):
+            m['S'] = _subj_priv.get('bm')
+            processed_indices.add(_subj_priv['orig_index'])
+
+        tree['_is_privative'] = True
+        tree['_has_cop']  = True
+        # Privatif utilise la copule présentatif du KG (pas l'équatif)
+        # Rendu: "[S] [O_privatif] presentative_marker"
+        m['V'] = G_kg.get('presentative_marker', 'dòn') or 'dòn'
+        processed_indices.add(_root_idx)
+        if _priv_case:
+            processed_indices.add(_priv_case['orig_index'])
+        return
+
+    # ── 6. Prédicat nominal / adjectival ──────────────────────────────────
+    if root_tok and _root_pos in ('NOUN', 'ADJ', 'PROPN'):
+        # Advmods du prédicat ADJ → qualitative (ka bòn, trop grand…)
+        _advs = [x for x in T
+                 if x.get('dep') == 'advmod'
+                 and x.get('head_index') == _root_idx
+                 and x.get('bm')
+                 and x['orig_index'] not in processed_indices]
+        if _advs:
+            m['QUAL'] = _root_bm
+            for _a in _advs:
+                m['QUAL'] = j(m['QUAL'], _a.get('bm'))
+                processed_indices.add(_a['orig_index'])
+        elif not m.get('O'):
+            # step4_objet a peut-être déjà extrait m['O'] (avec possessif) → ne pas écraser.
+            # Possessif DET sur le prédicat (mon ami, ta maison…)
+            _poss6 = next((x for x in T
+                           if x.get('dep') == 'det'
+                           and x.get('role') in ('pronoun', 'possessive')
+                           and x.get('head_index') == _root_idx), None)
+            if _poss6 and _poss6['orig_index'] not in processed_indices:
+                _pb6  = _poss6.get('bm', '')
+                _p1sg = G_kg.get('pron_1sg', '')
+                _gm   = G_kg.get('genitive_marker', '')
+                _obj_bm = j(_p1sg, _root_bm) if _pb6 == _p1sg else j(_pb6, _gm, _root_bm)
+                processed_indices.add(_poss6['orig_index'])
             else:
-                # VERB passif résultatif (le riz est cuit, sorti, parti) → résultatif
-                root_tok['is_participe_passe'] = True
-                tree['is_participe_passe'] = True
-                tree['participe_bm'] = root_tok.get('bm') or f"[{root_tok.get('lemma')}]"
-                tree['clause_type'] = 'simple'
-                tree['is_transitive'] = False
-                tree['tense'] = 'past'
-                tree['tam'] = ''
-                m['V'] = root_tok.get('bm') or f"[{root_tok.get('lemma')}]"
-                processed_indices.add(root_tok['orig_index'])
+                _poss6 = None
+                _obj_bm = _root_bm
+            # Pluriel du nom prédicat (frères → bálimakɛw)
+            _plur_s6 = G_kg.get('plural_noun_suffix', '') or 'w'
+            if (root_tok and root_tok.get('is_plural')
+                    and _obj_bm and not _obj_bm.endswith(_plur_s6)
+                    and root_tok.get('pos') not in ('PRON', 'PROPN')):
+                _obj_bm += _plur_s6
+            m['O'] = _obj_bm
 
-        elif has_with:
-            # Vérifier d'abord si c'est un conj comitative (Je suis avec mon mari)
-            _com_conj_with = next((x for x in T
-                                  if x.get('dep') in ('conj', 'attr', 'appos')
-                                  and x.get('pos') in ('NOUN', 'PROPN')
-                                  and x.get('bm')), None)
-            if _com_conj_with and not m.get('O'):
-                _com_bm = _com_conj_with.get('bm') or _com_conj_with.get('surface', '')
-                _poss = next((x for x in T if x.get('dep') == 'det'
-                              and x.get('role') in ('pronoun', 'possessive')
-                              and x.get('head_index') == _com_conj_with['orig_index']), None)
-                if _poss:
-                    from rules.core import j as _j
-                    _pb = _poss.get('bm', '')
-                    _com_bm = _j('n', _com_bm) if _pb == 'n' else _j(_pb, 'ka', _com_bm)
-                    processed_indices.add(_poss['orig_index'])
-                tree['clause_type'] = 'presentative'
-                m['O'] = _com_bm
-                tree['tam'] = 'dòn'
-                processed_indices.add(_com_conj_with['orig_index'])
-            else:
-                presentative.run_with(tree, G_kg)
+        # Pluriel sur m['O'] pré-posé par step4 (frères → bálimakɛ → bálimakɛw)
+        if m.get('O') and root_tok and root_tok.get('is_plural'):
+            _plur_s6b = G_kg.get('plural_noun_suffix', '') or 'w'
+            if (not m['O'].endswith(_plur_s6b)
+                    and root_tok.get('pos') not in ('PRON', 'PROPN')):
+                m['O'] = m['O'] + _plur_s6b
 
-        elif (_has_expletive
-              and root_tok and root_tok.get('pos') == 'NOUN'
-              and root_tok['orig_index'] not in processed_indices):
-            # Cas 14 : Ce sont mes frères → n bálimakɛw dòn
-            presentative.run_cas14(T, tree, m, processed_indices, G_kg, root_tok)
+        # Coordonnés du ROOT NOUN (et sœurs, et amis, …) : exécuté que m['O']
+        # ait été posé ici ou par step4 (qui ne traite pas les conj du ROOT NOUN).
+        if m.get('O'):
+            _poss6_conj = next((x for x in T
+                                if x.get('dep') == 'det'
+                                and x.get('role') in ('pronoun', 'possessive')
+                                and x.get('head_index') == _root_idx), None)
+            for _rc6 in T:
+                if (_rc6.get('dep') == 'conj'
+                        and _rc6.get('head_index') == _root_idx
+                        and _rc6.get('bm')
+                        and _rc6['orig_index'] not in processed_indices):
+                    _cc6 = (next((x for x in T if x.get('dep') == 'cc'
+                                  and x.get('head_index') == _root_idx), None)
+                            or next((x for x in T if x.get('dep') == 'cc'
+                                     and x.get('head_index') == _rc6['orig_index']), None))
+                    _rc6_bm = _rc6.get('bm', '')
+                    # Pluriel du conjoint (sœurs → bálimamuso+w)
+                    _plur_rc6 = G_kg.get('plural_noun_suffix', '') or 'w'
+                    if (_rc6.get('is_plural') and _rc6_bm
+                            and not _rc6_bm.endswith(_plur_rc6)
+                            and _rc6.get('pos') not in ('PRON', 'PROPN')):
+                        _rc6_bm += _plur_rc6
+                    if _poss6_conj:
+                        _pb6c  = _poss6_conj.get('bm', '')
+                        _p1sg6 = G_kg.get('pron_1sg', '')
+                        _gm6   = G_kg.get('genitive_marker', '')
+                        _rc6_bm = (j(_p1sg6, _rc6_bm) if _pb6c == _p1sg6
+                                   else j(_pb6c, _gm6, _rc6_bm))
+                    _conj_mk6 = (_cc6.get('bm', '') if _cc6 and _cc6.get('bm') else
+                                 G_kg.get('comitative_marker', ''))
+                    m['O'] = j(m['O'], _conj_mk6, _rc6_bm)
+                    processed_indices.add(_rc6['orig_index'])
+                    if _cc6:
+                        processed_indices.add(_cc6['orig_index'])
+        processed_indices.add(_root_idx)
 
+    # ADV prédicatif (locatif ici/là → OBL_ALL ; qualitatif loin/proche → QUAL)
+    elif root_tok and _root_pos == 'ADV':
+        if root_tok.get('is_loc') or root_tok.get('role') == 'locative':
+            m['OBL_ALL'].append({
+                'HEAD': _root_bm, 'MARKER': '',
+                'local_clause_type': 'locative',
+                'COMPOUND': '', 'MOD': '', 'DEM_PREF': '', 'DEM_SUFF': '',
+                'DEP_TYPE': '', 'COMPOUND_IS_QUANTIFIER': False,
+                'MARKER_IS_PREFIX': False,
+            })
         else:
-            # NOUN/PROPN dep=conj + case=comitative → présentatif ni
-            # Je suis avec mon fils/mari → n ni n dénkɛ dòn
-            _com_conj = next((x for x in T
-                             if x.get('dep') in ('conj', 'attr', 'appos')
-                             and x.get('pos') in ('NOUN', 'PROPN')
-                             and x.get('bm')
-                             and any(c.get('dep') == 'case'
-                                     and c.get('role') == 'comitative'
-                                     for c in T)), None)
-            if _com_conj and not m.get('O'):
-                _com_bm = _com_conj.get('bm') or _com_conj.get('surface', '')
-                # Possessif sur le conj
-                _poss = next((x for x in T if x.get('dep') == 'det'
-                              and x.get('role') in ('pronoun', 'possessive')
-                              and x.get('head_index') == _com_conj['orig_index']), None)
-                if _poss:
-                    _pb = _poss.get('bm', '')
-                    _com_bm = j('n', _com_bm) if _pb == 'n' else j(_pb, 'ka', _com_bm)
-                    processed_indices.add(_poss['orig_index'])
-                tree['clause_type'] = 'presentative'
-                m['O'] = _com_bm
-                tree['tam'] = 'dòn'
-                processed_indices.add(_com_conj['orig_index'])
-                return
+            m['QUAL'] = _root_bm
+        processed_indices.add(_root_idx)
 
-            # PROPN dep=conj + cop → équatif (Je suis/ne suis pas Hawa)
-            # spaCy parse parfois le PROPN comme conj du sujet PRON
-            _propn_conj_cop = next((x for x in T
-                                   if x.get('pos') in ('PROPN', 'NOUN')
-                                   and x.get('dep') in ('conj', 'attr', 'appos')
-                                   and x.get('bm')), None)
-            if _propn_conj_cop and not m.get('O'):
-                tree['clause_type'] = 'equative'
-                m['O'] = _propn_conj_cop.get('bm') or _propn_conj_cop.get('surface', '')
-                # TAM : tenir compte du futur (cop_tense='fut')
-                if tree.get('cop_tense') == 'fut':
-                    tree['tam'] = 'tɛ' if tree.get('neg') else 'yé'
-                elif tree.get('neg'):
-                    tree['tam'] = 'tɛ'
-                else:
-                    tree['tam'] = G_kg.get('equative_marker', 'yé') or 'yé'
-                processed_indices.add(_propn_conj_cop['orig_index'])
-                return  # ne pas continuer vers les branches ADJ
+    # Être ROOT : chercher l'attribut parmi les dépendants directs
+    elif copula_tok and copula_tok == root_tok:
+        _attr = next(
+            (x for x in T
+             if x.get('dep') in ('attr', 'xcomp', 'conj', 'appos')
+             and x.get('pos') in ('NOUN', 'PROPN', 'ADJ', 'PRON')
+             and x['orig_index'] != _root_idx
+             and x['orig_index'] not in processed_indices),
+            None)
+        if _attr:
+            _attr_bm = _attr.get('bm') or f"[{_attr.get('lemma', '')}]"
+            # Possessif sur l'attribut
+            _poss = next((x for x in T
+                          if x.get('dep') == 'det'
+                          and x.get('role') in ('pronoun', 'possessive')
+                          and x.get('head_index') == _attr['orig_index']), None)
+            if _poss:
+                _pb   = _poss.get('bm', '')
+                _p1sg = G_kg.get('pron_1sg', '')
+                _gm   = G_kg.get('genitive_marker', '')
+                _attr_bm = j(_p1sg, _attr_bm) if _pb == _p1sg else j(_pb, _gm, _attr_bm)
+                processed_indices.add(_poss['orig_index'])
+            # Pluriel
+            if (_attr.get('is_plural') or str(_attr.get('surface', '')).endswith('s')):
+                if not _attr_bm.endswith('w'):
+                    _attr_bm += 'w'
+            # Coordonnés de l'attribut
+            for _rc in T:
+                if (_rc.get('dep') == 'conj'
+                        and _rc.get('head_index') == _attr['orig_index']
+                        and _rc.get('bm')
+                        and _rc['orig_index'] not in processed_indices):
+                    _cc = next((x for x in T if x.get('dep') == 'cc'
+                                and x.get('head_index') == _attr['orig_index']), None)
+                    _rc_bm = _rc.get('bm', '')
+                    if _poss:
+                        _pb2 = _poss.get('bm', '')
+                        _rc_bm = j('n', _rc_bm) if _pb2 == 'n' else j(_pb2, 'ka', _rc_bm)
+                    _attr_bm = j(_attr_bm, _cc.get('bm', '') if _cc else '', _rc_bm)
+                    processed_indices.add(_rc['orig_index'])
+                    if _cc:
+                        processed_indices.add(_cc['orig_index'])
+            m['O'] = _attr_bm
+            processed_indices.add(_attr['orig_index'])
 
-            # ── Branchement ADJ/NOUN avec copule ──────────────────────────────
-            # Basé UNIQUEMENT sur les flags KG fiables :
-            #   is_statif, semantic_class, VerbForm=Part, statif_root
-            # is_valeur (qwen) est IGNORÉ — classification non fiable.
-            # Arbre de décision :
-            #   1. is_statif=True ou semantic_class='statif' → statif (-len dòn)
-            #   2. is_potential=True                        → potential (-ta dòn)
-            #   3. is_participe_passe ou bm=[..]+VerbForm=Part → résultatif (-ra)
-            #   4. bm=[...] sans VerbForm=Part              → équatif (profession inconnue)
-            #   5. bm valide (tout le reste)                → qualitative (ka/man)
+    # ── 7. Locatif (advmod/obl locatif non encore traité) ─────────────────
+    _loc = next(
+        (t for t in T
+         if (t.get('role') == 'locative' or t.get('is_loc'))
+         and t.get('dep') in ('advmod', 'obl', 'obl:mod', 'obl:arg')
+         and t['orig_index'] not in processed_indices),
+        None)
+    if _loc:
+        _loc_bm = _loc.get('bm', '')
+        if _loc_bm:
+            m['OBL_ALL'].append({
+                'HEAD': _loc_bm, 'MARKER': '',
+                'local_clause_type': 'locative',
+                'COMPOUND': '', 'MOD': '', 'DEM_PREF': '', 'DEM_SUFF': '',
+                'DEP_TYPE': '', 'COMPOUND_IS_QUANTIFIER': False,
+                'MARKER_IS_PREFIX': False,
+            })
+            processed_indices.add(_loc['orig_index'])
 
-            _statif_obl = next((x for x in T
-                                if x.get('dep') in ('obl', 'obl:arg', 'nmod')
-                                and x.get('head_index') == _root_idx
-                                and any(p.get('dep') == 'case'
-                                        and p.get('role') == 'locative'
-                                        and p.get('head_index') == x['orig_index']
-                                        for p in T)), None)
-            _morph_str = str(root_tok.get('morph', '')) if root_tok else ''
-            _has_aux_pass_on_root = any(
-                x.get('dep') == 'aux:pass'
-                and x.get('head_index') == _root_idx for x in T)
-            _is_statif_adj = (root_tok
-                              and root_tok.get('pos') == 'ADJ'
-                              and (root_tok.get('semantic_class') in ('statif', 'state', 'physical_state')
-                                   or root_tok.get('statif_root')
-                                   or root_tok.get('is_statif') is True
-                                   or 'VerbForm=Part' in _morph_str
-                                   or 'Tense=Past' in _morph_str
-                                   or _has_aux_pass_on_root))
-
-            if root_tok and root_tok.get('pos') == 'ADJ' and (_statif_obl or _is_statif_adj):
-                # Statif explicite (is_statif, semantic_class, VerbForm=Part)
-                statif.run(T, tree, m, processed_indices, G_kg, root_tok, aux_tense_tok)
-
-            elif root_tok and root_tok.get('pos') == 'ADV':
-                # ADV + copule : distinguer locatif (is_loc=True) et qualitatif (is_loc=False)
-                # Locatif  → S bɛ ADV  (ici, là, dehors → wátiriw bɛ yàn)
-                # Qualitatif → S ka ADV  (loin, près → só ka póroo)
-                if root_tok.get('is_loc') or root_tok.get('role') == 'locative':
-                    _adv_bm = root_tok.get('bm') or f"[{root_tok.get('lemma')}]"
-                    m['OBL_ALL'].append({
-                        'HEAD': _adv_bm, 'MARKER': '',
-                        'local_clause_type': 'simple',
-                        'COMPOUND': '', 'MOD': '', 'DEM_PREF': '', 'DEM_SUFF': '',
-                        'DEP_TYPE': '', 'COMPOUND_IS_QUANTIFIER': False,
-                        'MARKER_IS_PREFIX': False,
-                    })
-                    m['V'] = ''
-                    tree['tam'] = _resolve_tam('pres', tree.get('neg', False), G_kg) or 'bɛ'
-                    processed_indices.add(root_tok['orig_index'])
-                else:
-                    # ADV prédicatif non-locatif (loin, proche...) → qualitatif S ka ADV
-                    qualitative.run(T, tree, m, processed_indices, G_kg, root_tok)
-                    processed_indices.add(root_tok['orig_index'])
-
-            elif root_tok and root_tok.get('pos') == 'ADJ':
-                # ADJ prédicatif retraduit comme NOUN (profession/rôle) → équatif direct
-                if root_tok.get('_adj_is_nominal_pred') and root_tok.get('bm') and not root_tok.get('bm', '').startswith('['):
-                    equatif.run_default(T, tree, m, processed_indices, G_kg, root_tok, aux_tense_tok)
-                    if not m.get('O'):
-                        m['O'] = root_tok.get('bm')
-                        processed_indices.add(root_tok['orig_index'])
-                    return
-                _morph_str2        = str(root_tok.get('morph', ''))
-                _bm_is_fallback    = root_tok.get('bm', '').startswith('[')
-                _has_verbform_part = 'VerbForm=Part' in _morph_str2
-                _sc                = root_tok.get('semantic_class', '')
-                _is_statif_sc      = _sc in ('statif', 'state', 'physical_state')
-
-                # ── COMPARATIF : ADJ + advmod(neg_surf, head=ADJ) + mark(SCONJ) + ref ──
-                # ex: "est plus important que lui" → ka kólogirinman ka tɛmɛ à kan
-                _neg_surfs_s6 = G_kg.get('neg_surfaces', set())
-                _comp_adv = next((x for x in T
-                                  if x.get('dep') == 'advmod'
-                                  and x.get('head_index') == root_tok['orig_index']
-                                  and str(x.get('surface', '')).lower().rstrip("'")
-                                      in _neg_surfs_s6), None)
-                _comp_mark = next((x for x in T
-                                   if x.get('dep') == 'mark'
-                                   and x.get('pos') == 'SCONJ'
-                                   and x.get('role') != 'temporal'), None)
-                _comp_ref  = next((x for x in T
-                                   if x.get('dep') in ('dep', 'obl', 'nsubj', 'obj')
-                                   and x.get('bm')
-                                   and x['orig_index'] not in processed_indices
-                                   and x.get('orig_index') != root_tok['orig_index']), None)
-                if _comp_adv and _comp_mark and _comp_ref:
-                    tree['clause_type'] = 'comparative'
-                    tree['tam'] = 'ka'
-                    m['V'] = root_tok.get('bm') or f"[{root_tok.get('lemma')}]"
-                    m['comparative_particle'] = 'ka tɛmɛ'
-                    m['comparative_ref']      = _comp_ref.get('bm', '')
-                    processed_indices.update([
-                        root_tok['orig_index'],
-                        _comp_adv['orig_index'],
-                        _comp_mark['orig_index'],
-                        _comp_ref['orig_index'],
-                    ])
-
-                elif root_tok.get('is_statif') is True or _is_statif_sc:
-                    # Statif explicite via flag ou semantic_class KG
-                    statif.run(T, tree, m, processed_indices, G_kg, root_tok, aux_tense_tok)
-
-                elif root_tok.get('is_potential') is True:
-                    # Participe potential : V + -ta
-                    participes.run_potential(T, tree, m, processed_indices, G_kg, root_tok)
-
-                elif root_tok.get('is_participe_passe') or (
-                        _bm_is_fallback and _has_verbform_part):
-                    # Vrai participe passé (VerbForm=Part) → résultatif -ra/-la/-na
-                    participes.run_resultatif(T, tree, m, processed_indices, G_kg,
-                                              root_tok, _has_expletive)
-
-                elif _bm_is_fallback and not _has_verbform_part:
-                    if root_tok.get('pos') == 'ADJ':
-                        # ADJ sans traduction KG → qualitatif : n ka [bel]
-                        qualitative.run(T, tree, m, processed_indices, G_kg, root_tok)
-                    else:
-                        # Profession/rôle inconnu du KG → équatif
-                        # ex: [étudiant] → a tùn yé [étudiant] yé
-                        equatif.run_default(T, tree, m, processed_indices,
-                                            G_kg, root_tok, aux_tense_tok)
-                        if not m.get('O'):
-                            m['O'] = root_tok.get('bm') or f"[{root_tok.get('lemma')}]"
-                            processed_indices.add(root_tok['orig_index'])
-
-                else:
-                    # bm valide du KG — distinguer via is_valeur (qwen) :
-                    # QUALITE (grand, beau, petit) → qualitative → n ka bòn
-                    # VALEUR/STATIF (sûr, certain, fatigué) → statif → n jóonalen dòn
-                    # is_valeur est utilisé ICI UNIQUEMENT comme tiebreaker
-                    # quand semantic_class est absent du KG
-                    if root_tok.get('is_valeur') is True:
-                        statif.run(T, tree, m, processed_indices, G_kg, root_tok, aux_tense_tok)
-                    else:
-                        qualitative.run(T, tree, m, processed_indices, G_kg, root_tok)
-
-            else:
-                # Dernier recours : NOUN/PROPN conj sans cop directe
-                # ex: Il ne sera pas président → m['O']='pèresidan'
-                _last_conj = next((x for x in T
-                                   if x.get('dep') in ('conj', 'attr', 'appos')
-                                   and x.get('pos') in ('NOUN', 'PROPN', 'ADJ')
-                                   and x.get('bm')
-                                   and x['orig_index'] not in processed_indices), None)
-                if _last_conj and not m.get('O'):
-                    tree['clause_type'] = 'equative'
-                    m['O'] = _last_conj.get('bm') or _last_conj.get('surface', '')
-                    # TAM : tenir compte du futur
-                    if tree.get('cop_tense') == 'fut':
-                        tree['tam'] = 'tɛ' if tree.get('neg') else 'yé'
-                    elif tree.get('neg'):
-                        tree['tam'] = 'tɛ'
-                    else:
-                        tree['tam'] = G_kg.get('equative_marker', 'yé') or 'yé'
-                    processed_indices.add(_last_conj['orig_index'])
-                else:
-                    # être ROOT sans prédicat équatif + obliques présents
-                    # (ici, là, yàn...) → locatif : ɲàmakalaw bɛ yàn
-                    _has_obl = bool(m.get('OBL_ALL'))
-                    if _has_obl and not m.get('O'):
-                        tree['clause_type'] = 'locative'
-                        tree['tam'] = _resolve_tam(
-                            'pres', tree.get('neg', False), G_kg) or 'bɛ'
-                        m['V'] = ''
-                        processed_indices.add(root_tok['orig_index'])
-                    else:
-                        equatif.run_default(T, tree, m, processed_indices, G_kg,
-                                            root_tok, aux_tense_tok)
-
-        # Capturer root non encore traité comme V
-        if root_tok and root_tok['orig_index'] not in processed_indices:
-            _root_bm = root_tok.get('bm') or f"[{root_tok.get('lemma')}]"
-            if root_tok.get('bm_suffix'):
-                _root_bm += root_tok['bm_suffix']
-
-            _has_obj = any(x.get('dep') == 'obj' for x in T)
-            _is_verb = root_tok.get('pos') == 'VERB'
-            _is_trans = tree.get('is_transitive', True)
-            _intrans_type = root_tok.get('intransitive_type', '')
-            _is_intrans = bool(_intrans_type)  # Si intransitive_type est assigné, le verbe est intransitif
-            _tam = tree.get('tam', '')
-            _is_progressive = _tam in ('bɛ kà', 'tɛ kà')
-            _is_neg = bool(tree.get('neg'))
-
-            # Verbes transitifs sans COD → ajouter 'li kɛ'
-            # (pas de suffixe au négatif : "je ne mange pas" → n tɛ dún,
-            #  "il n'a pas parlé" → a ma kúma)
-            if (not _has_obj and _is_verb and _is_trans and not _is_intrans
-                    and not root_tok.get('is_statif') and not _is_neg):
-                # Pour les verbes d'action (transitifs sans COD), nominaliser : V+li kɛ
-                if _root_bm.endswith('la'):
-                    _root_bm = _root_bm[:-2]
-                _root_bm += 'li kɛ'
-
-            # Verbes intransitifs (explicitement marqués par intransitive_type)
-            elif _is_verb and _is_intrans and not root_tok.get('is_statif'):
-                if _is_progressive:
-                    # Progressif intransitif → ajouter 'kɛ'
-                    if not _root_bm.endswith('kɛ'):
-                        _root_bm += ' kɛ'
-                elif not _is_neg:
-                    # Présent intransitif → ajouter '-la'
-                    # (négatif : pas de suffixe — "je n'ai pas dormi" → n ma sùnɔgɔ)
-                    if not _root_bm.endswith('la'):
-                        _root_bm += 'la'
-
-            m['V'] = _root_bm
-            processed_indices.add(root_tok['orig_index'])
-
-    elif not aux_tense_tok:
-        if tree.get('neg'):
-            tree['tam'] = _resolve_tam(tree.get('tense', 'pres'), True, G_kg)
-        elif tree.get('clause_type') == 'locative':
-            tree['tam'] = _resolve_tam('pres', tree.get('neg', False), G_kg) or 'bɛ'
-        elif tree.get('clause_type') != 'noun_phrase':
-            if not tree.get('tam'):
-                tree['tam'] = (G_kg.get('tam_default', '')
-                               or _resolve_tam('pres', False, G_kg))
-
-    # c'est + ADJ ROOT + expletif → équatif ou participe
-    identificatoire.run_adj_expletif(T, tree, m, processed_indices, G_kg,
-                                     root_tok, _has_expletive)
-
-    # Alignement TAM équatif interrogatif
-    if clause_type_init == 'content_question':
-        _has_be_copula    = any(_is_copula(x) or x.get('dep') == 'cop' for x in T)
-        _has_loc_interrog = any(x.get('role') == 'interrogative'
-                                and x.get('dep') in ('advmod', 'dep', 'obj') for x in T)
-        if (_has_be_copula
-                or (root_tok and root_tok.get('role') == 'interrogative')):
-            if not _has_loc_interrog:
-                tree['tam'] = G_kg.get('equative_marker', 'yé') or 'yé'
+    # ── 8. Sujet expletif (c'est…, il y a…) ──────────────────────────────
+    if not m.get('S') and _has_expletive:
+        _expl = next((x for x in T if x.get('role') == 'expletive' and x.get('bm')), None)
+        if _expl:
+            m['S'] = _expl.get('bm')
+            processed_indices.add(_expl['orig_index'])

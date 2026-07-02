@@ -23,6 +23,8 @@ def normalize_token(token: str) -> str:
     token_str = str(token)
     
     token_str = unicodedata.normalize('NFC', token_str.lower().strip())
+    # Ligatures fran\u00e7aises : s\u0153ur\u2192soeur, c\u0153ur\u2192coeur (le KG stocke la forme ASCII)
+    token_str = token_str.replace('\u0153', 'oe').replace('\u00e6', 'ae')
     token_str = re.sub(r"['\u2019\-]", ' ', token_str)
     token_str = token_str.strip('.,;:!?()')
     return token_str.strip()

@@ -5,6 +5,7 @@ Forme : minw TAM V ka O xcomp
 """
 import networkx as nx
 from rules.core import j, _resolve_tam
+from rules.kg_rule_engine import apply_statif_morpho
 
 
 def handle(tok_item, T, m, processed_indices, G_kg, NX_G):
@@ -26,10 +27,16 @@ def handle(tok_item, T, m, processed_indices, G_kg, NX_G):
     _rel_o2_bm = _rel_obj2.get('bm', '') if _rel_obj2 else ''
     if _rel_o2_amod:
         _rel_o2_bm = j(_rel_o2_bm, _rel_o2_amod.get('bm', ''))
-    _rel_tam = _resolve_tam(tok_item.get('tense', 'pres'), False, G_kg)
-    _rel_str = j('minw', _rel_tam, _rel_v_bm,
-                 'ka' if _rel_xc_bm else '',
-                 _rel_xc_bm, _rel_o2_bm or _rel_o_bm)
+    if tok_item.get('is_statif'):
+        _morpho_stat = G_kg.get('morpho_rules', {}).get('statif', {})
+        _statif_base = tok_item.get('statif_root') or _rel_v_bm
+        _rel_str = j('minw', apply_statif_morpho(_statif_base, _morpho_stat,
+                                                  neg=bool(tok_item.get('is_neg'))))
+    else:
+        _rel_tam = _resolve_tam(tok_item.get('tense', 'pres'), False, G_kg)
+        _rel_str = j('minw', _rel_tam, _rel_v_bm,
+                     'ka' if _rel_xc_bm else '',
+                     _rel_xc_bm, _rel_o2_bm or _rel_o_bm)
     m['OBL_ALL'].append({
         'HEAD': _rel_str, 'MARKER': '', 'local_clause_type': 'simple',
         'COMPOUND': '', 'MOD': '', 'DEM_PREF': '', 'DEM_SUFF': '',

@@ -13,6 +13,7 @@ Token dict keys:
 
 import re
 from typing import Optional
+from config.settings import OLLAMA_GENERATE_URL
 from utils.normalize import normalize_token
 from utils.language import detect_language
 from llm.morphological_parser import MorphologicalParser
@@ -42,7 +43,7 @@ def _classify_sconj(surface: str, sentence: str, model: str = 'qwen2.5:3b') -> O
     )
     try:
         r = requests.post(
-            'http://localhost:11434/api/generate',
+            OLLAMA_GENERATE_URL,
             json={'model': model, 'prompt': prompt, 'stream': False,
                   'options': {'temperature': 0, 'num_predict': 5}},
             timeout=8)
@@ -82,7 +83,7 @@ def _classify_adj_verb(surface: str, sentence: str,
     )
     try:
         r = requests.post(
-            'http://localhost:11434/api/generate',
+            OLLAMA_GENERATE_URL,
             json={'model': model, 'prompt': prompt, 'stream': False,
                   'options': {'temperature': 0, 'num_predict': 10}},
             timeout=8)
@@ -339,20 +340,33 @@ def resolve_auxiliary_lemmas(tokens, db):
         # Article. Les déterminants (dep=det) tombent dans la requête générale.
         # 'dep' catches "Dis lui"/"Donne lui"/"prends le" where spaCy mislabels
         # the clitic as dep+ADV (lui) or dep+PUNCT (le) in short imperatives.
+        # spaCy mislabels postverbal clitics without a hyphen (e.g. "parle lui")
+        # as ADV+advmod instead of PRON+dep; extend the guard to catch that case.
+        _CLITIC_SURFS = {
+            'me', "m'", 'm', 'moi', 'te', "t'", 'toi', 'le', 'la', "l'",
+            'lui', 'leur', 'les', 'eux', 'elles', 'nous', 'vous',
+        }
         _dep_is_likely_dative = (
-            t.get('dep') == 'dep'
-            and t.get('pos') in ('PRON', 'ADV', 'PUNCT')
+            t.get('pos') in ('PRON', 'ADV', 'PUNCT')
             and any(x.get('dep') == 'ROOT' and x.get('pos') in ('VERB', 'AUX')
                     and x.get('head_index') == t.get('head_index')
-                    for x in tokens))
-        if ((t.get('pos') in ('PRON', 'DET') and t.get('dep') in ('obj', 'iobj'))
+                    for x in tokens)
+            and (
+                t.get('dep') == 'dep'
+                or (t.get('dep') == 'advmod'
+                    and surf_lower.lstrip('-') in _CLITIC_SURFS)
+            )
+        )
+        if ((t.get('pos') in ('PRON', 'DET') and t.get('dep') in ('obj', 'iobj', 'dep'))
                 or _dep_is_likely_dative):
+            # Strip leading '-' for imperative postverbal clitics (aide-moi → moi)
+            _surf_lookup = surf_lower.lstrip('-')
             _objp = db.query(
                 "MATCH (n:Pronoun {lang:$lang}) "
                 "WHERE toLower(n.surface) = $surface "
                 "AND n.role IN ['object_pronoun', 'object'] "
                 "RETURN n.bm AS bm, n.role AS role LIMIT 1",
-                {'lang': lang_curr, 'surface': surf_lower})
+                {'lang': lang_curr, 'surface': _surf_lookup})
             if _objp and _objp[0].get('bm'):
                 t['bm']   = _objp[0]['bm']
                 # Preserve KG role: 'object_pronoun'=accusatif (le/la/les),
@@ -360,6 +374,8 @@ def resolve_auxiliary_lemmas(tokens, db):
                 # objet direct (→ m['O']) vs indirect (→ OBL_ALL avec ma/yé).
                 t['role'] = _objp[0].get('role') or 'object_pronoun'
                 t['pos']  = 'PRON'
+                if t.get('dep') == 'advmod':
+                    t['dep'] = 'dep'
                 continue
             # Fallback surface → Bambara pour pronoms objet clitics FR
             # KG roles: le/la/les='object_pronoun', lui/leur/me/te='object'
@@ -373,11 +389,13 @@ def resolve_auxiliary_lemmas(tokens, db):
                 'eux': ('u', 'object_pronoun'), 'elles': ('u', 'object_pronoun'),
                 'nous': ('anw', 'object'), 'vous': ('aw', 'object'),
             }
-            _fb = _OBJ_SURF_MAP.get(surf_lower)
+            _fb = _OBJ_SURF_MAP.get(_surf_lookup)
             if _fb:
                 t['bm']   = _fb[0]
                 t['role'] = _fb[1]
                 t['pos']  = 'PRON'
+                if t.get('dep') == 'advmod':
+                    t['dep'] = 'dep'
                 continue
 
         res = db.query(
@@ -548,10 +566,9 @@ def _fix_pos_errors(tokens, grammar):
                             and _d['orig_index'] < t['orig_index']):
                         _d['head_index'] = t['orig_index']
 
-        # PUNCT ROOT content → verbe mal étiqueté par spaCy
-        # dep=ROOT ne peut jamais être une vraie ponctuation
+        # PUNCT ROOT/xcomp content → verbe infinitif mal étiqueté par spaCy
         if (t.get('pos') == 'PUNCT'
-                and t.get('dep') == 'ROOT'
+                and t.get('dep') in ('ROOT', 'xcomp')
                 and t.get('role') == 'content'):
             t['pos'] = 'VERB'
 
@@ -600,9 +617,10 @@ def _fix_pos_errors(tokens, grammar):
             st['dep']  = 'expletive'
             st['role'] = 'expletive'
     for st in tokens:
-        if st.get('dep') == 'nsubj' and str(st.get('surface', '')).strip() == '-':
+        if str(st.get('surface', '')).strip() == '-' and st.get('dep') in ('nsubj', 'dep'):
             st['dep']  = 'punct'
             st['role'] = 'punct'
+            st['pos']  = 'PUNCT'
 
     # ── PASSE 4 : arbre multi-ROOT cassé (fragment subordonné) ────────────────
     # spaCy peut produire PLUSIEURS dep='ROOT' sur un fragment sans proposition
@@ -640,6 +658,57 @@ def _fix_pos_errors(tokens, grammar):
                         d['dep'] = 'det'
                         d['head_index'] = _head_noun['orig_index']
                         d['is_root'] = False
+            # 3) PRON ROOT après hyphen → nsubj inversé du verbe (ex: as-tu, est-il)
+            # Note: _fix_pos_errors est appelé avant l'assignation des rôles,
+            # donc on ne peut pas filtrer sur role= ; on utilise uniquement pos=PRON + position
+            for t in tokens:
+                if (t is not _verb_root and t.get('dep') == 'ROOT'
+                        and t.get('pos') == 'PRON'
+                        and t['orig_index'] > _vr_idx):
+                    # Vérifier qu'il y a un hyphen entre verb_root et t (inversion as-tu)
+                    _between = [x for x in tokens
+                                if _vr_idx < x['orig_index'] < t['orig_index']
+                                and x.get('surface', '').strip() in ('-', '–', '–', '‐')]
+                    # Ou que PRON est juste +2 positions (hyphen déjà absorbé)
+                    _is_adjacent = (t['orig_index'] - _vr_idx <= 2)
+                    if _between or _is_adjacent:
+                        t['dep'] = 'nsubj'
+                        t['head_index'] = _vr_idx
+                        t['is_root'] = False
+                        for _hyph in _between:
+                            _hyph['dep'] = 'punct'
+                            _hyph['head_index'] = _vr_idx
+            # 4) PUNCT/VERB ROOT orphelin (ex: "?") → punct du verbe
+            for t in tokens:
+                if (t is not _verb_root and t.get('dep') == 'ROOT'
+                        and t.get('pos') in ('PUNCT', 'VERB')
+                        and t['orig_index'] > _vr_idx):
+                    t['dep'] = 'punct'
+                    t['head_index'] = _vr_idx
+                    t['is_root'] = False
+
+        else:
+            # Pas de VERB ROOT : chercher le NOUN/ADJ ROOT + ADV/PRON locatif ROOT.
+            # Pattern : "Le cahier est ici" → spaCy retourne cahier ROOT + ici ROOT.
+            # Pattern : "c'est vrai"/"c'est beau" → spaCy retourne c' ROOT + vrai ROOT.
+            _noun_root = next((t for t in _roots
+                               if t.get('pos') in ('NOUN', 'PROPN', 'ADJ')), None)
+            if _noun_root:
+                for t in _roots:
+                    if (t is not _noun_root
+                            and t.get('pos') == 'ADV'
+                            and (t.get('role') in ('locative', 'temporal')
+                                 or t.get('is_loc'))):
+                        t['dep'] = 'advmod'
+                        t['head_index'] = _noun_root['orig_index']
+                        t['is_root'] = False
+                    elif (t is not _noun_root
+                            and t.get('pos') == 'PRON'
+                            and t.get('role') in ('demonstrative', 'expletive', 'clitic', '')):
+                        # PRON ROOT expletif/déictique (c', ce) → expl:subj du prédicat ADJ/NOUN
+                        t['dep'] = 'expl:subj'
+                        t['head_index'] = _noun_root['orig_index']
+                        t['is_root'] = False
 
     return tokens
 
@@ -681,7 +750,14 @@ def _detect_progressive(tokens, grammar=None):
         for pattern in patterns:
             n = len(pattern)
             if i + n <= len(tokens):
-                window = [tokens[i+k].get('surface','').lower() for k in range(n)]
+                # Normaliser les formes élidées : d'→de, l'→le, j'→je, s'→se, m'→me
+                _elision_map = {"d'": "de", "d’": "de", "l'": "le", "l’": "le",
+                                "j'": "je", "j’": "je", "s'": "se", "s’": "se",
+                                "m'": "me", "m’": "me", "n'": "ne", "n’": "ne"}
+                def _norm_surf(s):
+                    sl = s.lower()
+                    return _elision_map.get(sl, sl)
+                window = [_norm_surf(tokens[i+k].get('surface','')) for k in range(n)]
                 if window == pattern:
                     # Vérifier si le ROOT est parmi les tokens consommés
                     _consumed_is_root = any(tokens[i+k].get('is_root') for k in range(n))
@@ -705,6 +781,43 @@ def _detect_progressive(tokens, grammar=None):
             result.append(tokens[i])
             i += 1
     return result
+
+
+def _detect_compound_nouns(tokens, grammar=None):
+    """
+    Fusionne les noms composés en un seul token pour la traduction :
+      1. Composés-trait-d'union : week-end, après-midi, porte-monnaie
+         Pattern : NOUN/ADJ + PUNCT('-') + NOUN/ADJ
+      2. Composés-génitif via PUNCT('-')+nmod déjà dans le flux
+    Le token fusionné conserve le pos/dep de la tête et utilise
+    la surface combinée pour le lookup KG + retriever.
+    """
+    out, i = [], 0
+    while i < len(tokens):
+        t = tokens[i]
+        # Cas 1 : NOUN/ADJ/VERB + '-' + NOUN/ADJ (composé trait-d'union)
+        if (i + 2 < len(tokens)
+                and t.get('pos') in ('NOUN', 'ADJ', 'PROPN', 'VERB')
+                and str(tokens[i+1].get('surface', '')).strip() == '-'
+                and tokens[i+1].get('pos') in ('PUNCT', 'NOUN', 'SYM')
+                and tokens[i+2].get('pos') in ('NOUN', 'ADJ', 'PROPN', 'VERB', 'ADV')):
+            compound_surface = (t.get('surface', '') + '-'
+                                 + tokens[i+2].get('surface', ''))
+            compound_lemma   = (t.get('lemma', '') + '-'
+                                 + tokens[i+2].get('lemma', ''))
+            merged = {
+                **t,
+                'surface':    compound_surface,
+                'lemma':      compound_lemma.lower(),
+                'role':       t.get('role', 'content'),
+                'bm':         '',   # sera rempli par le retriever
+            }
+            out.append(merged)
+            i += 3
+        else:
+            out.append(t)
+            i += 1
+    return out
 
 
 def _merge_multiword(tokens, funcs, lang):
@@ -954,6 +1067,7 @@ class SpacyParser:
         tokens = _fix_pos_errors(tokens, G)
         tokens = _detect_participial_to(tokens, G)
         tokens = _detect_progressive(tokens, G)
+        tokens = _detect_compound_nouns(tokens, G)
 
         # ── 3. LLM lemmatisation ──────────────────────────────────────────────
         try:
@@ -1171,10 +1285,17 @@ class SpacyParser:
         # un optatif. On force tense='sub' si le ROOT porte un mark SCONJ 'que'.
         # EXCLUSION : passé composé (aux:tense présent) ou participe passé
         # → subordination factuelle (que j'ai dit…), pas optatif.
+        # EXCLUSION : "Est-ce que" → interrogatif polaire (Yala …  wà ?), pas optatif.
+        # Signal : '-ce' dep='nsubj' présent.
+        _has_estce_que = any(
+            str(_t.get('surface', '')).lower().strip('-') == 'ce'
+            and _t.get('dep') in ('nsubj', 'expl:subj')
+            for _t in tokens)
         for t in tokens:
             if (t.get('is_root')
                     and t.get('pos') == 'VERB'
                     and t.get('tense') != 'sub'
+                    and not _has_estce_que
                     and 'VerbForm=Part' not in str(t.get('morph', ''))
                     and not any(x.get('dep') == 'aux:tense'
                                 and x.get('head_index') == t['orig_index']
