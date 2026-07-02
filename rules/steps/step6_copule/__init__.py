@@ -151,9 +151,9 @@ def run(T, tree, m, processed_indices, G_kg, root_tok,
 
         tree['_is_privative'] = True
         tree['_has_cop']  = True
-        # Privatif utilise la copule présentatif du KG (pas l'équatif)
-        # Rendu: "[S] [O_privatif] presentative_marker"
-        m['V'] = G_kg.get('presentative_marker', 'dòn') or 'dòn'
+        # Privatif utilise la copule équative du KG
+        # Rendu: "[S] [O_privatif] equative_marker"
+        m['V'] = G_kg.get('equative_marker', 'yé') or 'yé'
         processed_indices.add(_root_idx)
         if _priv_case:
             processed_indices.add(_priv_case['orig_index'])
