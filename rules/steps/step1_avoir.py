@@ -84,8 +84,16 @@ def run(T, tree, m, processed_indices, G_kg, root_tok):
 
     # ── Possession avoir — slots : S=sujet, O=objet possédé ──────────────
     if ct != 'noun_phrase_have':
-        # LLM classified root as 'having' (posséder, détenir…) but no PatternRule fired
-        if _is_avoir(root_tok):
+        # LLM classified root as 'having' (posséder, détenir…) but no PatternRule fired.
+        # Structural guard: a reflexive root ("se faire", "s'occuper"…) can never be
+        # genuine possession — French has no "s'avoir" — so a reflexive marker on the
+        # root is a strong signal the LLM 'having' classification is a misfire (e.g.
+        # idiomatic "se faire" = "to happen", not "to have").
+        _root_is_reflexive = any(
+            x.get('dep') in ('expl:comp', 'expl:pass')
+            and x.get('head_index') == root_tok.get('orig_index')
+            for x in T)
+        if _is_avoir(root_tok) and not _root_is_reflexive:
             tree['clause_type'] = 'noun_phrase_have'
         else:
             return root_tok

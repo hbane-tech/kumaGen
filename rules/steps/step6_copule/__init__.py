@@ -137,7 +137,16 @@ def run(T, tree, m, processed_indices, G_kg, root_tok,
                           and (x.get('head_index') == _root_idx
                                or (copula_tok and x.get('head_index') == copula_tok.get('orig_index')))), None)
         if _subj_priv and _subj_priv.get('bm'):
-            m['S'] = _subj_priv.get('bm')
+            _subj_priv_bm = _subj_priv.get('bm')
+            _subj_priv_demo = next((x for x in T
+                                    if x.get('dep') == 'det'
+                                    and x.get('role') == 'demonstrative'
+                                    and x.get('head_index') == _subj_priv['orig_index']), None)
+            if _subj_priv_demo:
+                _demo_suf = G_kg.get('demonstrative_suffix', '')
+                _subj_priv_bm = j(G_kg.get('demonstrative_prefix', ''), _subj_priv_bm, _demo_suf)
+                processed_indices.add(_subj_priv_demo['orig_index'])
+            m['S'] = _subj_priv_bm
             processed_indices.add(_subj_priv['orig_index'])
 
         tree['_is_privative'] = True

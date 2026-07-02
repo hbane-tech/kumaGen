@@ -577,7 +577,7 @@ class TranslationEngine:
                         c['score'] = 0
                         c['final_score'] = 0
                         invalidated_count += 1
-                        print(f"     ⚠️  LLM invalide: '{gloss_fr}' ≠ '{token_lower}' → {c['bm']} (→ 0 pts)")
+                        # print(f"     ⚠️  LLM invalide: '{gloss_fr}' ≠ '{token_lower}' → {c['bm']} (→ 0 pts)")
 
                 except Exception as e:
                     print(f"     ⚠️  LLM validation failed: {e}")
