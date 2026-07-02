@@ -29,8 +29,10 @@ def tree_to_bambara(tree, G=None, grammar=None):
     S   = m.get('S', '') or ''
     O   = m.get('O', '') or ''
     V   = m.get('V', '') or ''
+    # Privative ROOT : tree['final_string'] est la bonne traduction (construite en step7)
     if tree.get('_is_privative'):
-        print(f"[RENDER] Privative: S='{S}', O='{O}', V='{V}', ct='{ct}'")
+        return tree.get('final_string', '')
+
     V_ACT = m.get('V_ACTION', '') or ''
     V_SUF = m.get('V_SUFFIX', '') or ''
     ADV   = m.get('ADV', '')   or ''
