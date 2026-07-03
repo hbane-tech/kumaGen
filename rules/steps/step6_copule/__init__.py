@@ -104,17 +104,14 @@ def run(T, tree, m, processed_indices, G_kg, root_tok,
         root_tok.get('is_statif')
         or root_tok.get('is_potential')
         or root_tok.get('statif_root')
-        or root_tok.get('semantic_class') in ('statif', 'state', 'physical_state')
+        or root_tok.get('semantic_class') in ('statif', 'state', 'physical_state', 'color')
         or ('VerbForm=Part' in _morph and root_tok.get('is_participe_passe'))))
 
     if _is_statif and _root_pos == 'ADJ':
         _base = root_tok.get('statif_root') or _root_bm
-        # Retirer le -a final instable avant le suffixe (-len / -ta)
-        if (_base.endswith('a')
-                and not any(_base.endswith(s) for s in ('ba', 'ma', 'ka'))):
-            _base = _base[:-1]
         m['QUAL'] = _base
         tree['_is_statif'] = True
+        root_tok['is_statif'] = True
         processed_indices.add(_root_idx)
         return
 

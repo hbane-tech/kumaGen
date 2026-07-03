@@ -477,8 +477,8 @@ def run(T, tree, m, processed_indices, G_kg, NX_G, root_tok,
                                    and x.get('role') == 'demonstrative'
                                    and x.get('head_index') == subj_tok['orig_index']), None)
                 if _subj_demo:
-                    _demo_suf = G_kg.get('demonstrative_suffix', '')
-                    subj_bm   = j(G_kg.get('demonstrative_prefix', '') or G_kg.get('demonstrative_prefix', ''), subj_bm, _demo_suf)
+                    _demo_suf = _subj_demo.get('bm_suffix') or G_kg.get('demonstrative_suffix', '') or ''
+                    subj_bm   = j(G_kg.get('demonstrative_prefix', ''), subj_bm, _demo_suf)
                     processed_indices.add(_subj_demo['orig_index'])
                 _poss_det_s = next((x for x in T
                                     if x.get('dep') == 'det'

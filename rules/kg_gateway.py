@@ -385,13 +385,14 @@ def _apply_transform_rules(tree: dict, m: dict, G_kg: dict) -> None:
         elif transform == 'add_statif_suffix' or transform == 'add_statif_suffix_pos':
             _morpho_stat = G_kg.get('morpho_rules', {}).get('statif', {})
             qual = m.get('QUAL', '') or m.get('O', '')
-            if qual and _morpho_stat:
+            # QUAL vient toujours de step6 sans suffixe déjà appliqué : pas de garde
+            # endswith ici (un adjectif comme 'bìlen' finit coïncidentellement par
+            # 'len' sans porter le suffixe statif → un garde naïf bloquerait 'bìlenlen').
+            if qual and _morpho_stat and not m.get('_qual_suffixed'):
                 _sfx = _morpho_stat.get('suffix', 'len')
-                if not qual.endswith(_sfx):
-                    if qual.endswith('a') and not any(qual.endswith(s) for s in (G_kg.get('a_strip_exclusions', ()) or ('ba', 'ma', 'ka'))):
-                        qual = qual[:-1]
-                    qual += _sfx
+                qual += _sfx
                 m['QUAL'] = qual
+                m['_qual_suffixed'] = True
                 if not m.get('QUAL_WAS_O') and m.get('O') == m.get('QUAL', ''):
                     m['O'] = ''
             applied_targets.add(target)
@@ -399,11 +400,11 @@ def _apply_transform_rules(tree: dict, m: dict, G_kg: dict) -> None:
         elif transform == 'add_statif_suffix_neg':
             _morpho_stat = G_kg.get('morpho_rules', {}).get('statif', {})
             qual = m.get('QUAL', '') or m.get('O', '')
-            if qual and _morpho_stat:
+            if qual and _morpho_stat and not m.get('_qual_suffixed'):
                 _sfx = _morpho_stat.get('suffix', 'len')
-                if not qual.endswith(_sfx):
-                    qual += _sfx
+                qual += _sfx
                 m['QUAL'] = qual
+                m['_qual_suffixed'] = True
             applied_targets.add(target)
 
         elif transform == 'add_statif_suffix_hab':
