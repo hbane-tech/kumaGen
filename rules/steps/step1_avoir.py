@@ -44,7 +44,18 @@ def run(T, tree, m, processed_indices, G_kg, root_tok):
     _has_composite_aux = any(
         x.get('dep') in ('aux:tense', 'aux:pass') and x.get('pos') == 'AUX'
         for x in T)
-    if _has_composite_aux and _is_avoir(root_tok):
+    # Structural guard : 'avoir' comme aux:tense d'un AUTRE verbe promu root_tok
+    # (ex: root_tok redirigé vers 'faire' derrière "il a fait") ne fait pas de
+    # root_tok le verbe "avoir" lui-même — ignorer la classification
+    # semantic_class='having' potentiellement erronée du LLM dans ce cas.
+    _root_is_other_verb_with_avoir_aux_0 = (
+        str(root_tok.get('lemma', '')).lower() != 'avoir'
+        and any(x.get('dep') in ('aux:tense', 'aux:pass')
+                and str(x.get('lemma', '')).lower() == 'avoir'
+                and x.get('head_index') == root_tok.get('orig_index')
+                for x in T))
+    if (_has_composite_aux and _is_avoir(root_tok)
+            and not _root_is_other_verb_with_avoir_aux_0):
         _obj_sens = next((x for x in T
                           if x.get('dep') == 'obj'
                           and x.get('possession_type') in ('EXPERIENCER', 'STATIF')
@@ -62,7 +73,10 @@ def run(T, tree, m, processed_indices, G_kg, root_tok):
             if _subj:
                 processed_indices.add(_subj['orig_index'])
             _mark_aux(T, processed_indices)
-        return root_tok
+            return root_tok
+        # Pas de sensation/émotion EXPERIENCER/STATIF (ex: "j'ai eu un mari" =
+        # possession ABSTRACT/MATERIAL/AGE) : ne pas retourner, laisser la
+        # logique de possession standard ci-dessous traiter l'objet.
 
     # ── Existential (il y a) — slots : S='', O=nom réel ──────────────────
     if ct in ('existential_absolute', 'existential_localized'):
@@ -93,7 +107,23 @@ def run(T, tree, m, processed_indices, G_kg, root_tok):
             x.get('dep') in ('expl:comp', 'expl:pass')
             and x.get('head_index') == root_tok.get('orig_index')
             for x in T)
-        if _is_avoir(root_tok) and not _root_is_reflexive:
+        # Structural guard : si 'avoir' apparaît comme AUXILIAIRE DE TEMPS d'un
+        # AUTRE verbe promu root_tok (ex: "Qu'est-ce qu'il a fait ?" → root_tok
+        # redirigé vers 'faire', 'avoir' reste aux:tense enfant de 'faire'),
+        # alors root_tok n'est PAS lexicalement "avoir" — la classification
+        # semantic_class='having' du LLM sur root_tok est un misfire (même
+        # défaut que le LLM de transitivité : reclassification non-déterministe
+        # d'un verbe qui n'a rien à voir avec la possession).
+        _root_lemma_is_avoir = str(root_tok.get('lemma', '')).lower() == 'avoir'
+        _avoir_is_aux_of_root = any(
+            x.get('dep') in ('aux:tense', 'aux:pass')
+            and str(x.get('lemma', '')).lower() == 'avoir'
+            and x.get('head_index') == root_tok.get('orig_index')
+            for x in T)
+        _root_is_other_verb_with_avoir_aux = (
+            not _root_lemma_is_avoir and _avoir_is_aux_of_root)
+        if (_is_avoir(root_tok) and not _root_is_reflexive
+                and not _root_is_other_verb_with_avoir_aux):
             tree['clause_type'] = 'noun_phrase_have'
         else:
             return root_tok
