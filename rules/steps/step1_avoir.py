@@ -210,8 +210,12 @@ def run(T, tree, m, processed_indices, G_kg, root_tok):
             _body_bm = _body.get('bm') or f"[{_body.get('lemma', '')}]"
             m['O'] = j(_subj_bm, _body_bm)
             m['S'] = _subj_bm
-            m['V'] = ''
-            tree['pain_bm'] = _state_bm
+            # EXPERIENCER + partie du corps : le mot ressenti ("mal", "gratte",
+            # "faim"...) porte le prédicat lui-même — quel que soit le mot, sa
+            # traduction déjà résolue (_state_bm) va dans le slot PAIN attendu
+            # par le ClauseTemplate KG "possession_pain_*" ({O} {TAM} {S} {PAIN}),
+            # sans spécialiser aucun lexème particulier.
+            m['PAIN'] = _state_bm
             tree['possession_type'] = 'EXPERIENCER_PAIN'
             _mark_det(T, _body['orig_index'], processed_indices, ('det', 'fixed', 'case'))
             processed_indices.add(_body['orig_index'])
