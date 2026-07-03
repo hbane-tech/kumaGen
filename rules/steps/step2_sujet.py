@@ -4,7 +4,7 @@ rules/steps/step2_sujet.py
 verrou interrogatif, attribut négatif, expletif pronominal.
 """
 import networkx as nx
-from rules.core import j, _is_avoir, _is_copula, _resolve_tam, get_bounded_chunk_tokens, adj_man, INTRANS_SC
+from rules.core import j, apply_affixes, _is_avoir, _is_copula, _resolve_tam, get_bounded_chunk_tokens, adj_man, INTRANS_SC
 from rules.steps.step5_obliques.advcl import _purp_verb_bm
 from rules.kg_rule_engine import apply_morpho_suffix
 
@@ -477,8 +477,7 @@ def run(T, tree, m, processed_indices, G_kg, NX_G, root_tok,
                                    and x.get('role') == 'demonstrative'
                                    and x.get('head_index') == subj_tok['orig_index']), None)
                 if _subj_demo:
-                    _demo_suf = _subj_demo.get('bm_suffix') or G_kg.get('demonstrative_suffix', '') or ''
-                    subj_bm   = j(G_kg.get('demonstrative_prefix', ''), subj_bm, _demo_suf)
+                    subj_bm = apply_affixes(_subj_demo.get('bm'), subj_bm, _subj_demo.get('bm_suffix'))
                     processed_indices.add(_subj_demo['orig_index'])
                 _poss_det_s = next((x for x in T
                                     if x.get('dep') == 'det'

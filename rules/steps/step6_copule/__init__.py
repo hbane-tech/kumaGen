@@ -2,7 +2,7 @@
 Extraction structurelle uniquement : copule → slots S / O / V / QUAL / OBL_ALL / ADV.
 Aucune décision de clause_type ou TAM — délégué à kg_gateway après step7.
 """
-from rules.core import j, _is_copula
+from rules.core import j, apply_affixes, _is_copula
 
 
 def _extract_cop_tense(tok):
@@ -140,8 +140,8 @@ def run(T, tree, m, processed_indices, G_kg, root_tok,
                                     and x.get('role') == 'demonstrative'
                                     and x.get('head_index') == _subj_priv['orig_index']), None)
             if _subj_priv_demo:
-                _demo_suf = _subj_priv_demo.get('bm_suffix') or G_kg.get('demonstrative_suffix', '') or ''
-                _subj_priv_bm = j(G_kg.get('demonstrative_prefix', ''), _subj_priv_bm, _demo_suf)
+                _subj_priv_bm = apply_affixes(
+                    _subj_priv_demo.get('bm'), _subj_priv_bm, _subj_priv_demo.get('bm_suffix'))
                 processed_indices.add(_subj_priv_demo['orig_index'])
             m['S'] = _subj_priv_bm
             processed_indices.add(_subj_priv['orig_index'])

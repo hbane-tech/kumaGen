@@ -5,7 +5,7 @@ compound, amod, démonstratif, loc_nmod, MARKER_IS_PREFIX, fusion week-end.
 Utilisé par locatif, temporel, simple.
 """
 import networkx as nx
-from rules.core import j, adj_man
+from rules.core import j, apply_affixes, adj_man
 
 
 def _nmod_has_loc_adp(nmod_t, T, loc_markers, tmp_markers):
@@ -101,8 +101,8 @@ def append(tok_item, T, m, processed_indices, G_kg, NX_G,
     pref_val = ''
     suff_dict_val = ''
     if _demo_det and not demo_tok:
-        pref_val      = G_kg.get('demonstrative_prefix', '')
-        suff_dict_val = _demo_det.get('bm_suffix') or G_kg.get('demonstrative_suffix', '') or ''
+        pref_val      = _demo_det.get('bm') or ''
+        suff_dict_val = _demo_det.get('bm_suffix') or ''
         processed_indices.add(_demo_det['orig_index'])
 
     # purposive sur nom → équatif yé
@@ -148,14 +148,14 @@ def append(tok_item, T, m, processed_indices, G_kg, NX_G,
         head_base = j(head_base, _d_bm, head_base)
 
     if demo_tok and compound_base:
-        suff_val = G_kg.get('demonstrative_suffix', '')
-        if not compound_base.endswith(suff_val):
+        suff_val = demo_tok.get('bm_suffix') or ''
+        if suff_val and not compound_base.endswith(suff_val):
             compound_base = f"{compound_base} {suff_val}"
-        pref_val      = demo_tok.get('bm') or G_kg.get('demonstrative_prefix', '')
+        pref_val      = demo_tok.get('bm') or ''
         suff_dict_val = ''
     elif demo_tok:
         pref_val      = demo_tok.get('bm') or ''
-        suff_dict_val = G_kg.get('demonstrative_suffix', '')
+        suff_dict_val = demo_tok.get('bm_suffix') or ''
 
     # loc_nmod imbriqués
     loc_nmod_toks = sorted(

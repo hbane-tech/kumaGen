@@ -227,9 +227,6 @@ class RuleEngine:
             "MATCH (p:Preposition) WHERE p.role = 'locative' "
             "RETURN p.bm_marker AS m LIMIT 1")
 
-        g['demonstrative_prefix'] = self._single_marker(
-            "MATCH (fw:FunctionWord {lang:'bm'}) WHERE fw.role = 'demonstrative_prefix' "
-            "RETURN fw.bm AS m LIMIT 1")
         # Surfaces relatives et expletif FR depuis KG
         _rel_rows = self._q("MATCH (fw:FunctionWord) WHERE fw.role = 'relative_pron_surface' RETURN fw.bm AS bm")
         g['relative_pron_surfaces'] = {r['bm'].lower() for r in _rel_rows if r.get('bm')}
@@ -266,16 +263,6 @@ class RuleEngine:
         g['interrogative_who']     = self._single_marker(
             "MATCH (fw:FunctionWord {lang:'bm'}) WHERE fw.role = 'interrogative_who' "
             "RETURN fw.bm AS m LIMIT 1")
-        # Suffixes adj_man et a_strip_exclusions depuis MorphoRule
-        _adj_rule = g.get('morpho_rules', {}).get('adjective_epithet', {})
-        g['adj_epithet_suffix'] = _adj_rule.get('suffix', '')
-        # Surcharger la constante core.py
-        if g['adj_epithet_suffix']:
-            import rules.core as _core_mod
-            _core_mod._ADJ_EPITH_SUFFIX = g['adj_epithet_suffix']
-        _strip_rule = g.get('morpho_rules', {}).get('a_strip_exclusions', {})
-        g['a_strip_exclusions'] = tuple(s for s in (_strip_rule.get('exclude_endings', '') or '').split('|') if s)
-
         g['comparative_particle'] = self._single_marker(
             "MATCH (f:FunctionWord {lang:'bm'}) WHERE f.role = 'comparative_particle' "
             "RETURN f.bm AS m LIMIT 1")
@@ -349,6 +336,13 @@ class RuleEngine:
             "m.hab_prefix AS hab_prefix, "
             "m.support AS support, m.condition AS condition")
         g['morpho_rules'] = {r['name']: r for r in morpho_rows if r.get('name')}
+
+        # Suffixe adj_man depuis MorphoRule
+        _adj_rule = g['morpho_rules'].get('adjective_epithet', {})
+        g['adj_epithet_suffix'] = _adj_rule.get('suffix', '')
+        if g['adj_epithet_suffix']:
+            import rules.core as _core_mod
+            _core_mod._ADJ_EPITH_SUFFIX = g['adj_epithet_suffix']
 
         # Raccourcis — valeurs lues depuis KG, exposées pour les steps
         _res = g['morpho_rules'].get('resultative', {})

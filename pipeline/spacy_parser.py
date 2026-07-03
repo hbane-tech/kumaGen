@@ -903,8 +903,6 @@ class SpacyParser:
                            'progressive_markers':[],'participial_markers':set(),
                            'expletive_surfaces':set(),
                            'locative_markers':set(),'temporal_markers':set(),
-                           'demonstrative_suffix':'in','resultative_marker':'ye',
-                           'tam_default':'bɛ',
                        }.items()}
             return self._g
 
@@ -1006,9 +1004,6 @@ class SpacyParser:
                                   if r.get('r') == 'locative' and r.get('m')},
             'temporal_markers':  {r['m'].lower() for r in pr
                                   if r.get('r') == 'temporal' and r.get('m')},
-            'demonstrative_suffix': 'in',
-            'resultative_marker':   'ye',
-            'tam_default':          'bɛ',
         }
         return self._g
     

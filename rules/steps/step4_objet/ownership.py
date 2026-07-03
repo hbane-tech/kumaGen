@@ -2,7 +2,7 @@
 step4_objet/ownership.py
 Appartenance (ownership) : purposive case + cop sur NOUN/PRON ROOT.
 """
-from rules.core import j
+from rules.core import j, apply_affixes
 
 
 def run(T, tree, m, processed_indices, G_kg, root_tok):
@@ -58,8 +58,7 @@ def run(T, tree, m, processed_indices, G_kg, root_tok):
                                and x.get('head_index') == _subj_for_ownership['orig_index']), None)
         _subj_bm = _subj_for_ownership.get('bm') or _subj_for_ownership.get('surface', '')
         if _demo_on_subj:
-            _demo_suf = G_kg.get('demonstrative_suffix', '')
-            m['S'] = j(_demo_on_subj.get('bm') or G_kg.get('demonstrative_prefix', ''), _subj_bm, _demo_suf)
+            m['S'] = apply_affixes(_demo_on_subj.get('bm'), _subj_bm, _demo_on_subj.get('bm_suffix'))
             processed_indices.add(_demo_on_subj['orig_index'])
         else:
             m['S'] = _subj_bm

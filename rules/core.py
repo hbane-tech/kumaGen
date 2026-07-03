@@ -13,6 +13,17 @@ def j(*p):
     return ' '.join(str(x) for x in p if x and str(x).strip() and str(x).lower() != 'null')
 
 
+def apply_affixes(bm_prefix, bm, bm_suffix):
+    """Assemble un token selon le schéma slot bm_prefix - bm - bm_suffix.
+    Chaque slot est optionnel (None/'' accepté) — absent → omis, jamais de valeur par défaut."""
+    return j(bm_prefix, bm, bm_suffix)
+
+
+def tok_bm(tok):
+    """Lit un token selon le schéma bm_prefix - bm - bm_suffix (tous optionnels)."""
+    return apply_affixes(tok.get('bm_prefix'), tok.get('bm'), tok.get('bm_suffix'))
+
+
 # ── CONSTANTES CHARGÉES DEPUIS LE KG PAR rule_engine ─────────────────────────
 # Initialisées vides — le KG est l'unique source de vérité.
 # rule_engine les surcharge au démarrage via _load_grammar().
@@ -36,7 +47,6 @@ _GRAMMAR_FALLBACK = {
     'temporal_markers':        set(),
     'temporal_roles':          set(),
     'genitive_marker':         _GENITIVE_FALLBACK,
-    'demonstrative_suffix':    '',
     'resultative_marker':      '',
     'tam_default':             '',
     'quantifier_words':        {},
