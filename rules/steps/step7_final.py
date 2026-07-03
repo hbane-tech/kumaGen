@@ -14,11 +14,13 @@ def run(T, tree, m, processed_indices, G_kg, NX_G, root_tok,
 
     # Privative ROOT : construire final_string et retourner (skip tous autres traitements)
     if tree.get('_is_privative'):
-        # Construire m['SLOTS'] : X1=S, X2=TAM (vide), X3=O, X4=V
+        # Équatif bambara : S yé O yé (le marqueur encadre le prédicat)
         m['SLOTS'] = {}
         idx_s = 1
         if m.get('S'):
             m['SLOTS'][f'X{idx_s}'] = m['S']; idx_s += 1
+        if m.get('V'):
+            m['SLOTS'][f'X{idx_s}'] = m['V']; idx_s += 1
         if m.get('O'):
             m['SLOTS'][f'X{idx_s}'] = m['O']; idx_s += 1
         if m.get('V'):

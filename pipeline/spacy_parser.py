@@ -402,9 +402,12 @@ def resolve_auxiliary_lemmas(tokens, db):
             "MATCH (n) WHERE n.lang = $lang "
             "AND (n.surface = $surface OR n.lemma = $lemma) "
             "RETURN n.lemma AS lemma, n.bm AS bm, n.role AS role, "
-            "n.semantic_class AS sc, labels(n) AS labels LIMIT 1",
+            "n.semantic_class AS sc, n.bm_suffix AS bm_suffix, labels(n) AS labels "
+            "ORDER BY CASE WHEN n.role = 'demonstrative' AND $is_det THEN 0 ELSE 1 END "
+            "LIMIT 1",
             {'lang': lang_curr, 'surface': surf_lower,
-             'lemma': t.get('lemma', surf_lower).lower()}
+             'lemma': t.get('lemma', surf_lower).lower(),
+             'is_det': t.get('dep') == 'det'}
         )
 
 
@@ -424,6 +427,8 @@ def resolve_auxiliary_lemmas(tokens, db):
                 t['role'] = node_data['role']
             if node_data.get('sc'):
                 t['semantic_class'] = node_data['sc']
+            if node_data.get('bm_suffix') and not _is_det_ctx:
+                t['bm_suffix'] = node_data['bm_suffix']
 
         elif res and isinstance(res, dict):
             if res.get('lemma'): t['lemma'] = res['lemma']
