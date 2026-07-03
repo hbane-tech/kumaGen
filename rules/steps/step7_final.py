@@ -510,6 +510,7 @@ def run(T, tree, m, processed_indices, G_kg, NX_G, root_tok,
             and not tree.get('neg', False)
             and root_tok and root_tok.get('pos') == 'VERB'
             and root_tok.get('semantic_class', '') in INTRANS_SC
+            and not m.get('O')
             and m.get('V')):
         tree['is_transitive'] = False
         # NB: le suffixage du verbe ordinaire sans objet (V la / V kɛ) est
