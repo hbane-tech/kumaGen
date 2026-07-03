@@ -194,6 +194,16 @@ def run(T, tree, m, processed_indices, G_kg, NX_G, root_tok,
                 _ccomp_sc      = ccomp_tok.get('semantic_class', '')
                 _ccomp_intrans = ccomp_tok.get('intransitive_type', '')
                 _ccomp_is_past = (ccomp_tok.get('tense') == 'past' and not _ccomp_neg)
+                # Plus-que-parfait : l'auxiliaire (était/avait) porte l'imparfait
+                # (tense='hab'), pas le participe lui-même ("parti" reste tense='past').
+                # "qu'il était parti" ≠ "qu'il est parti" — sans ce signal sur
+                # l'AUXILIAIRE, les deux s'aplatissaient sur le même résultatif V+ra
+                # sans TAM, perdant la distinction plus-que-parfait/passé simple.
+                _ccomp_aux_tense_tok = next((x for x in T
+                                            if x.get('dep') in ('aux:tense', 'aux:pass')
+                                            and x.get('head_index') == ccomp_tok['orig_index']), None)
+                _ccomp_is_plup = bool(_ccomp_aux_tense_tok
+                                     and _ccomp_aux_tense_tok.get('tense') == 'hab')
                 # Intransitif au passé positif → résultatif V+ra/na, sans TAM
                 # INTRANS_SC (motion, biological…) = toujours intransitif (signal KG,
                 # fiable) — ignorer le it='ACTION' du LLM pour ces classes.
@@ -210,7 +220,7 @@ def run(T, tree, m, processed_indices, G_kg, NX_G, root_tok,
                             else _sfx_v if (ccomp_head_bm and ccomp_head_bm[-1] in _trig_v)
                             else _sfx_def)
                     _ccomp_v_bm    = ccomp_head_bm + _sfx
-                    _ccomp_tam_out = ''
+                    _ccomp_tam_out = (G_kg.get('statif_hab_prefix', '') or 'tùn') if _ccomp_is_plup else ''
                 # NOM-ACTION (action/having/technique) : BM déjà nominal → V kɛ (jamais V+li)
                 # ex: travailler=báara → ko a bɛ báara kɛ (pas báarali kɛ)
                 elif (not _ccomp_obj and ccomp_head_bm
