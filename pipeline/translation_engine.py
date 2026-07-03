@@ -519,7 +519,9 @@ class TranslationEngine:
 
     def _validate_candidate_semantics(self, token_fr: str,
                                       candidates: list,
-                                      top_k: int = 5) -> list:
+                                      top_k: int = 5,
+                                      tok: dict = None,
+                                      all_tokens: list = None) -> list:
         """
         Filter out false positives using LLM semantic validation.
 
@@ -613,6 +615,28 @@ class TranslationEngine:
                 and word_distance <= 1
                 and starts_with_token
             )
+
+            # Contextual guard: the gloss's extra word(s) beyond the bare token
+            # (e.g. "peur" in "faire peur") must be attested by a real complement
+            # of this token in the sentence — not just lexical proximity in the
+            # gloss text. Without this, "faire" in "qu'est-ce qu'il a fait ?"
+            # (object = interrogative "que", no concrete complement) wrongly
+            # restored "faire peur" → 'yògoro' just because it was the closest
+            # gloss variant, regardless of what the sentence actually says.
+            if is_close_variant and tok is not None and all_tokens:
+                _extra_words = [w for w in words_in_gloss if w != token_lower]
+                _tok_idx = tok.get('orig_index')
+                _complement_lemmas = {
+                    (t.get('lemma') or t.get('bm') or '').lower()
+                    for t in all_tokens
+                    if t.get('head_index') == _tok_idx
+                    and t.get('dep') in ('obj', 'nmod', 'obl:arg', 'xcomp')
+                    and t.get('role') not in ('interrogative', 'relative')
+                }
+                if _extra_words and not (_complement_lemmas & set(_extra_words)):
+                    is_close_variant = False
+                    print(f"     ⚠️  [FALLBACK] '{best_gloss}' rejeté : aucun "
+                          f"complément réel du token ne correspond à {_extra_words}")
 
             if best_orig_score > 0 and is_close_variant:
                 restore_score = int(best_orig_score * 0.5)  # 50% of original
@@ -1527,7 +1551,8 @@ class TranslationEngine:
 
         # ── SEMANTIC VALIDATION: Filter out false positives ──
         # LLM checks if candidate gloss actually matches the token semantically
-        candidates = self._validate_candidate_semantics(lemma, candidates, top_k=10)
+        candidates = self._validate_candidate_semantics(lemma, candidates, top_k=10,
+                                                        tok=tok, all_tokens=all_tokens)
 
         # ── AFFICHAGE DU TOP 5/6 DES CANDIDATS SENSE DU KG (DIAGNOSTIC VISUEL) ──
         print(f"\n     🔎 [TRANSLATION ENGINE] Jeton: '{surface}' | Lemme: '{lemma}' | POS: {pos}")
