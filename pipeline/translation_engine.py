@@ -1031,21 +1031,21 @@ class TranslationEngine:
     def _detect_intransitive_type(self, lemma: str, semantic_class: str = '') -> str:
 
         # ── PRIORITÉ CLASSE SÉMANTIQUE : VerbNet détermine la transitivité ────
-        # # Niveau 1 — classes intransitives pures → ABSOLU (jamais de COD).
-        # _INTRANSITIVE_SC = {'motion', 'biological', 'posture', 'spontaneous',
-        #                     'meteorological'}
-        # if semantic_class in _INTRANSITIVE_SC:
-        #     print(f"  🔍 [TRANSITIVITY] '{lemma}' class={semantic_class} "
-        #           f"→ ABSOLU (classe autonome, LLM ignoré)")
-        #     return 'ABSOLU'
+        # Niveau 1 — classes intransitives pures → ABSOLU (jamais de COD).
+        _INTRANSITIVE_SC = {'motion', 'biological', 'posture', 'spontaneous',
+                            'meteorological'}
+        if semantic_class in _INTRANSITIVE_SC:
+            print(f"  🔍 [TRANSITIVITY] '{lemma}' class={semantic_class} "
+                  f"→ ABSOLU (classe autonome, LLM ignoré)")
+            return 'ABSOLU'
 
-        # # Niveau 2 — classes transitives → ACTION (prennent un COD ; sans COD
-        # # → V+li kɛ / action_noun kɛ dans step7_final). Pas de LLM nécessaire.
-        # _TRANSITIVE_SC = {'consumption', 'preparation', 'action', 'craft', 'perception'}
-        # if semantic_class in _TRANSITIVE_SC:
-        #     print(f"  🔍 [TRANSITIVITY] '{lemma}' class={semantic_class} "
-        #           f"→ ACTION (classe transitive, LLM ignoré)")
-        #     return 'ACTION'
+        # Niveau 2 — classes transitives → ACTION (prennent un COD ; sans COD
+        # → V+li kɛ / action_noun kɛ dans step7_final). Pas de LLM nécessaire.
+        _TRANSITIVE_SC = {'consumption', 'preparation', 'action', 'craft', 'perception'}
+        if semantic_class in _TRANSITIVE_SC:
+            print(f"  🔍 [TRANSITIVITY] '{lemma}' class={semantic_class} "
+                  f"→ ACTION (classe transitive, LLM ignoré)")
+            return 'ACTION'
 
         # ── LLM : présence d'un COD (complément d'objet direct) ──────────────
         # Note : ne pas inclure la semantic_class dans le prompt — le label 'action'
@@ -1674,7 +1674,7 @@ class TranslationEngine:
             #   ils suivent le chemin ACTION (V+li kɛ), pas l'intransitif absolu.
             elif _sc in ('motion', 'biological', 'posture', 'spontaneous',
                        'meteorological'):
-                tok['intransitive_type'] = 'absolute'
+                tok['intransitive_type'] = 'ABSOLU'
 
             # Catégorie B2 : nom support dédié → action_noun + kɛ
             elif _sc in ('consumption', 'preparation'):
