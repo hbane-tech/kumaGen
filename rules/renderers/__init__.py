@@ -199,6 +199,8 @@ def tree_to_bambara(tree, G=None, grammar=None):
         'INTERROG': m.get('INTERROG', ''),
         'ALT':      m.get('ALT', ''),
         'O_LOC':    m.get('O_LOC', ''),
+        'REFL_PRON': tree.get('refl_pron', ''),
+        'REFL_SELF': G.get('reflexive_self_marker', ''),
     }
 
     # ── Dispatch KG générique ─────────────────────────────────────────────────

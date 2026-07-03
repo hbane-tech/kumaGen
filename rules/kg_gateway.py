@@ -195,8 +195,12 @@ def _build_features(tree: dict, T: list, G_kg: dict = None) -> dict:
         'has_reciprocal':        'true' if (
                                     # Ne pas déclencher ɲɔgɔn pour les verbes qui ne sont pas mutuels par nature
                                     (root_tok.get('semantic_class', '') not in ('preparation', 'grooming', 'cognitive'))
-                                    # expl:comp (se/nous) ou obj PRON pluriel réflexif (nous nous)
-                                    and (any(t.get('dep') == 'expl:comp'
+                                    # expl:comp/expl:pass (se/nous) ou obj PRON pluriel réflexif (nous nous).
+                                    # expl:pass inclus : spaCy tague "se parler" en expl:pass même au
+                                    # pluriel ("ils se parlent"), contrairement à "nous nous parlons"
+                                    # (expl:comp) — incohérence de tagging UD, pas une distinction
+                                    # linguistique réelle (même construction réfléchie communicative).
+                                    and (any(t.get('dep') in ('expl:comp', 'expl:pass')
                                          and t.get('role') in ('reflexive', 'clitic') for t in T)
                                      or any(t.get('dep') == 'obj' and t.get('pos') == 'PRON'
                                             and (t.get('is_plural') or 'Number=Plur' in str(t.get('morph', '')))
@@ -204,8 +208,8 @@ def _build_features(tree: dict, T: list, G_kg: dict = None) -> dict:
                                                     and s.get('lemma') == t.get('lemma')
                                                     for s in T)  # lemme identique = reflexif (pas relatif)
                                             for t in T)
-                                     # "nous nous": expl:comp même lemme que nsubj pluriel
-                                     or any(t.get('dep') == 'expl:comp' and t.get('pos') == 'PRON'
+                                     # "nous nous": expl:comp/expl:pass même lemme que nsubj pluriel
+                                     or any(t.get('dep') in ('expl:comp', 'expl:pass') and t.get('pos') == 'PRON'
                                             and any(s.get('dep') in ('nsubj', 'nsubj:pass')
                                                     and s.get('lemma') == t.get('lemma')
                                                     for s in T)
@@ -708,9 +712,19 @@ def apply_kg_rules(tree: dict, T: list, G_kg: dict) -> dict:
             m['V'] = j(_root_bm_2a, _has_propn.get('bm', ''))  # kánbìla Hawa
             tree['clause_type'] = 'simple'
         elif _refl_self:
+            # Sujet pluriel ("ils s'appellent") : transitif + pluriel = réciproque
+            # (ils se nomment l'un l'autre), pas réflexif singulier → ɲɔgɔn au
+            # lieu de yɛrɛ. Le sujet impersonnel 'a' reste (construction figée
+            # de dénomination, indépendante de la personne/nombre du français),
+            # seul le marqueur O change.
+            _subj_2a = next((t for t in T if t.get('dep') in ('nsubj', 'nsubj:pass')), None)
+            _subj_is_plural_2a = bool(
+                _subj_2a and (_subj_2a.get('is_plural')
+                              or 'Number=Plur' in str(_subj_2a.get('morph', ''))))
+            _recip_marker = G_kg.get('reciprocal_marker', '') if _subj_is_plural_2a else ''
             # "Je m'appelle" → a bɛ yɛrɛ kánbìla (réflexif-naming, sujet impersonnel)
             m['S'] = _impersonal
-            m['O'] = _refl_self   # yɛrɛ (inconditationnel, écrase step7)
+            m['O'] = _recip_marker or _refl_self   # ɲɔgɔn (pluriel) / yɛrɛ (singulier)
             if _root_bm_2a:
                 m['V'] = _root_bm_2a  # kánbìla (écrase la nominalization)
             tree['clause_type'] = 'simple'
@@ -1017,6 +1031,7 @@ def apply_kg_rules(tree: dict, T: list, G_kg: dict) -> dict:
                 m['ADV'] = m['O']  # déplacer vers ADV si pas encore là
             m['O'] = ''  # supprimer de O pour éviter duplication
 
+
     # ── copula_comitative COMPANION : fallback sur m['O'] si OBL_ALL ne donne que le marqueur
     if _ct == 'copula_comitative':
         _comit_ni_fb = G_kg.get('comitative_marker', 'ni') or 'ni'
@@ -1178,6 +1193,40 @@ def apply_kg_rules(tree: dict, T: list, G_kg: dict) -> dict:
             tree['_kg_template']   = best_rule.get('template', '')
             tree['_kg_rule_name']  = rule_name
             tree['_kg_word_order'] = best_rule.get('word_order', '')
+
+    # ── content_question_adv : {S} {TAM} {V_NOM} {O} ? — V_NOM jamais posé ────
+    # ailleurs (slot mort) : le verbe racine disparaissait entièrement du rendu
+    # ("Comment cela se fait-il ?" → "a bɛ cógo dì ?", sans trace de 'faire').
+    # Lu en tout dernier via tree['clause_type'] (pas la variable locale _ct,
+    # un instantané pris plus haut qui ne reflète pas la transition posée par
+    # un second passage de PatternRule KG : content_question → content_question_adv).
+    if tree.get('clause_type') == 'content_question_adv' and not m.get('V_NOM') and _root_tok_kg:
+        _vnom_bm = _root_tok_kg.get('bm') or f"[{_root_tok_kg.get('lemma', '')}]"
+        if not m.get('O') or _vnom_bm != m.get('O'):
+            m['V_NOM'] = _vnom_bm
+
+    # ── Filet de sécurité : verbe réflexif racine disparu du rendu ────────────
+    # Un verbe réflexif RÉEL (root_tok avec marqueur 'se' expl:comp/expl:pass)
+    # peut se retrouver sans trace dans aucun slot (V/V_ACTION/V_NOM/O) quand
+    # la classification LLM de sa catégorie réflexive (pronominal/posture/
+    # actif/accidentel — non-déterministe) l'aiguille à tort vers une
+    # construction qui ne le consomme pas (ex: "Comment cela se fait-il ?"
+    # classé POSTURE à tort → verbe absorbé nulle part). Scopé strictement
+    # aux verbes réflexifs pour ne pas affecter d'autres constructions
+    # (ex: le verbe d'une relative acl:relcl, qui n'est pas root_tok ici).
+    _root_has_refl_marker = bool(_root_tok_kg) and any(
+        x.get('dep') in ('expl:comp', 'expl:pass')
+        and x.get('head_index') == _root_tok_kg.get('orig_index')
+        for x in T)
+    if (_root_tok_kg and _root_tok_kg.get('pos') == 'VERB' and _root_has_refl_marker
+            and not m.get('V') and not m.get('V_ACTION')
+            and not m.get('V_NOM') and not m.get('QUAL')
+            and not tree.get('_is_passive') and not tree.get('_is_statif')):
+        _root_consumed_elsewhere = any(
+            _root_tok_kg.get('bm') and _root_tok_kg.get('bm') in (m.get(k) or '')
+            for k in ('S', 'O', 'ADV', 'QUAL'))
+        if not _root_consumed_elsewhere:
+            m['V'] = _root_tok_kg.get('bm') or f"[{_root_tok_kg.get('lemma', '')}]"
 
     return tree
 
