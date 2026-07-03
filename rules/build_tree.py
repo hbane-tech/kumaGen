@@ -174,6 +174,7 @@ def build_tree(tokens, db=None, grammar=None):
     # Les steps ont extrait les features ; le KG choisit la construction.
     # Règles KG priorité > 60 → override décisions Python.
     # ══════════════════════════════════════════════════════════════
+    tree['_processed_indices'] = processed_indices
     tree = apply_kg_rules(tree, T, G_kg)
 
     # Post-KG guard : ROOT NOUN/ADJ + clause_type subordonnant

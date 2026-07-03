@@ -144,6 +144,19 @@ def run(T, tree, m, processed_indices, G_kg, root_tok):
                          if x.get('dep') in ('obl:arg', 'nmod')
                          and x.get('head_index') == _interrog_qty_tok['orig_index']
                          and x.get('pos') in ('NOUN', 'PROPN')), None)
+    if not _obj:
+        # "avoir mal" : spaCy étiquette souvent 'mal' ADV+advmod (comme dans
+        # "il travaille mal") plutôt que NOUN+obj, alors que c'est ici un COD
+        # nominal ("la douleur"). Reconnaître ce cas précis via le marqueur KG
+        # avoir_mal_fr avant de traiter 'mal' comme un adverbe ordinaire.
+        _avoir_mal_surf_pre = G_kg.get('avoir_mal_fr', '')
+        if _avoir_mal_surf_pre:
+            _obj = next((x for x in T
+                         if x.get('dep') == 'advmod'
+                         and x.get('head_index') == root_tok.get('orig_index')
+                         and (str(x.get('surface', '')).lower() == _avoir_mal_surf_pre.lower()
+                              or str(x.get('lemma', '')).lower() == _avoir_mal_surf_pre.lower())
+                         and x.get('bm')), None)
     _subj = next((x for x in T
                   if x.get('dep') in ('nsubj', 'nsubj:pass')
                   and x.get('bm')), None)

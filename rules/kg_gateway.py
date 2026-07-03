@@ -463,6 +463,7 @@ def _apply_transform_rules(tree: dict, m: dict, G_kg: dict) -> None:
 def _apply_slot_fill_rules(tree: dict, m: dict, T: list, G_kg: dict) -> None:
     """Remplit les slots spéciaux en lisant SlotFillRule KG — aucun hardcode."""
     ct = tree.get('clause_type', '')
+    _processed = tree.get('_processed_indices') or set()
     rules = sorted(G_kg.get('kg_slot_fill_rules', []),
                    key=lambda r: r.get('priority', 0) or 0, reverse=True)
     for rule in rules:
@@ -478,6 +479,7 @@ def _apply_slot_fill_rules(tree: dict, m: dict, T: list, G_kg: dict) -> None:
                         and (not role or t.get('role') == role)
                         and (not pos  or t.get('pos') == pos)
                         and t.get(vsrc)
+                        and t.get('orig_index') not in _processed
                         # Exclure les clitiques datifs/accusatifs mislabélés dep='nsubj'
                         # du slot S (role='object' = COI/COD, jamais sujet grammatical).
                         and not (target == 'S' and t.get('role') == 'object')), None)
