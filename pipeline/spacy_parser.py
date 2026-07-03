@@ -1184,7 +1184,7 @@ class SpacyParser:
         # sur la valeur du CSV function_words.csv.
         _temporal_when_bm = (
             G.get('funcs', {}).get(('lorsque', lang), {}).get('bm')
-            or 'tuma min'
+            or 'túma mín'
         )
         # Désambiguïsation : LLM d'abord, fallback structurel si indisponible.
         # LLM : TEMPORAL → subordonnant temporel ; COMPLETEUR → complémenteur de verbe

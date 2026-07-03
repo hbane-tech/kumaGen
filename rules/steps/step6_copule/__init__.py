@@ -91,10 +91,16 @@ def run(T, tree, m, processed_indices, G_kg, root_tok,
     _is_aux_pass_on_root = bool(_aux_pass and _aux_pass.get('head_index') == _root_idx)
 
     if _is_pass_participle or _is_aux_pass_on_root:
-        m['V'] = _root_bm
+        # Participe passif sans traduction lexicale (compound Sense non
+        # trouvé, ex: "faire" seul face à "faire peur"/"faire voeu"...) :
+        # repli sur le verbe support générique (kɛ = "se faire, arriver",
+        # sens naturel du passif impersonnel "ce fut fait" = "cela arriva").
+        _root_bm_pass = (G_kg.get('coord_action_suffix', 'kɛ') or 'kɛ') \
+            if _root_bm.startswith('[') else _root_bm
+        m['V'] = _root_bm_pass
         tree['_is_passive']    = True
         tree['is_participe_passe'] = True
-        tree['participe_bm']   = _root_bm
+        tree['participe_bm']   = _root_bm_pass
         processed_indices.add(_root_idx)
         return
 

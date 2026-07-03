@@ -122,8 +122,20 @@ def run(T, tree, m, processed_indices, G_kg, root_tok):
             for x in T)
         _root_is_other_verb_with_avoir_aux = (
             not _root_lemma_is_avoir and _avoir_is_aux_of_root)
+        # Structural guard : "avoir"/"posséder"/"détenir" ne se passivent pas
+        # ("*fut eu" n'existe pas) — un root_tok au passif (aux:pass, quel que
+        # soit son lemme) qui n'est pas lexicalement "avoir" ne peut donc pas
+        # être une véritable possession, même si le LLM a classé sa
+        # semantic_class='having' (même misfire non-déterministe que ci-dessus,
+        # ex: "quand cela fut fait" → 'faire' classé 'having' à tort).
+        _root_is_passive = bool(root_tok.get('is_passive')) or any(
+            x.get('dep') == 'aux:pass'
+            and x.get('head_index') == root_tok.get('orig_index')
+            for x in T)
+        _root_is_passive_non_avoir = _root_is_passive and not _root_lemma_is_avoir
         if (_is_avoir(root_tok) and not _root_is_reflexive
-                and not _root_is_other_verb_with_avoir_aux):
+                and not _root_is_other_verb_with_avoir_aux
+                and not _root_is_passive_non_avoir):
             tree['clause_type'] = 'noun_phrase_have'
         else:
             return root_tok

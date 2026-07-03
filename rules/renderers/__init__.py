@@ -139,7 +139,11 @@ def tree_to_bambara(tree, G=None, grammar=None):
                 if _morpho_res:
                     _root_v = apply_morpho_suffix(_root_v, _morpho_res)
                 V = j(_root_v, *_rest_v)
-            TAM = ''
+            # Subordonnée temporelle ("quand X ...") : le résultatif prend le
+            # préfixe d'antériorité 'tùn' (l'événement précède la référence
+            # temporelle implicite), contrairement au résultatif d'une
+            # principale simple qui reste sans TAM.
+            TAM = (G.get('statif_hab_prefix', '') or 'tùn') if ct == 'temporal' else ''
     else:
         TAM = tam_val
 
