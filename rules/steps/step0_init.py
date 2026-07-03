@@ -47,6 +47,33 @@ def run(T, G_kg):
         if _verb_root:
             root_tok = _verb_root
 
+    # ── MISPARSE "je suis avec X" : spaCy attache parfois X (le complément
+    # comitatif) en dep='conj' du pronom sujet, plutôt que d'en faire le ROOT
+    # nominal hébergeant sa propre copule ("je suis avec mon mari" → 'mari'
+    # récupère cop='être' + case='avec' + det comme SES PROPRES enfants, mais
+    # reste rattaché en conj à 'je'). Sans correction, le pipeline traite 'je'
+    # et 'mari' comme deux éléments coordonnés ("moi et mari"), produisant un
+    # comitatif dupliqué/incohérent. Détection structurelle : un NOUN dep=conj
+    # dont le head est le PRON root, et qui porte lui-même un enfant cop ET un
+    # enfant case comitatif → c'est en réalité le vrai ROOT nominal.
+    if root_tok and root_tok.get('pos') == 'PRON' and root_tok.get('dep') == 'ROOT':
+        _misparsed_noun = next((t for t in T
+                                if t.get('pos') in ('NOUN', 'PROPN')
+                                and t.get('dep') == 'conj'
+                                and t.get('head_index') == root_tok.get('orig_index')
+                                and any(c.get('dep') == 'cop'
+                                        and c.get('head_index') == t.get('orig_index')
+                                        for c in T)
+                                and any(c.get('dep') == 'case' and c.get('role') == 'comitative'
+                                        and c.get('head_index') == t.get('orig_index')
+                                        for c in T)), None)
+        if _misparsed_noun:
+            root_tok['dep'] = 'nsubj'
+            root_tok['head_index'] = _misparsed_noun['orig_index']
+            _misparsed_noun['dep'] = 'ROOT'
+            _misparsed_noun['head_index'] = _misparsed_noun['orig_index']
+            root_tok = _misparsed_noun
+
     print(f"DEBUG root_tok flags APRES: "
           f"is_participe_passe={root_tok.get('is_participe_passe') if root_tok else None}")
 

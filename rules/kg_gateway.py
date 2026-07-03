@@ -743,6 +743,21 @@ def apply_kg_rules(tree: dict, T: list, G_kg: dict) -> dict:
         # Présent "dire" = S ko CCOMP ; le template '{S}' laisse le ccomp s'attacher
         tree['clause_type'] = 'saying_present'
 
+    # ── copula_comitative COMPANION : depuis m['O'] (chaîne génitive complète
+    # déjà construite par step4_objet, ex: "avec la fille du frère de mon ami"
+    # → tête + chaîne entière), AVANT le GraphWalkRule KG générique ci-dessous.
+    # Nécessaire ici et pas plus bas : GraphWalkRule 'comitative_companion_gw'
+    # capture le premier NOUN dep='nmod' de TOUTE la phrase sans lien avec la
+    # construction comitative réelle (ex: 'frère', un nmod intermédiaire de la
+    # chaîne, plutôt que 'fille' la vraie tête) — sa propre garde
+    # `if m.get(target): continue` le neutralise si COMPANION est déjà posé ici.
+    if tree.get('clause_type') == 'copula_comitative':
+        _comit_ni_fb_early = G_kg.get('comitative_marker', 'ni') or 'ni'
+        if (not m.get('COMPANION') or m.get('COMPANION') == _comit_ni_fb_early) \
+                and m.get('O') and m['O'] != _comit_ni_fb_early:
+            m['COMPANION'] = m['O']
+            m['O'] = ''
+
     # ── 3. SlotFillRule → slots simples ──────────────────────────────────────
     _apply_slot_fill_rules(tree, m, T, G_kg)
 
@@ -1032,15 +1047,11 @@ def apply_kg_rules(tree: dict, T: list, G_kg: dict) -> dict:
             m['O'] = ''  # supprimer de O pour éviter duplication
 
 
-    # ── copula_comitative COMPANION : fallback sur m['O'] si OBL_ALL ne donne que le marqueur
-    if _ct == 'copula_comitative':
-        _comit_ni_fb = G_kg.get('comitative_marker', 'ni') or 'ni'
-        if (not m.get('COMPANION') or m.get('COMPANION') == _comit_ni_fb) and m.get('O') and m['O'] != _comit_ni_fb:
-            m['COMPANION'] = m['O']
-            m['O'] = ''
-
     # ── copula_comitative : COMPANION ← oblique comitatif (HEAD réel, pas juste marqueur)
-    if _ct == 'copula_comitative':
+    # Ne s'applique QUE si un bloc précédent (avant le GraphWalkRule générique,
+    # voir plus haut) n'a pas déjà posé un COMPANION valide depuis m['O'].
+    if (_ct == 'copula_comitative'
+            and not (m.get('COMPANION') and m['COMPANION'] != G_kg.get('comitative_marker', 'ni'))):
         # OBL_ALL[0].HEAD = '{companion} yé' — on veut juste le nom sans le marqueur final
         _comit_end = G_kg.get('comitative_end_marker', 'yé') or 'yé'
         _obl_heads = [o.get('HEAD', '') for o in m.get('OBL_ALL', []) if o.get('HEAD')]

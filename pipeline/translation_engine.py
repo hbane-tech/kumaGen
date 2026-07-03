@@ -1260,7 +1260,7 @@ class TranslationEngine:
             f'    asseoir (place sur un support), coucher (allonge sur une surface),\n'
             f'    pencher, accroupir. Voix active : "asseoir un enfant" = positionner sur surface.\n'
             f'    NE PAS classer "lever" en posture : lever = processus transformationnel (biological).\n'
-            f'  spontaneous=réaction involontaire (rire, crier, pleurer...)\n'
+            f'  spontaneous=réaction involontaire (rire, crier...)\n'
             f'  perception=voir, entendre, sentir (perception directe)\n'
             f'  meteorological=phénomène atmosphérique (pleuvoir, neiger...)\n'
             f'  copula=lien attributif (être, sembler, paraître...)\n'
@@ -2219,7 +2219,7 @@ class TranslationEngine:
 
         print(f"\n🧠 INPUT : {sentence}  [{lang_tag}]")
         print(f"🔤 TOKENS: "
-              f"{[(t['lemma'], t['pos'], t['dep'], t['role']) for t in all_tokens]}")
+              f"{[(t['orig_index'], t['lemma'], t['pos'], t['dep'], t['role'], t.get('head_index')) for t in all_tokens]}")
         print(f"📊 FRAME : {frame}")
         print("=" * 75)
 
