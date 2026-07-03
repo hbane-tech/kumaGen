@@ -1286,12 +1286,16 @@ def run(T, tree, m, processed_indices, G_kg, NX_G,
         tree['tense'] = tree['_cq_acl_tense']
         tree['tam']   = _resolve_tam(tree['_cq_acl_tense'], tree.get('neg', False), G_kg) or 'bɛ'
 
-    # OBLIGATION : devoir/falloir → TAM spécial + V='kan'
+    # OBLIGATION : devoir/falloir → TAM spécial + V=bm du verbe (résolu par le KG)
     # Positif : S kan ka V_nom kɛ  |  Négatif : S man kan ka V_nom kɛ
     if (root_tok and root_tok.get('semantic_class') == 'obligation'
             and tree.get('clause_type') not in ('prohibitive', 'imperative')):
-        root_tok['bm'] = 'kan'
-        m['V'] = 'kan'
+        # bm lu depuis le Sense KG (retrieval normal), pas de valeur en dur —
+        # 'kan' n'intervient qu'en dernier recours si le KG n'a vraiment rien.
+        _oblig_bm = root_tok.get('bm') or 'kan'
+        if not root_tok.get('bm'):
+            root_tok['bm'] = _oblig_bm
+        m['V'] = _oblig_bm
         tree['tam'] = 'man' if tree.get('neg', False) else ''
         tree['_obligation'] = True   # bloque le ré-écrasement TAM dans step6
 
