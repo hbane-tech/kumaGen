@@ -320,6 +320,12 @@ def _apply_transform_rules(tree: dict, m: dict, G_kg: dict) -> None:
                 applied_targets.add(target)
                 continue
 
+        # Obligation (devoir/falloir) : TAM déjà posé par step3_verbe (S ka kan / S man kan) —
+        # aucune TransformRule générique ne doit l'écraser avec le TAM par défaut.
+        if tree.get('_obligation') and target == 'TAM':
+            applied_targets.add(target)
+            continue
+
         # (Guard prohibitive nominalization via _is_action_no_obj computation above)
 
         # Progressif : TAM 'bɛ kà' posé par step3 et verbe nu — pas de réécriture

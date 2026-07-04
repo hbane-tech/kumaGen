@@ -1296,8 +1296,17 @@ def run(T, tree, m, processed_indices, G_kg, NX_G,
         if not root_tok.get('bm'):
             root_tok['bm'] = _oblig_bm
         m['V'] = _oblig_bm
-        tree['tam'] = 'man' if tree.get('neg', False) else ''
-        tree['_obligation'] = True   # bloque le ré-écrasement TAM dans step6
+        # Présent positif : pas de TAM générique ('bɛ') — l'expression figée
+        # de l'obligation au présent est 'ka kan' (S ka kan ka V), 'ka' n'étant
+        # pas le marqueur temporel habituel mais partie de la construction
+        # modale elle-même. Négatif : 'man kan ka V' (inchangé).
+        if tree.get('neg', False):
+            tree['tam'] = 'man'
+        elif tree.get('tense', 'pres') == 'pres':
+            tree['tam'] = G_kg.get('obligation_pres_marker', 'ka') or 'ka'
+        else:
+            tree['tam'] = ''
+        tree['_obligation'] = True   # bloque le ré-écrasement TAM dans le kg_gateway
 
     # NB: l'application des suffixes verbaux (li kɛ / la / kɛ) est centralisée
     # dans step6_copule ("Capturer root non encore traité comme V"). On ne fait
