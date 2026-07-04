@@ -1246,7 +1246,32 @@ class TranslationEngine:
         return verb
 
     def _detect_semantic_class(self, lemma: str) -> str:
-        """Détecte la classe sémantique d'un verbe via LLM."""
+        """Détecte la classe sémantique d'un verbe. Pré-check KG d'abord
+        (Sense.semantic_class) — évite un appel LLM non-déterministe pour
+        les lemmes déjà classés une fois (ex: 'pleurer' -> 'spontaneous'
+        reclassé différemment à chaque appel LLM, cassant tour à tour la
+        transitivité, le réflexif, etc. selon la session)."""
+        if not lemma:
+            return 'other'
+        _VALID_SC = {
+            'motion', 'biological', 'posture', 'spontaneous', 'perception',
+            'meteorological', 'copula', 'stative_cognitive', 'psych_emotion', 'modal', 'obligation',
+            'action', 'consumption_liquid', 'consumption',
+            'preparation', 'technique', 'craft', 'communication', 'communication_transitive',
+            'having', 'other', 'color',
+        }
+        try:
+            _kg_sc = self.db.query(
+                "MATCH (n:Sense) WHERE toLower(n.fr) = toLower($fr) AND n.semantic_class IS NOT NULL "
+                "RETURN n.semantic_class AS sc LIMIT 1",
+                {'fr': lemma})
+            if _kg_sc and _kg_sc[0].get('sc'):
+                _sc = str(_kg_sc[0]['sc']).lower()
+                if _sc in _VALID_SC:
+                    print(f"     🏷️  semantic_class('{lemma}') = {_sc}  [KG]")
+                    return _sc
+        except Exception:
+            pass
         prompt = (
             f'Quelle est la nature sémantique du verbe français "{lemma}" ?\n\n'
             f'Catégories AUTONOMES (intransitifs, n\'acceptent pas de COD direct):\n'
@@ -1301,12 +1326,6 @@ class TranslationEngine:
             f'    envoyer, recevoir, ouvrir, fermer, casser, porter, mettre, garder...\n\n'
             f'Réponds UNIQUEMENT par le nom de la catégorie.'
         )
-        _VALID_SC = {
-            'motion', 'biological', 'posture', 'spontaneous', 'perception',
-            'meteorological', 'copula', 'stative_cognitive', 'psych_emotion', 'modal', 'obligation',
-            'action', 'consumption_liquid', 'consumption',
-            'preparation', 'technique', 'craft', 'communication', 'having', 'other',
-        }
         try:
             import re as _re
             cls_raw = self._call_llm(prompt, max_tokens=15).strip().lower()
