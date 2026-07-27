@@ -1,0 +1,366 @@
+idx,group,source,reference_bm,kuma_bm,root_form,root_upos,single_root,root_pos_ok,has_subject,no_dep_placeholder,ud_all_ok,best_gold_match,gold_similarity
+1,equative,Je suis enseignant,n yé kàramɔgɔkɛ yé,n yé kàramɔgɔkɛ yé,kàramɔgɔkɛ,VERB,True,True,False,True,False,u ye a konyè kè ten.,0.571
+2,equative,il est professeur,a yé porofesɛri yé,a yé porofesɛri yé,yé,NOUN,True,True,False,True,False,BANINYÈGÈNÈ FURULI,0.5
+3,equative,Musa est un chasseur,Musa yé dònso yé,Musa yé dònso yé,yé,NOUN,True,True,False,True,False,BANINYÈGÈNÈ FURULI,0.5
+4,equative,je suis étudiant,n yé kàlandenba yé,n yé kàlandenba yé,yé,NOUN,True,True,False,True,False,NAMARAMATU DENIN KAROGÈLÈN,0.75
+5,equative,tu es mon ami,i yé n téri yé,i yé n téri yé,yé,NOUN,True,True,False,True,False,e kò ka nyi ne ba kò ye.,0.4
+6,equative,elle est médecin,a yé medesɛn yé,a yé medesɛn yé,medesɛn,VERB,True,True,False,True,False,u ye a konyè kè ten.,0.571
+7,equative,nous sommes des paysans,anw yé wúlakɔnɔmɔgɔw yé,anw yé wúlakɔnɔmɔgɔw yé,yé,NOUN,True,True,False,True,False,BANINYÈGÈNÈ FURULI,0.5
+8,equative,Ils sont étudiants,u yé kàlandenbaw yé,u yé kàlandenbaw yé,yé,NOUN,True,True,False,True,False,BANINYÈGÈNÈ FURULI,0.5
+9,equative,vous êtes des enseignants,aw yé kàramɔgɔkɛw yé,aw yé kàramɔgɔkɛw yé,yé,NOUN,True,True,False,True,False,BANINYÈGÈNÈ FURULI,0.5
+10,equative,il n'est pas professeur,a tɛ porofesɛri yé,a tɛ porofesɛri yé,tɛ,VERB,True,True,True,True,True,kònòba ta tora fila.,0.8
+11,equative,il n'est pas un professeur,a tɛ porofesɛri yé,a tɛ porofesɛri yé,tɛ,VERB,True,True,True,True,True,kònòba ta tora fila.,0.8
+12,equative,il n'est pas un étudiant,a tɛ kàlandenba yé,a tɛ kàlandenba yé,tɛ,VERB,True,True,True,True,True,kònòba ta tora fila.,0.8
+13,equative,je ne suis pas enseignant,n tɛ kàramɔgɔkɛ yé,n tɛ kàramɔgɔkɛ yé,tɛ,VERB,True,True,True,True,True,kònòba ta tora fila.,0.8
+14,equative_neg_nothing,Il n'est rien,a tɛ foyi yé,a tɛ foyi yé,tɛ,VERB,True,True,True,True,True,kònòba ta tora fila.,0.8
+15,equative,ce n'est pas vrai,o tɛ tiɲɛ yé,o tɛ tiɲɛ yé,tɛ,VERB,True,True,True,True,True,den nin ye muso ye.,0.667
+16,equative,il était professeur,a tùn yé porofesɛri yé,a tùn yé porofesɛri yé,tùn,VERB,True,True,True,True,True,Kusuba denkè wolo bè n kan!,0.714
+17,equative,j'étais étudiant,n tùn yé kàlandenba yé,n tùn yé kàlandenba yé,tùn,VERB,True,True,True,True,True,kolokurun jalan bè a bolo.,0.571
+18,equative,il n'était pas étudiant,a tùn tɛ kàlandenba yé,a tùn tɛ kàlandenba yé,tɛ,VERB,True,True,True,True,True,Kusuba denkè wolo bè n kan!,0.714
+19,locative,Je suis en route,n bɛ síraden la,n bɛ síraden la,bɛ,VERB,True,True,True,True,True,u tagara dògònyiniyòrò la.,0.8
+20,locative,Musa est au village,Musa bɛ dùgu la,Musa bɛ dùgu la,bɛ,VERB,True,True,False,True,False,jelikè kòni bè a la:,0.667
+21,locative,Les enfants sont en route,dén bɛ síraden la,dén bɛ síraden la,bɛ,VERB,True,True,True,True,True,u tagara dògònyiniyòrò la.,0.8
+22,locative,Ils sont aux portes,u bɛ bóndaw la,u bɛ bóndaw la,bɛ,VERB,True,True,True,True,True,u tagara dògònyiniyòrò la.,0.8
+23,locative,je suis à la maison,n bɛ só la,n bɛ só la,bɛ,VERB,True,True,True,True,True,u tagara dògònyiniyòrò la.,0.8
+24,locative,nous sommes au marché,anw bɛ súgu la,anw bɛ súgu la,bɛ,VERB,True,True,True,True,True,u tagara dògònyiniyòrò la.,0.8
+25,locative,il est au champ,a bɛ fòro la,a bɛ fòro la,bɛ,VERB,True,True,True,True,True,u tagara dògònyiniyòrò la.,0.8
+26,locative,elle est à l'école,a bɛ kàlankɛyɔrɔ la,a bɛ kàlankɛyɔrɔ la,bɛ,VERB,True,True,True,True,True,u tagara dògònyiniyòrò la.,0.8
+27,locative,il n'est pas à la maison,a tɛ só la,a tɛ só la,tɛ,VERB,True,True,True,True,True,u tagara dògònyiniyòrò la.,0.8
+28,locative,je ne suis pas au marché,n tɛ súgu la,n tɛ súgu la,tɛ,VERB,True,True,True,True,True,u tagara dògònyiniyòrò la.,0.8
+29,qualitative,je suis belle,n ka [bel],n ka [bel],[bel],NOUN,True,True,False,True,False,BANINYÈGÈNÈ FURULI,0.667
+30,qualitative,le cheval est rapide,dàfe ka téli,dàfe ka téli,fe,VERB,True,True,False,True,False,syèdennin yèlènna ka lenburusun yuguyugu.,0.667
+31,qualitative,La maison est loin,só ka póroo,só ka póroo,só,NOUN,True,True,False,True,False,ko ayi.,0.5
+32,qualitative,Les maisons sont loin,sów ka póroo,sów ka póroo,sów,NOUN,True,True,False,True,False,tèmèn ni e da ye.,0.5
+33,qualitative,l'eau est chaude,jí ka gòni,jí ka gòni,gòni,NOUN,True,True,False,True,False,BANINYÈGÈNÈ FURULI,0.667
+34,qualitative,la route est longue,síraden ka búlubulu,síraden ka búlubulu,búlubulu,PROPN,True,True,False,True,False,SYÈFAN ANI SYÈDENNIN,0.5
+35,qualitative,tu n'es pas bien,i man ɲuman,i man ɲuman,ɲuman,NOUN,True,True,False,True,False,BANINYÈGÈNÈ FURULI,0.667
+36,qualitative,la maison n'est pas grande,só man bòn,só man bòn,bòn,VERB,True,True,True,True,True,o ye o dun.,0.6
+37,qualitative,la route était longue,síraden tùn ka búlubulu,síraden tùn ka búlubulu,tùn,VERB,True,True,False,True,False,syèdennin yèlènna ka lenburusun yuguyugu.,0.667
+38,qualitative,il n'était pas bien,a tùn ma ɲuman,a tùn ma ɲuman,ɲuman,NOUN,True,True,False,True,False,dògò bè nòrò a nò la.,0.571
+39,statif,je suis sûre de ça,n [sûr]len dòn o la,n [sûr]len dòn o la,[sûr]len,VERB,True,True,True,True,True,n bòra kònò le n ma!,0.714
+40,statif,Les maisons sont sûres,sów [sûr]len dòn,sów [sûr]len dòn,[sûr]len,VERB,True,True,True,True,True,a jiginna dencè.,0.75
+41,simple,C'est cuit,nin mɔ́nlen dòn,nin mɔ́nlen dòn,mɔ́nlen,VERB,True,True,True,True,True,a jiginna dencè.,0.75
+42,simple,Les viandes sont cuites,sògow bàsabasalen dòn,sògow bàsabasalen dòn,bàsabasalen,VERB,True,True,True,True,True,a jiginna dencè.,0.75
+43,simple,il est parti,a fáɲira,a fáɲira,fáɲira,VERB,True,True,True,True,True,lenburu binna.,0.667
+44,simple,elle est tombée,a wɔ̀lɔwɔlɔla,a wɔ̀lɔwɔlɔla,wɔ̀lɔwɔlɔla,VERB,True,True,True,True,True,lenburu binna.,0.667
+45,simple,ils sont arrivés,u séra,u séra,séra,VERB,True,True,True,True,True,lenburu binna.,0.667
+46,simple,Musa a mangé le riz,Musa yé iri dún,Musa yé iri dún,dún,VERB,True,True,True,True,True,ko an bèè den don!,0.667
+47,simple,J'ai acheté des pagnes,n yé kɔ̀baw sàn,n yé kɔ̀baw sàn,sàn,VERB,True,True,True,True,True,dennin bolo tigèra.,0.6
+48,simple,tu as vu l'homme,i yé mɔ̀gɔ yé,i yé mɔ̀gɔ yé,yé,NOUN,True,True,False,True,False,BANINYÈGÈNÈ FURULI,0.5
+49,simple,elle a bu de l'eau,a yé jí jí,a yé jí jí,jí,NOUN,True,True,False,True,False,BANINYÈGÈNÈ FURULI,0.5
+50,simple,nous avons mangé le riz,anw yé iri dún,anw yé iri dún,dún,VERB,True,True,False,True,False,mògò si ma i tògò dòn.,0.571
+51,simple,ils ont construit la maison,u yé só [construire],u yé só [construire],[construire],NOUN,True,True,False,True,False,BANINYÈGÈNÈ FURULI,0.5
+52,relative_topic,L'homme que tu as vu hier est parti,"i yé mɔ̀gɔ mìn yé kúnun, o fáɲira","i yé mɔ̀gɔ mìn yé kúnun, o fáɲira",mìn,VERB,True,True,True,True,True,"o kò kotò, a bolo bèè tigèra.",0.8
+53,noun_phrase_have,J'ai de l'argent,wári bɛ n bóló,wári bɛ n bóló,bɛ,VERB,True,True,True,True,True,bèè ta ko tot tot!,0.667
+54,noun_phrase_have,il a une voiture,wátiri bɛ a bóló,wátiri bɛ a bóló,bɛ,VERB,True,True,True,True,True,kònòba ta tora fila.,0.8
+55,noun_phrase_have,Ils ont des voitures,wátiriw bɛ u bóló,wátiriw bɛ u bóló,bɛ,VERB,True,True,True,True,True,kònòba ta tora fila.,0.8
+56,noun_phrase_have,tu as un couteau,pága bɛ i fɛ,pága bɛ i fɛ,fɛ,VERB,True,True,False,True,False,maaninfin dun bè kaba wolo?,0.667
+57,noun_phrase_have,Quel âge as-tu ?,i bɛ saan jùmɛn la ?,i bɛ saan jùmɛn la ?,saan,VERB,True,True,True,True,True,segi tun tè olu bolo.,1.0
+58,noun_phrase_have,elle n'a pas d'argent,wári tɛ a bóló,wári tɛ a bóló,tɛ,VERB,True,True,True,True,True,kònòba ta tora fila.,0.8
+59,noun_phrase_have,J'ai un frère,bálimakɛ bɛ n fɛ,bálimakɛ bɛ n fɛ,bɛ,VERB,True,True,True,True,True,bèè ta ko tot tot!,0.667
+60,noun_phrase_have,J'ai une sœur,bálimamuso bɛ n fɛ,bálimamuso bɛ n fɛ,bɛ,VERB,True,True,True,True,True,bèè ta ko tot tot!,0.667
+61,noun_phrase_have,J'ai des frères et sœurs,bálimakɛw ni bálimamusow bɛ n fɛ,bálimakɛw ni bálimamuso bɛ n fɛ,bɛ,VERB,True,True,True,True,True,a ko aw ni ce!,0.714
+62,simple,J'aime manger,n bɛ dúnli kànu,n bɛ dúnli kànu,bɛ,VERB,True,True,True,True,True,u tagara dògònyiniyòrò la.,0.8
+63,noun_phrase_have,il a de la chance,tère bɛ a fɛ,tère bɛ a fɛ,fɛ,VERB,True,True,True,True,True,o ye o dun.,0.8
+64,noun_phrase_have,elle n'a pas de frère,bálimakɛ tɛ a fɛ,bálimakɛ tɛ a fɛ,tɛ,VERB,True,True,True,True,True,den nin ye muso ye.,0.667
+65,existential_absolute,Il y'a du pain,búuru bɛ,búuru bɛ,bɛ,VERB,True,True,True,True,True,lenburu binna.,0.667
+66,existential_absolute,il y a un problème,gìrigara bɛ,gìrigara bɛ,gìrigara,VERB,True,True,False,True,False,fulakè nana sunògò.,0.5
+67,existential_absolute,il y a du travail,báara bɛ,báara bɛ,báara,VERB,True,True,False,True,False,fulakè nana sunògò.,0.5
+68,existential_absolute,il n'y a pas de pain,búuru tɛ,búuru tɛ,tɛ,VERB,True,True,True,True,True,lenburu binna.,0.667
+69,existential_localized,il n'y a personne dans le village,mɔgɔ tɛ dùgu kɔnɔ,mɔgɔ tɛ dùgu kɔnɔ,tɛ,VERB,True,True,True,True,True,u tagara dògònyiniyòrò la.,0.8
+70,existential_localized,Il y a de l'eau dans la bouteille,jí bɛ bútèli kɔnɔ,jí bɛ bútèli kɔnɔ,bɛ,VERB,True,True,True,True,True,u tagara dògònyiniyòrò la.,0.8
+71,existential_localized,Il y a des gens ici,yènkaw bɛ yàn,yènkaw bɛ yàn,bɛ,VERB,True,True,True,True,True,a jiginna dencè.,0.75
+72,existential_localized,Il n'y a personne ici,mɔgɔ tɛ yàn,mɔgɔ tɛ yàn,tɛ,VERB,True,True,True,True,True,a jiginna dencè.,0.75
+73,existential_localized,il y a des enfants dans la maison,dénw bɛ só kɔnɔ,dénw bɛ só kɔnɔ,bɛ,VERB,True,True,True,True,True,u tagara dògònyiniyòrò la.,0.8
+74,existential_localized,il n'y a pas d'eau dans la bouteille,jí tɛ bútèli kɔnɔ,jí tɛ bútèli kɔnɔ,tɛ,VERB,True,True,True,True,True,u tagara dògònyiniyòrò la.,0.8
+75,identificatory,C'est moi,n de dòn,n de dòn,dòn,VERB,True,True,True,True,True,o fana tagara.,0.75
+76,identificatory,C'est moi Hawa,n de yé Hawa yé,n de yé Hawa yé,yé,NOUN,True,True,False,True,False,Cɛkɔrɔba n'a denw,0.8
+77,identificatory,Ce n'est pas moi,n tɛ,n tɛ,tɛ,VERB,True,True,True,True,True,lenburu binna.,0.667
+78,presentative,c'est Musa,Musa de dòn,Musa de dòn,dòn,VERB,True,True,True,True,True,o fana tagara.,0.75
+79,presentative,Ce sont mes frères et sœurs,o yé n bálimakɛw ni n bálimamusow yé,o yé n bálimakɛw ni n bálimamusow yé,yé,NOUN,True,True,False,True,False,Cɛkɔrɔba n'a denw,0.5
+80,identificatory,c'est lui,ale de dòn,ale de dòn,dòn,VERB,True,True,True,True,True,o fana tagara.,0.75
+81,identificatory,ce n'est pas lui,o tɛ,o tɛ,tɛ,VERB,True,True,True,True,True,lenburu binna.,0.667
+82,identificatory,c'est nous,anw de dòn,anw de dòn,dòn,VERB,True,True,True,True,True,o fana tagara.,0.75
+83,presentative,Voilà la voiture,wátiri félé,wátiri félé,félé,NOUN,True,True,False,True,False,BANINYÈGÈNÈ FURULI,1.0
+84,presentative,Voilà les voitures,wátiriw félé,wátiriw félé,félé,NOUN,True,True,False,True,False,BANINYÈGÈNÈ FURULI,1.0
+85,presentative,Voilà Musa,Musa félé,Musa félé,félé,NOUN,True,True,False,True,False,ko ayi.,0.667
+86,presentative,Voilà l'eau,jí félé,jí félé,félé,NOUN,True,True,False,True,False,BANINYÈGÈNÈ FURULI,1.0
+87,interrogative,Parles-tu bambara ?,i bɛ bambara kúma wà ?,i bɛ bambara kúma wà ?,bɛ,VERB,True,True,True,True,True,bèè ta ko tot tot!,0.714
+88,interrogative,Allez-vous au marché ?,aw bɛ wá súgu la wà ?,aw bɛ wá súgu la wà ?,bɛ,VERB,True,True,True,True,True,a bè iko kò bamafara!,0.857
+89,interrogative,Est-ce que ça va vraiment bien ?,Yala nin bɛ wá yɛ̀rɛ ɲuman wà ?,Yala nin bɛ wá yɛ̀rɛ ɲuman wà ?,bɛ,VERB,True,True,False,True,False,mògò si ma i tògò dòn.,0.5
+90,interrogative,Est-ce que tes frères et sœurs sont ici ?,Yala i bálimakɛw ni bálimamusow bɛ yàn wà ?,Yala i bálimakɛ ni bálimamusow bɛ yàn wà ?,bɛ,VERB,True,True,True,True,True,a nana u ma ko aw ni ce!,0.8
+91,interrogative,Tu veux du poisson ou bien tu veux de la viande ?,i bɛ jɛ́gɛ ŋàniya wàlima i bɛ sògo ŋàniya wà ?,i bɛ jɛ́gɛ ŋàniya wàlima i bɛ sògo ŋàniya wà ?,jɛ́gɛ,VERB,True,True,True,True,True,"cènin ka wulunin o dalen bè dennin jukòrò, o bè dennin filè.",0.786
+92,interrogative,Tu veux des arachides ou bien tu veux des patates douces ?,i bɛ kàntìgɛw ŋàniya wàlima i bɛ wóso ŋàniya wà ?,i bɛ kàntìgɛw ŋàniya wàlima i bɛ wóso ŋàniya wà ?,bɛ,VERB,True,True,True,True,True,a ye a tògò la ko n tògò ye Barawulenin ye.,0.769
+93,interrogative,il mange ?,a bɛ dumuni kɛ wà ?,a bɛ dumuni kɛ wà ?,bɛ,VERB,True,True,True,True,True,bèè ta ko tot tot!,0.714
+94,interrogative,tu as de l'argent ?,wári bɛ i bóló,wári bɛ i bóló,bɛ,VERB,True,True,True,True,True,bèè ta ko tot tot!,0.667
+95,interrogative,elle est à la maison ?,a bɛ só wà ?,a bɛ só wà ?,bɛ,VERB,True,True,True,True,True,bèè ta ko tot tot!,0.833
+96,interrogative,peut-il manger de la viande ?,a bɛ se ka sògo dún wà ?,a bɛ se ka sògo dún wà ?,se,VERB,True,True,True,True,True,Ala ye a ta ka bin.,0.875
+97,content_question,Qui fait la bagarre ?,jɔn bɛ káta kɛ́ ?,jɔn bɛ káta kɛ́ ?,bɛ,VERB,True,True,True,True,True,a ko e dakabanako!,1.0
+98,content_question,Qui aimez-vous ?,aw bɛ jɔn kànu ?,aw bɛ jɔn kànu ?,bɛ,VERB,True,True,True,True,True,a jiginna dencè.,0.8
+99,content_question,Qui aiment-ils ?,u bɛ jɔn kànu ?,u bɛ jɔn kànu ?,bɛ,VERB,True,True,True,True,True,O bɛ wele ko Azawadi.,0.833
+100,content_question,Tu manges quoi ?,i bɛ mún dún ?,i bɛ mún dún ?,bɛ,VERB,True,True,True,True,True,a jiginna dencè.,0.8
+101,content_question,Tu veux quoi ?,i bɛ mún ŋàniya ?,i bɛ mún ŋàniya ?,ŋàniya,VERB,True,True,True,True,True,o ye o dun.,1.0
+102,content_question,il mange quoi ?,a bɛ mún dún ?,a bɛ mún dún ?,bɛ,VERB,True,True,True,True,True,a jiginna dencè.,0.8
+103,content_question,Où allez-vous ?,aw bɛ wá mín ?,aw bɛ wá mín ?,bɛ,VERB,True,True,True,True,True,u tagara dògònyiniyòrò la.,1.0
+104,content_question,où est Musa ?,Musa bɛ mín ?,Musa bɛ mín ?,bɛ,VERB,True,True,True,True,True,a jiginna dencè.,1.0
+105,content_question,Quand viens-tu ?,i bɛ nà túma jùmɛn ?,i bɛ nà túma jùmɛn ?,bɛ,VERB,True,True,True,True,True,a ko i ba tè ne ye.,0.75
+106,content_question,quand pars-tu ?,i bɛ fáɲi túma jùmɛn ?,i bɛ fáɲi túma jùmɛn ?,fáɲi,VERB,True,True,True,True,True,segi tun tè olu bolo.,1.0
+107,content_question,Pourquoi pleures-tu ?,i bɛ kàsi mún kósɔn ?,i bɛ kàsi mún kósɔn ?,bɛ,VERB,True,True,True,True,True,a ko tèmèn ni e da ye.,0.75
+108,content_question,pourquoi il mange ?,a bɛ dumuni kɛ mún kósɔn ?,a bɛ dumuni kɛ mún kósɔn ?,bɛ,VERB,True,True,True,True,True,a ko i ba tè ne ye.,0.875
+109,content_question,Comment t'appelles-tu ?,i bɛ kánbìla cógo dǐ ?,i bɛ kánbìla cógo dǐ ?,bɛ,VERB,True,True,True,True,True,kònòba ta tora fila.,0.833
+110,content_question,Comment cela se fait-il ?,a bɛ kɛ́ cógo dǐ ?,a bɛ kɛ́ cógo dǐ ?,bɛ,VERB,True,True,True,True,True,bèè ta ko tot tot!,0.714
+111,content_question,Quelle femme ?,númanfɛlaka jùmɛn ?,númanfɛlaka jùmɛn ?,jùmɛn,VERB,True,True,False,True,False,nsiirin.,0.667
+112,content_question,Tu veux quelle maison ?,i bɛ só jùmɛn ŋàniya ?,i bɛ só jùmɛn ŋàniya ?,bɛ,VERB,True,True,True,True,True,a ye den dò sòrò.,0.714
+113,content_question,Ça coûte combien ?,o yé jóli yé ?,o yé jóli yé ?,yé,NOUN,True,True,False,True,False,e kò ka nyi ne ba kò ye.,0.556
+114,content_question,tu as combien d'enfants ?,dénw jóli bɛ i fɛ ?,dénw jóli bɛ i fɛ ?,fɛ,VERB,True,True,True,True,True,a ye den dò sòrò.,1.0
+115,simple,je mange du riz,n bɛ iri dún,n bɛ iri dún,bɛ,VERB,True,True,True,True,True,a jiginna dencè.,1.0
+116,simple,tu bois de l'eau,i bɛ jí jí,i bɛ jí jí,bɛ,VERB,True,True,True,True,True,bèè ta ko tot tot!,0.667
+117,simple,il parle bambara,a bɛ bambara kúma,a bɛ bambara kúma,bɛ,VERB,True,True,True,True,True,u tagara dògònyiniyòrò la.,0.8
+118,simple,elle chante,a bɛ [chanter] kɛ,a bɛ [chanter],bɛ,VERB,True,True,True,True,True,a jiginna dencè.,0.75
+119,simple,nous travaillons,anw bɛ báara la,anw bɛ báara la,báara,VERB,True,True,True,True,True,segi tun tè olu bolo.,0.667
+120,simple,ils mangent du riz,u bɛ iri dún,u bɛ iri dún,bɛ,VERB,True,True,True,True,True,a jiginna dencè.,1.0
+121,simple,je ne mange pas,n tɛ dumuni kɛ,n tɛ dumuni kɛ,tɛ,VERB,True,True,True,True,True,kònòba ta tora fila.,0.8
+122,simple,il ne parle pas bambara,a tɛ bambara kúma,a tɛ bambara kúma,tɛ,VERB,True,True,True,True,True,u tagara dògònyiniyòrò la.,0.8
+123,simple,je veux manger,n bɛ ŋàniya ka dúnli kɛ,n bɛ ŋàniya ka dúnli kɛ,ŋàniya,VERB,True,True,True,True,True,Ala ye a ta ka bin.,0.857
+124,simple,il veut partir,a bɛ ŋàniya ka fáɲi,a bɛ ŋàniya ka fáɲi,ŋàniya,VERB,True,True,True,True,True,Ala ye a ta ka bin.,0.714
+125,simple,je ne veux pas manger,n tɛ ŋàniya ka dúnli kɛ,n tɛ ŋàniya ka dúnli kɛ,ŋàniya,VERB,True,True,False,True,False,a bè ba nin sin ta ka a min.,0.6
+126,simple,je suis en train de manger,n bɛ kà dumuni kɛ,n bɛ kà dumuni kɛ,bɛ,VERB,True,True,True,True,True,bèè ta ko tot tot!,0.571
+127,simple,il est en train de parler,a bɛ kà kúma,a bɛ kà kúma,bɛ,VERB,True,True,True,True,True,bèè ta ko tot tot!,0.667
+128,simple,je vais manger,n bɛ na dúnli kɛ,n bɛ na dúnli kɛ,na,VERB,True,True,True,True,True,O bɛ wele ko Azawadi.,0.571
+129,simple,il va partir,a bɛ na fáɲi,a bɛ na fáɲi,bɛ,VERB,True,True,True,True,True,u tagara dògònyiniyòrò la.,0.8
+130,simple,je n'irai pas,n tɛ na wá,n tɛ na wá,tɛ,VERB,True,True,True,True,True,u tagara dògònyiniyòrò la.,0.8
+131,simple,je n'ai pas mangé,n ma dumuni kɛ,n ma dumuni kɛ,kɛ,VERB,True,True,True,True,True,o ye o dun.,0.8
+132,simple,il n'a pas parlé,a ma kúma,a ma kúma,kúma,NOUN,True,True,False,True,False,BANINYÈGÈNÈ FURULI,0.667
+133,simple,il mangeait du riz,a tùn bɛ iri dún,a tùn bɛ iri dún,bɛ,VERB,True,True,True,True,True,kònòba ta tora fila.,1.0
+134,simple,je travaillais,n tùn bɛ báara la,n tùn bɛ báara la,bɛ,VERB,True,True,True,True,True,a bè iko kò bamafara!,0.833
+135,simple_purposive_coordinated,Je te donne de l'argent pour cuisiner et manger,n bɛ wári di i ma walasa ka [cuisiner] kɛ ani ka dúnli kɛ,n bɛ wári di i ma walasa ka [cuisiner] kɛ ani ka dúnli kɛ,di,VERB,True,True,True,True,True,ko i ka na an ka a jeni ka a nyimi bani!,0.688
+136,complex_comitative_relative,Je veux manger avec mon mari et ma fille qui est malade,n bɛ ŋàniya ka dúnli kɛ ni n fúrucɛ ni n mùsoma yé mìn jànkarotɔ dòn,n bɛ ŋàniya ka dúnli kɛ ni n fúrucɛ ni n mùsoma yé mìn jànkarotɔ dòn,ŋàniya,VERB,True,True,True,True,True,Dawuda ka kòròkè nana sunògò a ye Dawuda ka kòròkè nyèkili fila bò ka taga ni a ye.,0.667
+137,verb_serial,il donne le livre à l'enfant,a bɛ kìtabu di dén ma,a bɛ kìtabu di dén ma,di,VERB,True,True,True,True,True,o ye ji kè a la.,0.857
+138,privative_pred,sans moi,n kɔ,n kɔ,kɔ,NOUN,True,True,False,True,False,BANINYÈGÈNÈ FURULI,1.0
+139,simple,"sans moi, tu ne pourras pas partir",i tɛ na se ka fáɲi nkɔ,i tɛ na se ka fáɲi nkɔ,tɛ,VERB,True,True,True,True,True,syèdennin ka yèlè ka yèlè ka yèlè.,0.667
+140,noun_phrase,Ce légume est sans cuisson,nin lègimu in yé [cuisson]tan yé,nin lègimu in yé [cuisson]tan yé,[cuisson]tan,VERB,True,True,True,True,True,kònòba ta tora fila.,0.571
+141,simple,il est parti sans avertir,a fáɲira ka sɔrɔ a ma lásɔ̀mili kɛ,a fáɲira ka sɔrɔ a ma lásɔ̀mi,fáɲira,VERB,True,True,True,True,True,a ye dennin nègèn ko u ka taga dògò nyini.,0.636
+142,noun_phrase,sans eau,jítan,jítan,jítan,NOUN,True,True,False,True,False,BANINYÈGÈNÈ FURULI,0.5
+143,noun_phrase,sans argent,wáritan,wáritan,wáritan,NOUN,True,True,False,True,False,BANINYÈGÈNÈ FURULI,0.5
+144,relative_topic,Une femme qui a eu un enfant ne peut pas abandonner son enfant,"númanfɛlaka mìn yé dén sɔrɔ, o tɛ se ka a dén láfìli","númanfɛlaka mìn yé dén sɔrɔ, o tɛ se ka a dén láfìli",mìn,VERB,True,True,True,True,True,olu ye a wele ko a ka na u ka tulonkè kè.,0.733
+145,equative,Les djihadistes montrent clairement qu'ils sont les maîtres du jeu,[djihadiste]w bɛ ɲásili kɛ fɛ́rɛtɛtɛ ko u yé [jeu] mɛtiriw yé,[djihadiste]w bɛ ɲásili kɛ [clairement] ko u yé [jeu] mɛtiriw yé,bɛ,VERB,True,True,True,True,True,"a fa sara, a ba sara ka a tò to a ba sinamuso ye.",0.5
+146,comitative,je suis avec mon mari,n ni n fúrucɛ dòn,n ni n fúrucɛ dòn,dòn,VERB,True,True,True,True,True,Cɛkɔrɔba n'a denw,0.8
+147,comitative,Je suis avec la fille du frère de mon ami,n ni n téri bálimakɛ mùsoma dòn,n ni n téri bálimakɛ mùsoma dòn,bálimakɛ,VERB,True,True,True,True,True,n ma bòra kalakari wo kalakari.,0.75
+148,simple,je mange avec mon ami,n bɛ dumuni kɛ ni n téri yé,n bɛ dumuni kɛ ni n téri yé,kɛ,VERB,True,True,True,True,True,u ye a konyè kè ten.,0.667
+149,reciprocal,nous nous aimons,an bɛ ɲɔgɔn kànu,an bɛ ɲɔgɔn kànu,bɛ,VERB,True,True,True,True,True,O bɛ wele ko Azawadi.,0.667
+150,reciprocal,ils se battent,u bɛ ɲɔgɔn gòsi,u bɛ ɲɔgɔn gòsi,bɛ,VERB,True,True,True,True,True,a jiginna dencè.,0.6
+151,reciprocal,nous nous parlons,an bɛ kúma ɲɔgɔn fɛ,an bɛ kúma ɲɔgɔn fɛ,bɛ,VERB,True,True,True,True,True,kònòba ta tora fila.,1.0
+152,imperative,mange !,dumuni kɛ,dumuni kɛ,kɛ,NOUN,True,True,False,True,False,BANINYÈGÈNÈ FURULI,1.0
+153,imperative,pars !,fáɲi,fáɲi,fáɲi,NOUN,True,True,False,True,False,BANINYÈGÈNÈ FURULI,0.5
+154,imperative,viens !,nà,nà,nà,NOUN,True,True,False,True,False,BANINYÈGÈNÈ FURULI,0.5
+155,imperative,parle bambara !,bambara kúma,bambara kúma,kúma,NOUN,True,True,False,True,False,BANINYÈGÈNÈ FURULI,1.0
+156,prohibitive,ne mange pas !,kàna dumuni kɛ,kàna dumuni kɛ,kàna,VERB,True,True,False,True,False,BANINYÈGÈNÈ FURULI,0.667
+157,prohibitive,ne pars pas !,kàna fáɲi,kàna fáɲi,kàna,VERB,True,True,False,True,False,a jiginna dencè.,0.5
+158,prohibitive,ne parle pas !,kàna kúma,kàna kúma,kàna,VERB,True,True,False,True,False,a jiginna dencè.,0.5
+159,ownership,ce sac est pour ma fille,nin jɔ̀bɔrɔ in yé n mùsoma ta yé,nin jɔ̀bɔrɔ in yé n mùsoma ta yé,ta,VERB,True,True,False,True,False,u ba ninw fana bèè furu sara.,0.455
+160,ownership_pron,Ce sac est pour moi,nin jɔ̀bɔrɔ in yé n ta yé,nin jɔ̀bɔrɔ in yé n ta yé,yé,NOUN,True,True,False,True,False,u ba ninw fana bèè furu sara.,0.5
+161,noun_phrase,la maison de mon ami,n téri ka só,n téri ka só,só,NOUN,True,True,False,True,False,Kusuba denkè wolo bè n kan!,0.571
+162,noun_phrase,la participation citoyenne et démocratique,[participation] jàmaden ni demokaratiki,[participation] jàmaden ni demokaratiki,jàmaden,NOUN,True,True,False,True,False,Cɛkɔrɔba n'a denw,1.0
+163,noun_phrase,La décision finale de la constitution du Mali,Mali dácogo làtigɛ [final],Mali dácogo làtigɛ [final],[final],NOUN,True,True,False,True,False,BANINYÈGÈNÈ FURULI,0.5
+164,noun_phrase,le champ du vieux,màakɔrɔlama ka fòro,màakɔrɔlama fòro,fòro,PROPN,True,True,False,True,False,BANINYÈGÈNÈ FURULI,1.0
+165,noun_phrase,la mère de l'enfant,dén bámuso,dén bámuso,bámuso,NOUN,True,True,False,True,False,SYÈFAN ANI SYÈDENNIN,0.667
+166,noun_phrase,la maison de Musa,Musa ka só,Musa ka só,só,NOUN,True,True,False,True,False,ko ayi.,0.5
+167,infinitive,Promouvoir le bambara et les autres langues nationales,ka bambara ni Nasiyonali nɛ̀n wɛ́rɛ [promouvoir],ka bambara ni Nasiyonali nɛ̀n wɛ́rɛ [promouvoir],[promouvoir],NOUN,True,True,False,True,False,n ma bòra kalakari wo kalakari.,0.556
+168,infinitive,manger du riz,ka iri dún,ka iri dún,dún,VERB,True,True,False,True,False,o ye o dun.,0.6
+169,infinitive,parler bambara,ka bambara kúma,ka bambara kúma,kúma,NOUN,True,True,False,True,False,BANINYÈGÈNÈ FURULI,0.667
+170,infinitive,ne pas manger,kàna dumuni kɛ,kàna dumuni kɛ,kàna,VERB,True,True,False,True,False,BANINYÈGÈNÈ FURULI,0.667
+171,infinitive,"Promouvoir le bambara et les autres langues nationales, inclusion sociale, meilleure circulation de l'information",ka bambara ni Nasiyonali nɛ̀n wɛ́rɛ [promouvoir] [inclusion] sosiyaliman [circulation] kùnnafoni [meilleur],ka bambara ni Nasiyonali nɛ̀n wɛ́rɛ ni [circulation] [promouvoir] [inclusion] sosiyaliman kùnnafoni,kùnnafoni,NOUN,True,True,True,True,True,"a bolo tigèlen tuma min, jinamuso ye i kanto ko ne kò ani i ba kò, jòn nugulen bè?",0.478
+172,complex_relative,"Mais la situation reste très incertaine au Mali, qui s'enfonce toujours plus dans le chaos","[Mais] tɔ̀rɔkɔtɔrɔkɔ bɛ tó [incertain] ndére Mali la, min tɛ a yɛrɛ pénpe kádawuw [chaos] kɔnɔ","nka lújura bɛ [incertain] ndére tó Mali la, jɔn tɛ ɲɔgɔn pénpe kádawuw [chaos] kɔnɔ",lújura,VERB,True,True,True,True,True,"a ba nana ka bò a ka mugufyèyòrò, a bè ŋunuma gurubaguruba!",0.765
+173,existential_nominal,Il existe un frein politique lié aux logiques de pouvoir des élites qui veulent maintenir la masse populaire à l'écart de la gouvernance,"nɛ̀njuru pólitiki sìrilen [élites] ka sémako [logique]w la, min bɛ ŋàniya ka [masse] popilɛri lámìnɛ [gouvernance] [écart] la",nɛ̀njuru pólitiki sìrilen bɛ min bɛ ŋàniya ka [masse] popilɛri lámìnɛ [gouvernance] [écart] ma sémako [élite] [logique] la,bɛ,VERB,True,True,True,True,True,"a bè a kò la tuma min, o kò kotò bawo kòfara bòlen dòn iko disirifè cogo min.",0.52
+174,complex_noun_phrase,"Chercheur associé à l'Institut français des relations internationales, Thierry Vircoulon revient pour 20 Minutes sur la situation explosive au Mali","ɲíninikɛla jɛ̀len cɛ́sira Institut faransɛ ɛntɛrinasiyɔnali la, Thierry Vircoulon bɛ kɔ́sègin [20] mínitiw ye Mali la dábolo bàlawumaman kan","[chercheur] jɛ̀len bɛ cɛ́sira Institut faransɛman ɛntɛrinasiyɔnaliman la, Thierry Vircoulon bɛ kɔ́sègin [20] mínitiw ye Mali la kùnnasirilenya bàlawumaman kan",jɛ̀len,VERB,True,True,True,True,True,"o tagara o fò o cènin fila bamuso fè, ko e ma ye ko a denw bè yèlèn na lemurusun na ?",0.643
+175,complex_purposive,"L'université de Kumamoto recrute actuellement des participants pour le Programme d'apprentissage coopératif japonais, ainsi que des étudiants japonais pour la soutenir","Kumamoto iniwɛrisite bɛ [participant]w [recruter] hálisà dègeli pòrogaramu zapɔnɛ [coopératif] ye, ka fara kàlandenbaw [japonais]w kan walasa ka a dòndo","Kumamoto iniwɛrisite bɛ sélikɛlaw [recruter] hálisà dègeli pòrogaramu zapɔnɛ [coopératif] ye, ka fara kàlandenbaw kan walasa ka a dòndo",bɛ,VERB,True,True,True,True,True,"Amadu Tara ye kuma nyèfò olu fana ye, u ka sòrò ka taga u ka dugu.",0.727
+176,locative,les gens sont ici,[gens]w bɛ yàn,fàsojamaw bɛ yàn,bɛ,VERB,True,True,True,True,True,a jiginna dencè.,0.75
+177,locative,il est là,a bɛ yèn,a bɛ yèn,bɛ,VERB,True,True,True,True,True,a jiginna dencè.,0.75
+178,simple,deux hommes sont partis,mɔ̀gɔw fila fáɲira,mɔ̀gɔw fila fáɲira,fáɲira,VERB,True,True,True,True,True,DENMUSO FILA,0.667
+179,simple,trois enfants mangent du riz,dénw saba bɛ iri dún,dénw saba bɛ iri dún,bɛ,VERB,True,True,True,True,True,a jiginna dencè.,0.8
+180,locative,cinq femmes sont ici,númanfɛlakaw duuru bɛ yàn,númanfɛlakaw duuru bɛ yàn,bɛ,VERB,True,True,True,True,True,O bɛ wele ko Azawadi.,0.667
+181,simple,j'ai acheté deux livres,n yé kìtabuw fila sàn,n yé kìtabuw fila sàn,sàn,VERB,True,True,True,True,True,a den kelen bè yen.,0.571
+182,simple,je suis en train de travailler,n bɛ kà báara kɛ,n bɛ kà báara kɛ,bɛ,VERB,True,True,True,True,True,a bɛ fɔ ko kɔrɔtɔ ye sogosan ye.,0.556
+183,simple,je ne travaille pas,n tɛ báara la,n tɛ báara la,báara,VERB,True,True,True,True,True,dennin bolo tigèra.,1.0
+184,simple,j'ai travaillé,n yé báara kɛ,n yé báara kɛ,báara,VERB,True,True,True,True,True,kònòba ta tora fila.,0.8
+185,simple,je n'ai pas travaillé,n ma báara kɛ,n ma báara kɛ,báara,VERB,True,True,True,True,True,kònòba ta tora fila.,0.8
+186,simple,je ne travaillais pas,n tùn tɛ báara la,n tùn tɛ báara la,tɛ,VERB,True,True,True,True,True,a bè iko kò bamafara!,0.833
+187,simple,je travaillerai,n bɛ na báara kɛ,n bɛ na báara kɛ,bɛ,VERB,True,True,True,True,True,a bɛ fɔ ko kɔrɔtɔ ye sogosan ye.,0.556
+188,temporal,quand il vient,túma mín a bɛ nà,túma mín a bɛ nà,bɛ,VERB,True,True,True,True,True,a ko ne bè taga Maromaro.,0.714
+189,simple,les bambara disent que la raison de la venue de quelqu'un est plus importante que soi-même,bambaraw ko mɔ̀gɔ dɔ [venue] jó ka kólogirinman ka tɛmɛ a yɛrɛ kan,bambaraw ko mɔ̀gɔ dɔ jɔ̀kun ka kólogirinman ka tɛmɛ yɛrɛ kan,ko,VERB,True,True,True,True,True,a ye i yèrè kè limògò ye ka tugun o kò.,0.917
+190,optatif,que tu viennes,i ka nà,i ka nà,nà,NOUN,True,True,False,True,False,BANINYÈGÈNÈ FURULI,0.667
+191,optatif,que Moussa mange,Moussa ka dumuni kɛ,Moussa ka dumuni kɛ,kɛ,VERB,True,True,False,True,False,maaninfin dun bè kaba wolo?,0.667
+192,optatif,que Dieu t'aide,Dieu ka bólodɛ̀mɛ kɛ i ma,i bɛ Dieu,bɛ,VERB,True,True,True,True,True,a ko ayi!,0.75
+193,venir_de,Je viens de Bamako,n bɛ bɔ Bamako la,n bɛ bɔ Bamako la,bɛ,VERB,True,True,True,True,True,den nin ye muso ye.,0.833
+194,venir_de,Je viens de l'école,n bɛ bɔ kàlankɛyɔrɔ la,n bɛ bɔ kàlankɛyɔrɔ la,bɛ,VERB,True,True,True,True,True,den nin ye muso ye.,0.833
+195,venir_de,Je viens de manger,n bɔra ka dúnli kɛ,n bɔra ka dúnli kɛ,bɔra,VERB,True,True,True,True,True,syèdennin yèlènna ka lenburusun yuguyugu.,0.833
+196,venir_de,Il vient de partir,a bɔra ka fáɲi,a bɔra ka fáɲi,bɔra,VERB,True,True,True,True,True,dennin wulila ka taga.,0.8
+197,conj_avec,elle alla au village et demande des infos,a wára wa a yé ɛnfo ɲɛ́juguya dùgu la,a wára wa a yé ɛnfo ɲɛ́juguya dùgu la,wára,VERB,True,True,True,True,True,O fana taara kabini sɔgɔma fo tilelafana dun tuma.,0.727
+198,verb_serial,elle alla trouver et demande des informations,a wára ka ɲɛ́sɔ̀rɔ wa a bɛ kùnnafoni ɲɛ́juguya,a wára ka ɲɛ́sɔ̀rɔ wa a bɛ kùnnafoni ɲɛ́juguya,wára,VERB,True,True,True,True,True,u ye a konyè kè ten.,0.6
+199,comitative,il est venu avec moi,a nàra ni n yé,a nàra ni n yé,nàra,VERB,True,True,True,True,True,a bè iko kò bamafara!,0.833
+200,comitative,elle travaille avec lui,a bɛ báara la ni ale yé,a bɛ báara la ni ale yé,bɛ,VERB,True,True,True,True,True,a ko i ba tè ne ye.,0.667
+201,comitative,Il est venu avec une dentition complète,a nàra ni [dentition] kɔ́nbilen yé,a nàra ni [dentition] kɔ́nbilen yé,nàra,VERB,True,True,True,True,True,kolokurun jalan bè a bolo.,0.714
+202,temporal_np,Depuis quelques mois,kabini [mois] damadɔw,kabini [mois] damadɔw,damadɔw,NOUN,True,True,False,True,False,BANINYÈGÈNÈ FURULI,0.667
+203,temporal_np,depuis quelques jours,kabini [jour] damadɔw,kabini [jour] damadɔw,damadɔw,NOUN,True,True,False,True,False,BANINYÈGÈNÈ FURULI,0.667
+204,temporal_np,depuis quelques années,kabini saanw damadɔw,kabini saanw damadɔw,damadɔw,NOUN,True,True,False,True,False,BANINYÈGÈNÈ FURULI,0.667
+205,ccomp,sais-tu que je suis un enfant ?,i bɛ dɔ́n ko n yé dén yé wà ?,i bɛ dɔ́n ko n yé dén yé wà ?,bɛ,VERB,True,True,True,True,True,a ye a tògò fò a ye ko a tògò ko Baninyègènè.,0.769
+206,ccomp_savoir,je sais que tu es mon ami,n bɛ dɔ́n ko i yé n téri yé,n bɛ dɔ́n ko i yé n téri yé,bɛ,VERB,True,True,True,True,True,ko e ko n na saganin nana bi wa ?,0.462
+207,ccomp_savoir,ils savent que nous sommes ici,u bɛ dɔ́n ko anw bɛ yàn,u bɛ dɔ́n ko anw bɛ yàn,bɛ,VERB,True,True,True,True,True,a ko: e de ye nin ye wa?,0.7
+208,ccomp_dire,il dit qu'il mange,a ko a bɛ dúnli kɛ,a ko a bɛ dúnli kɛ,ko,VERB,True,True,True,True,True,a ko an ka an suma !,0.857
+209,ccomp_dire,ils disent que la route est longue,u ko síraden ka búlubulu,u ko síraden ka búlubulu,ko,VERB,True,True,True,True,True,a ko i ba tè ne ye.,0.625
+210,ccomp_dire,elle a dit que Musa est parti,a yé fɔ ko Musa fáɲira,a yé fɔ ko Musa fáɲira,ko,VERB,True,True,True,True,True,"o kò kotò, a bolo bèè tigèra.",0.667
+211,modal_pouvoir,nous pouvons partir,anw bɛ se ka fáɲi,anw bɛ se ka fáɲi,se,VERB,True,True,True,True,True,Ala ye a ta ka bin.,0.714
+212,modal_pouvoir,il ne peut pas manger,a tɛ se ka dúnli kɛ,a tɛ se ka dúnli kɛ,se,VERB,True,True,True,True,True,a ma se ka a den dun.,0.75
+213,modal_pouvoir,elle peut venir,a bɛ se ka nà,a bɛ se ka nà,se,VERB,True,True,True,True,True,Ala ye a ta ka bin.,0.714
+214,modal_pouvoir,tu ne peux pas partir,i tɛ se ka fáɲi,i tɛ se ka fáɲi,se,VERB,True,True,True,True,True,dennin wulila ka taga.,0.667
+215,past_intransitive,ils ne sont pas arrivés,u ma sé,u ma sé,sé,NOUN,True,True,False,True,False,BANINYÈGÈNÈ FURULI,0.667
+216,past_intransitive,il n'est pas tombé,a ma wɔ̀lɔwɔlɔ,a ma wɔ̀lɔwɔlɔ,ma,NOUN,True,True,False,True,False,BANINYÈGÈNÈ FURULI,0.667
+217,past_intransitive,elle n'est pas venue,a ma nà,a ma nà,nà,NOUN,True,True,False,True,False,BANINYÈGÈNÈ FURULI,0.667
+218,habitude,elle ne mangeait pas,a tùn tɛ dumuni kɛ,a tùn tɛ dumuni kɛ,tɛ,VERB,True,True,True,True,True,Kusuba denkè wolo bè n kan!,0.714
+219,habitude,nous ne parlions pas bambara,anw tùn tɛ bambara kúma,anw tùn tɛ bambara kúma,tɛ,VERB,True,True,True,True,True,a bè iko kò bamafara!,0.833
+220,passe_anterieur,il n'avait pas mangé,a tùn ma dumuni kɛ,a tùn ma dumuni kɛ,kɛ,VERB,True,True,True,True,True,o ye ji kè a la.,0.714
+221,conditional,"Si j'ai du courage, saurait-on ?","ní dùsukolo bɛ n fɛ, a bɛ na dɔ́n wà ?","ní dùsukolo bɛ n fɛ, a bɛ na dɔ́n wà ?",bɛ,VERB,True,True,True,True,True,"a tagara a fò a bamuso ye ko ne ye baba wele, o ko fònhòn !",0.706
+222,prohibitive,Ne mange pas le riz,kàna iri dún,kàna iri dún,kàna,VERB,True,True,False,True,False,a jiginna dencè.,0.4
+223,temporal_avoir_possessive,quand il eut ton appel,túma mín a yé i ka wéle sɔrɔ,túma mín a yé i wélewele sɔrɔ,sɔrɔ,VERB,True,True,True,True,True,e kò ka nyi ne ba kò ye.,0.6
+224,temporal_passive,Quand cela fut fait,túma mín o tùn kɛ́ra,túma mín o tùn kɛ́ra,kɛ́ra,VERB,True,True,True,True,True,Cɛkɔrɔba n'a denw,0.8
+225,fixed_phrase,Ainsi donc,ola sa,ola sa,ola,VERB,True,True,False,True,False,ko ayi.,0.667
+226,restrictive,tu ne serais qu'un pleutre,i tɛ na kɛ dɔwɛrɛ yé ni sègɛ tɛ,i tɛ na kɛ dɔwɛrɛ yé ni sègɛ tɛ,tɛ,VERB,True,True,True,True,True,a nana u ma ko aw ni ce!,0.636
+227,quest_ce_que,Qu'est-ce qu'il pourrait t'arriver là-bas ?,mún bɛ na se ka i sé yèn [bas] ?,mún bɛ na se ka i sé yèn [bas] ?,bɛ,VERB,True,True,True,True,True,ne bè taga ka taga i ka filen kala Maromaroko.,0.909
+228,quest_ce_que_real,Qu'est-ce qu'il peut faire ?,a bɛ se ka mún kɛ́ ?,a bɛ se ka mún kɛ́ ?,se,VERB,True,True,True,True,True,baramuso bè girin ka bò san fè.,0.875
+229,relative,Toi qui prends l'ennemi vivant,e mìn bɛ júgu níma mɔ́n,e mìn bɛ júgu [vivant] mɔ́n,bɛ,VERB,True,True,True,True,True,Kusuba denkè wolo bè n kan!,0.857
+230,valoir_peine_sov,cela vaut la peine de prendre un fusil,o bɛ sɛ̀gɛn [valoir] ka gàtan mɔ́n,o bɛ sɛ̀gɛn [valoir] ka gàtan mɔ́n,bɛ,VERB,True,True,True,True,True,"a ko ònhòn, ne de ye a wolo.",0.7
+231,restrictive,tu ne serais que jaloux,i tɛ na kɛ dɔwɛrɛ yé ni kèle tɛ,i tɛ na kɛ dɔwɛrɛ yé ni kèle tɛ,tɛ,VERB,True,True,True,True,True,a nana u ma ko aw ni ce!,0.636
+232,refl_actif,il s'est lavé,a yé a jó,a yé a jó,jó,NOUN,True,True,False,True,False,BANINYÈGÈNÈ FURULI,0.5
+233,refl_actif,elle se lave,a bɛ a jó,a bɛ a jó,bɛ,VERB,True,True,True,True,True,kònòba ta tora fila.,0.8
+234,refl_actif,il s'est lavé lui même,a yé a yɛrɛ jó,a yé a yɛrɛ jó,yɛrɛ,VERB,True,True,True,True,True,u ye a konyè kè ten.,0.714
+235,refl_accidentel,il s'est blessé,a yé a yɛrɛ màjógin,a yé a yɛrɛ màjógin,màjógin,VERB,True,True,False,True,False,i ba be i muso dun.,0.5
+236,refl_posture,il s'est assis,a yé a sìgi,a yé a sìgi,sìgi,VERB,True,True,True,True,True,a ko n kolo susu!,0.667
+237,refl_idiom,il s'est mis à pleurer,a yé a yɛrɛ bìla kàsi la,a yé a yɛrɛ bìla kàsi la,bìla,VERB,True,True,True,True,True,a ko i ba tè ne ye.,0.667
+238,simple_iobj,Il me parle,a bɛ kúma n fɛ,a bɛ kúma n fɛ,bɛ,VERB,True,True,True,True,True,bèè ta ko tot tot!,0.571
+239,verb_serial,elle me donne un livre,n bɛ kìtabu kelen di i ma,a bɛ kìtabu kelen di n ma,bɛ,VERB,True,True,True,True,True,a ko a ma n kò ko.,0.667
+240,content_question,Qu'est-ce qu'il pourrait faire ?,a bɛ na se ka mún kɛ́ ?,a bɛ na se ka mún kɛ́ ?,bɛ,VERB,True,True,True,True,True,syèdennin ka yèlè ka yèlè ka yèlè.,0.778
+241,future_have,Tu auras une voiture,i bɛ na wátiri sɔrɔ,i bɛ na wátiri sɔrɔ,na,VERB,True,True,True,True,True,syèdennin yèlènna ka lenburusun yuguyugu.,0.833
+242,future_have,Elle aura de l'argent,a bɛ na wári sɔrɔ,a bɛ na wári sɔrɔ,bɛ,VERB,True,True,True,True,True,a ko nin ye jòn ye?,0.714
+243,future_have,J'aurai un frère,n bɛ na bálimakɛ sɔrɔ,n bɛ na bálimakɛ sɔrɔ,na,VERB,True,True,True,True,True,dennin wulila ka taga.,0.667
+244,future_have,Il aura du succès,a bɛ na táɲɛw sɔrɔ,a bɛ na táɲɛw sɔrɔ,bɛ,VERB,True,True,True,True,True,a ko nin ye jòn ye?,0.714
+245,future_have,Nous aurons des enfants,anw bɛ na dénw sɔrɔ,anw bɛ na dénw sɔrɔ,bɛ,VERB,True,True,True,True,True,a ko nin ye jòn ye?,0.714
+246,future_have,ils n'auront pas de voiture,u tɛ na wátiri sɔrɔ,u tɛ na wátiri sɔrɔ,tɛ,VERB,True,True,True,True,True,a ko nin ye jòn ye?,0.714
+247,past_transitive_avoir_eu,j'ai eu un mari,n yé fúrucɛ sɔrɔ,n yé fúrucɛ sɔrɔ,sɔrɔ,VERB,True,True,False,True,False,mògò si ma i tògò dòn.,0.571
+248,past_transitive_avoir_eu,elle a eu des enfants,a yé dénw sɔrɔ,a yé dénw sɔrɔ,sɔrɔ,VERB,True,True,True,True,True,ko an bèè den don!,0.667
+249,past_transitive_avoir_eu,tu as eu de la chance,i yé tère sɔrɔ,i yé tère sɔrɔ,tère,VERB,True,True,True,True,True,bèè ta ko tot tot!,0.667
+250,past_transitive_avoir_eu,il a eu un problème,a yé báasi sɔrɔ,a yé báasi sɔrɔ,sɔrɔ,VERB,True,True,True,True,True,dennin bolo tigèra.,0.6
+251,past_transitive_avoir_eu,nous avons eu des difficultés,anw yé màgɛlɛyaw sɔrɔ,anw yé màgɛlɛyaw sɔrɔ,sɔrɔ,VERB,True,True,True,True,True,ko an bèè den don!,0.667
+252,past_have,j'avais une voiture,wátiri tùn bɛ n bóló,wátiri tùn bɛ n bóló,bɛ,VERB,True,True,True,True,True,bèè ta ko tot tot!,0.571
+253,past_have,il avait de l'argent,wári tùn bɛ a bóló,wári tùn bɛ a bóló,bɛ,VERB,True,True,True,True,True,Kusuba denkè wolo bè n kan!,0.714
+254,past_have,elle n'avait pas de frère,bálimakɛ tùn tɛ a fɛ,bálimakɛ tùn tɛ a fɛ,tɛ,VERB,True,True,True,True,True,syèdennin yèlènna ka lenburusun yuguyugu.,0.833
+255,past_have,nous avions un champ,fòro tùn bɛ anw fɛ,fòro tùn bɛ anw fɛ,bɛ,VERB,True,True,True,True,True,kònòba ta tora fila.,0.667
+256,past_have,tu avais de la chance,tère tùn bɛ i fɛ,tère tùn bɛ i fɛ,fɛ,VERB,True,True,True,True,True,an be èndutigènankuru dun bi !,0.833
+257,optatif,Que Dieu vous bénisse,Dieu ka aw dùbabu,aw bɛ Dieu,bɛ,VERB,True,True,True,True,True,a jiginna dencè.,0.75
+258,optatif,Qu'il vienne,a ka nà,a ka nà,nà,NOUN,True,True,False,True,False,BANINYÈGÈNÈ FURULI,0.667
+259,optatif,Qu'ils partent,u ka fáɲi,u ka fáɲi,fáɲi,VERB,True,True,True,True,True,o ye o dun.,0.6
+260,optatif,Que la paix règne,hɛ́rɛ ka [regner],hɛ́rɛ ka [regner],hɛ́rɛ,VERB,True,True,False,True,False,dennin wulila ka taga.,0.6
+261,optatif,Que tu réussisses,i ka ɲɛ̀,i ka ɲɛ̀,ɲɛ̀,NOUN,True,True,False,True,False,BANINYÈGÈNÈ FURULI,0.667
+262,optatif,Que nous mangions ensemble,anw ka dumuni kɛ ánsanbulu,anw ka dumuni kɛ ánsanbulu,kɛ,VERB,True,True,True,True,True,an be èndutigènankuru dun bi !,0.833
+263,conj_verb,il mange et boit,a bɛ dumuni kɛ wa a bɛ jí,a bɛ dumuni kɛ wa a bɛ jí,bɛ,VERB,True,True,True,True,True,a ko èè i tònyògòn tèmènna a la.,0.7
+264,conj_verb,elle chante et danse,a bɛ [chanter] kɛ wa a bɛ [danser],a bɛ [chanter] wa a bɛ dɔ̀n la,bɛ,VERB,True,True,True,True,True,a ye daga fa a kèra sogo ye.,0.889
+265,conj_verb,il est venu et a mangé,a nàra wa a yé dumuni kɛ,a nàra wa a yé dumuni kɛ,nàra,VERB,True,True,True,True,True,n na bòra kònò le n ma!,0.5
+266,modal_pouvoir,tu peux manger,i bɛ se ka dúnli kɛ,i bɛ se ka dúnli kɛ,se,VERB,True,True,True,True,True,Ala ye a ta ka bin.,0.857
+267,modal_pouvoir,nous ne pouvons pas venir,anw tɛ se ka nà,anw tɛ se ka nà,se,VERB,True,True,True,True,True,dennin wulila ka taga.,0.667
+268,modal_pouvoir,elles peuvent travailler,u bɛ se ka báara kɛ,u bɛ se ka báara kɛ,se,VERB,True,True,True,True,True,baramuso bè girin ka bò san fè.,0.75
+269,modal_pouvoir,il pouvait partir,a tùn bɛ se ka fáɲi,a tùn bɛ se ka fáɲi,se,VERB,True,True,True,True,True,a ma se ka a den dun.,0.75
+270,modal_pouvoir,peut-elle partir ?,a bɛ se ka fáɲi wà ?,a bɛ se ka fáɲi wà ?,se,VERB,True,True,True,True,True,baramuso bè girin ka bò san fè.,0.875
+271,modal_pouvoir,il ne pouvait pas manger,a tùn tɛ se ka dúnli kɛ,a tùn tɛ se ka dúnli kɛ,se,VERB,True,True,True,True,True,a ye segi minè ka a fa.,0.875
+272,verb_serial,il me donne de l'argent,a bɛ wári di n ma,a bɛ wári di n ma,di,VERB,True,True,True,True,True,o ye ji kè a la.,0.857
+273,simple,elle lui parle,a bɛ kúma ale fɛ,a bɛ kúma ale fɛ,bɛ,VERB,True,True,True,True,True,a ko e bònè mayira.,0.833
+274,verb_serial,nous leur donnons du riz,anw bɛ iri di u ma,anw bɛ iri di u ma,di,VERB,True,True,True,True,True,o ye ji kè a la.,0.857
+275,verb_serial,je te donne un livre,n bɛ kìtabu kelen di i ma,n bɛ kìtabu kelen di i ma,bɛ,VERB,True,True,True,True,True,a ko nin ye jòn ye?,0.75
+276,simple_iobj,il nous parle,a bɛ kúma anw fɛ,a bɛ kúma anw fɛ,bɛ,VERB,True,True,True,True,True,a ko filen nin bè kala.,0.714
+277,refl_posture,il se lève,a bɛ láyɛ̀lɛn,a bɛ láyɛ̀lɛn,bɛ,VERB,True,True,True,True,True,a jiginna dencè.,0.75
+278,refl_posture,il s'est levé,a láyɛ̀lɛnna,a láyɛ̀lɛnna,láyɛ̀lɛnna,VERB,True,True,True,True,True,lenburu binna.,0.667
+279,refl_accidentel,elle s'est trompée,a ŋànamula,a ŋànamula,ŋànamula,VERB,True,True,True,True,True,lenburu binna.,0.667
+280,refl_idiom,il s'est mis à travailler,a yé a yɛrɛ bìla báara la,a yé a yɛrɛ bìla báara la,bìla,VERB,True,True,True,True,True,a ko i ba tè ne ye.,0.667
+281,refl_actif,elle se regarde,a bɛ a yɛrɛ fílɛ,a bɛ a yɛrɛ fílɛ,bɛ,VERB,True,True,True,True,True,a ko n kolo susu!,0.833
+282,refl_actif,nous nous préparons,anw bɛ anw yɛrɛ fìri,anw bɛ anw yɛrɛ fìri,yɛrɛ,VERB,True,True,True,True,True,an be èndutigènankuru dun bi !,0.833
+283,refl_posture,elle se réveille,a bɛ màkúnu,a bɛ màkúnu,bɛ,VERB,True,True,True,True,True,a ko ayi!,0.75
+284,imperative,viens ici !,nà yàn,nà yàn,yàn,ADV,True,False,False,True,False,BANINYÈGÈNÈ FURULI,1.0
+285,prohibitive,ne fais pas ça !,kàna o kɛ́,kàna o kɛ́,kàna,VERB,True,True,False,True,False,BANINYÈGÈNÈ FURULI,0.667
+286,imperative,aide-moi !,n bólodɛ̀mɛ,n bólodɛ̀mɛ,n,PRON,True,False,False,True,False,dennin dò don.,0.5
+287,prohibitive,ne pleure pas !,kàna kàsi,kàna kàsi,kàna,VERB,True,True,False,True,False,a jiginna dencè.,0.5
+288,imperative_adv,mange vite !,dumuni kɛ súwɛ,dumuni kɛ súwɛ,kɛ,NOUN,True,True,False,True,False,BANINYÈGÈNÈ FURULI,0.667
+289,prohibitive,ne bois pas l'eau !,kàna jí jí,kàna jí jí,kàna,VERB,True,True,False,True,False,BANINYÈGÈNÈ FURULI,0.667
+290,prohibitive,ne mange pas la viande !,kàna sògo dún,kàna sògo dún,kàna,VERB,True,True,False,True,False,a jiginna dencè.,0.4
+291,interrogative,Est-ce qu'il mange ?,Yala a bɛ dumuni kɛ wà ?,Yala a bɛ dumuni kɛ wà ?,bɛ,VERB,True,True,True,True,True,bèè ta ko tot tot!,0.625
+292,interrogative,Est-ce qu'elle travaille ?,Yala a bɛ báara la wà ?,Yala a bɛ báara la wà ?,bɛ,VERB,True,True,True,True,True,a nana u ma ko aw ni ce!,0.778
+293,interrogative,a-t-il mangé ?,a yé dumuni kɛ wà ?,a yé dumuni kɛ wà ?,kɛ,VERB,True,True,False,True,False,u ye a konyè kè ten.,0.625
+294,interrogative,Travailles-tu ?,i bɛ báara la wà ?,i bɛ báara la wà ?,bɛ,VERB,True,True,True,True,True,a ko nin ye jòn ye?,0.857
+295,interrogative,est-il venu ?,a nàra wà ?,a nàra wà ?,nàra,VERB,True,True,True,True,True,a jiginna dencè.,1.0
+296,interrogative,Est-ce qu'ils sont arrivés ?,Yala u séra wà ?,Yala u séra wà ?,séra,VERB,True,True,True,True,True,a jiginna dencè.,0.8
+297,content_question,Qui est-il ?,a yé jɔn yé ?,a yé jɔn yé ?,jɔn,VERB,True,True,False,True,False,u ye a konyè kè ten.,0.714
+298,content_question,Qu'est-ce que tu fais ?,i bɛ mún kɛ́ ?,i bɛ mún kɛ́ ?,bɛ,VERB,True,True,True,True,True,bèè ta ko tot tot!,0.833
+299,content_question,Quand est-il parti ?,a fáɲira túma jùmɛn ?,a fáɲira túma jùmɛn ?,fáɲira,VERB,True,True,True,True,True,u tagara dògònyiniyòrò la.,1.0
+300,content_question,Pourquoi ne viens-tu pas ?,i tɛ nà mún kósɔn ?,i tɛ nà mún kósɔn ?,tɛ,VERB,True,True,True,True,True,n bòra kònò le n ma!,0.857
+301,content_question,Combien coûte ce livre ?,nin kìtabu in yé jóli yé ?,nin kìtabu in yé jóli yé ?,yé,NOUN,True,True,False,True,False,u ba ninw fana bèè furu sara.,0.667
+302,content_question,Qui a mangé ?,jɔn yé dumuni kɛ ?,jɔn yé dumuni kɛ ?,kɛ,VERB,True,True,False,True,False,i ba be i muso dun.,0.714
+303,relative,La femme qui mange,númanfɛlaka mìn bɛ dúnli kɛ,númanfɛlaka mìn bɛ dúnli kɛ,kɛ,VERB,True,True,True,True,True,o ye ji kè a la.,0.714
+304,relative,Le livre que j'ai acheté,n yé kìtabu mìn sàn,n yé kìtabu mìn sàn,mìn,VERB,True,True,True,True,True,Kusuba denkè wolo bè n kan!,0.714
+305,relative,L'homme qui est parti,mɔ̀gɔ mìn fáɲira,mɔ̀gɔ mìn fáɲira,fáɲira,VERB,True,True,True,True,True,dennin dò don.,0.75
+306,relative,L'enfant qui pleure,dén mìn bɛ kàsi,dén mìn bɛ kàsi,bɛ,VERB,True,True,True,True,True,kònòba ta tora fila.,0.8
+307,relative,La maison que nous avons construite,anw yé só mìn [construire],anw yé só mìn [construire],mìn,VERB,True,True,False,True,False,u ye muso nin kun tigè a la.,0.556
+308,ccomp,tu sais qu'il est parti ?,i bɛ dɔ́n ko a fáɲira wà ?,i bɛ dɔ́n ko a fáɲira wà ?,bɛ,VERB,True,True,True,True,True,a ko: e de ye nin ye wa?,0.8
+309,ccomp_dire,elle dit qu'elle partira,a ko a bɛ na fáɲi,a ko a bɛ na fáɲi,ko,VERB,True,True,True,True,True,a ko ne bè taga Maromaro.,0.857
+310,ccomp,nous savons qu'il est là,anw bɛ dɔ́n ko a bɛ yèn,anw bɛ dɔ́n ko a bɛ yèn,bɛ,VERB,True,True,True,True,True,a ko: e de ye nin ye wa?,0.7
+311,ccomp_dire,il dit qu'il ne mange pas,a ko a tɛ dúnli kɛ,a ko a tɛ dúnli kɛ,ko,VERB,True,True,True,True,True,kònòba ta tora fila.,0.571
+312,ccomp,je sais que tu es là,n bɛ dɔ́n ko i bɛ yèn,n bɛ dɔ́n ko i bɛ yèn,bɛ,VERB,True,True,True,True,True,a ko: e de ye nin ye wa?,0.7
+313,ccomp_dire,ils disent qu'il est venu,u ko a nàra,u ko a nàra,ko,VERB,True,True,True,True,True,a ko baasi tè.,0.8
+314,ccomp_dire,il a dit qu'il mangeait,a yé fɔ ko a tùn bɛ dúnli kɛ,a yé fɔ ko a tùn bɛ dúnli kɛ,ko,VERB,True,True,True,True,True,ale denkènin o tògò ye ko Jasun ba yèrè o tògò ye ko Nasun.,0.6
+315,ccomp_dire,ils ont dit qu'il était parti,u tùn yé fɔ ko a tùn fáɲira,u tùn yé fɔ ko a tùn fáɲira,tùn,VERB,True,True,True,True,True,"o kò kotò, a bolo bèè tigèra.",0.545
+316,venir_de,Ils viennent du marché,u bɛ bɔ súgu la,u bɛ bɔ súgu la,bɛ,VERB,True,True,True,True,True,den nin ye muso ye.,0.833
+317,venir_de,Elle vient de la mosquée,a bɛ bɔ [mosquée] la,a bɛ bɔ [mosquée] la,bɛ,VERB,True,True,True,True,True,den nin ye muso ye.,0.833
+318,venir_de,Nous venons de Bamako,anw bɛ bɔ Bamako la,anw bɛ bɔ Bamako la,bɛ,VERB,True,True,True,True,True,den nin ye muso ye.,0.833
+319,venir_de,Elle vient de travailler,a bɔra ka báara kɛ,a bɔra ka báara kɛ,bɔra,VERB,True,True,True,True,True,dennin wulila ka taga.,0.667
+320,venir_de,tu viens d'où ?,i bɛ bɔ mín ?,i bɛ bɔ mín ?,bɛ,VERB,True,True,True,True,True,u tagara dògònyiniyòrò la.,1.0
+321,comitative,il est venu avec ses enfants,a nàra ni a ka dén yé,a nàra ni a ka dén yé,nàra,VERB,True,True,True,True,True,"o kòfè, u juguyara dennin na.",0.667
+322,simple,je mange avec ma famille,n bɛ dumuni kɛ ni n ka dénbaya yé,n bɛ dumuni kɛ ni n dénbaya yé,kɛ,VERB,True,True,True,True,True,u ye a konyè kè ten.,0.667
+323,comitative,il est parti avec ses amis,a fáɲira ni a téri yé,a fáɲira ni a ka téri yé,fáɲira,VERB,True,True,True,True,True,A taara kabini sɔgɔma fo tilelafana dun tuma.,0.778
+324,comitative,elle travaille avec son mari,a bɛ báara la ni a fúrucɛ yé,a bɛ báara la ni a ka fúrucɛ yé,bɛ,VERB,True,True,True,True,True,a ko a tè kala yòrò si ni Maromaro jinamuso tè.,0.615
+325,prohibitive,Ne bois pas le lait,kàna nɔ́nɔ jí,kàna nɔ́nɔ jí,kàna,VERB,True,True,False,True,False,den nin ye muso ye.,0.5
+326,prohibitive,Ne prends pas ça,kàna o mɔ́n,kàna o mɔ́n,kàna,VERB,True,True,False,True,False,u tagara dògònyiniyòrò la.,0.6
+327,restrictive,tu n'es qu'un enfant,i tɛ dɔwɛrɛ yé ni dén tɛ,i tɛ dɔwɛrɛ yé ni dén tɛ,tɛ,VERB,True,True,True,True,True,a ko aw ni ce!,0.625
+328,restrictive,il n'est qu'un lâche,a tɛ dɔwɛrɛ yé ni [lâche] tɛ,a tɛ dɔwɛrɛ yé ni [lâche] tɛ,tɛ,VERB,True,True,True,True,True,a ko aw ni ce!,0.625
+329,restrictive,elle n'est que belle,a tɛ dɔwɛrɛ yé ni [bel] tɛ,a tɛ dɔwɛrɛ yé ni [bel] tɛ,tɛ,VERB,True,True,True,True,True,a ko aw ni ce!,0.625
+330,content_question,Qu'est-ce qu'il a fait ?,a yé mún kɛ́ ?,a yé mún kɛ́ ?,mún,VERB,True,True,False,True,False,u ye a konyè kè ten.,0.714
+331,quest_ce_que,Qu'est-ce que vous voulez ?,aw bɛ mún ŋàniya ?,aw bɛ mún ŋàniya ?,ŋàniya,VERB,True,True,True,True,True,o ye o dun.,1.0
+332,relative,L'homme que tu vois est mon ami,"i bɛ mɔ̀gɔ mìn yé , o yé n téri yé","i bɛ mɔ̀gɔ mìn yé , o yé n téri yé",bɛ,VERB,True,True,True,True,True,a ko n ba sinamuso ka filen cira n bolo.,0.833
+333,valoir_peine,cela ne vaut pas la peine,o tɛ sɛ̀gɛn [valoir],o tɛ sɛ̀gɛn [valoir],tɛ,VERB,True,True,True,True,True,a jiginna dencè.,0.6
+334,experiencer,J'ai faim,dún-kà-fá bɛ n la,dún-kà-fá bɛ n la,bɛ,VERB,True,True,True,True,True,u tagara dògònyiniyòrò la.,0.8
+335,experiencer,J'ai soif,jíminnɔgɔ bɛ n la,jíminnɔgɔ bɛ n la,bɛ,VERB,True,True,True,True,True,u tagara dògònyiniyòrò la.,0.8
+336,experiencer,il a peur,a jàpapalen dòn,a jàpapalen dòn,jàpapalen,VERB,True,True,True,True,True,a jiginna dencè.,0.75
+337,experiencer,elle a honte,a màlolen dòn,a màlolen dòn,màlolen,VERB,True,True,True,True,True,a jiginna dencè.,0.75
+338,experiencer,j'ai sommeil,sùnɔgɔ bɛ n la,n sùnɔgɔlen dòn,sùnɔgɔlen,VERB,True,True,True,True,True,a jiginna dencè.,0.75
+339,experiencer,nous avons froid,nɛ́nɛ bɛ anw la,nɛ́nɛ bɛ anw la,bɛ,VERB,True,True,True,True,True,u tagara dògònyiniyòrò la.,0.8
+340,experiencer,tu as chaud,gòni bɛ i la,gòni bɛ i la,bɛ,VERB,True,True,True,True,True,u tagara dògònyiniyòrò la.,0.8
+341,experiencer,je n'ai pas faim,dún-kà-fá tɛ n la,dún-kà-fá tɛ n la,tɛ,VERB,True,True,True,True,True,u tagara dògònyiniyòrò la.,0.8
+342,experiencer,il n'a pas peur,a jàpapalen tɛ,a jàpapalen tɛ,jàpapalen,VERB,True,True,True,True,True,a ko ayi!,0.75
+343,experiencer,j'ai mal à la tête,n kùn bɛ n dádigi,n kùn bɛ n dádigi,dádigi,VERB,True,True,True,True,True,ne ba dun ma kaba wolo sa.,0.625
+344,experiencer,elle a mal au ventre,a nàga bɛ a dádigi,a nàga bɛ a dádigi,nàga,VERB,True,True,True,True,True,syèdennin yèlènna ka lenburusun yuguyugu.,0.833
+345,experiencer,il a mal aux pieds,a kɔ̀gɔɲɛ bɛ a dádigi,a kɔ̀gɔɲɛ bɛ a dádigi,bɛ,VERB,True,True,True,True,True,a ko baasi tè.,0.667
+346,freq,tous les jours,[jour] bɛɛ,[jour] bɛɛ,[jour],NOUN,True,True,False,True,False,dennin dò don.,0.5
+347,freq,chaque jour,[jour] ò [jour],[jour] ò [jour],[jour],NOUN,True,True,False,True,False,BANINYÈGÈNÈ FURULI,0.667
+348,freq,chaque mois,[mois] ò [mois],[mois] ò [mois],[mois],NOUN,True,True,False,True,False,BANINYÈGÈNÈ FURULI,0.667
+349,freq,chaque semaine,dɔ́gɔfurancɛ ò dɔ́gɔfurancɛ,dɔ́gɔfurancɛ ò dɔ́gɔfurancɛ,ò,NOUN,True,True,False,True,False,BANINYÈGÈNÈ FURULI,0.667
+350,freq,chaque année,saan ò saan,saan ò saan,saan,VERB,True,True,True,True,True,dennin bolo tigèra.,0.75
+351,freq,tous les matins,sɔ̀gɔmà bɛɛ,sɔ̀gɔmàw bɛɛ,sɔ̀gɔmàw,NOUN,True,True,False,True,False,dennin dò don.,0.5
+352,freq,tous les soirs,fìtirimagɛnw bɛɛ,fìtirimagɛnw bɛɛ,fìtirimagɛnw,NOUN,True,True,False,True,False,dennin dò don.,0.5
+353,freq,il vient tous les jours,a bɛ nà [jour] bɛɛ,a bɛ nà [jour] bɛɛ,bɛ,VERB,True,True,True,True,True,kònòba ta tora fila.,0.667
+354,freq,elle mange chaque matin,a bɛ dumuni kɛ sɔ̀gɔmà ò sɔ̀gɔmà,a bɛ dumuni kɛ sɔ̀gɔmà ò sɔ̀gɔmà,kɛ,VERB,True,True,True,True,True,u ye a konyè kè ten.,0.75
+355,freq,nous travaillons chaque semaine,anw bɛ báara kɛ dɔ́gɔfurancɛ ò dɔ́gɔfurancɛ,anw bɛ báara kɛ dɔ́gɔfurancɛ ò dɔ́gɔfurancɛ,bɛ,VERB,True,True,True,True,True,u ba ninw fana bèè furu sara.,0.5
+356,impersonnel,il pleut,[pleuvoir] bɛ na,[pleuvoir] bɛ na,bɛ,VERB,True,True,True,True,True,u tagara dògònyiniyòrò la.,0.6
+357,impersonnel,il neige,[neiger] bɛ na,[neiger] bɛ na,bɛ,VERB,True,True,True,True,True,u tagara dògònyiniyòrò la.,0.6
+358,impersonnel,il fait chaud,gòni bɛ,gòni bɛ,bɛ,VERB,True,True,True,True,True,lenburu binna.,0.667
+359,impersonnel,il fait froid,nɛ́nɛ bɛ,nɛ́nɛ bɛ,bɛ,VERB,True,True,True,True,True,lenburu binna.,0.667
+360,impersonnel,il fait nuit,[nuit] kora,bɛ,bɛ,VERB,True,True,False,True,False,BANINYÈGÈNÈ FURULI,0.5
+361,impersonnel,il faut manger,a ka kan ka dumuni kɛ,a ka kan ka dumuni kɛ,kan,VERB,True,True,True,True,True,Ala ye a ta ka bin.,0.857
+362,impersonnel,il faut partir,a ka kan ka fáɲi,a ka kan ka fáɲi,kan,VERB,True,True,True,True,True,Ala ye a ta ka bin.,0.714
+363,impersonnel,il ne faut pas manger,a man kan ka dumuni kɛ,a man kan ka dumuni kɛ,kan,VERB,True,True,True,True,True,Ala ye a ta ka bin.,0.857
+364,impersonnel,il ne faut pas partir,a man kan ka fáɲi,a man kan ka fáɲi,kan,VERB,True,True,True,True,True,Ala ye a ta ka bin.,0.714
+365,impersonnel,il doit partir,a ka kan ka fáɲi,a ka kan ka fáɲi,kan,VERB,True,True,True,True,True,Ala ye a ta ka bin.,0.714

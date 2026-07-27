@@ -3,7 +3,7 @@ rules/steps/step3_verbe.py
 Étape 3 : verbe ROOT (m['V']), xcomp, négation, prohibitif, impératif,
 infinitif, F1 tense transfer, déjà, privatif, ADJ/NOUN ROOT avec copule.
 """
-from rules.core import j, _is_copula, _is_avoir, _resolve_tam, adj_man, INTRANS_SC
+from rules.core import j, _is_copula, _is_avoir, _resolve_tam, adj_man, INTRANS_SC, nominalize_verb
 
 
 def run(T, tree, m, processed_indices, G_kg, NX_G,
@@ -127,7 +127,7 @@ def run(T, tree, m, processed_indices, G_kg, NX_G,
                                      tree.get('neg', False) or root_tok.get('is_neg', False),
                                      G_kg)
                                  or G_kg.get('tam_default', 'bɛ'))
-                    m['V'] = j(m['V'], 'wa', _coord_pron, _conj_tam, _crv_obj_bm, _crv_bm,
+                    m['V'] = j(m['V'], G_kg.get('coord_verb_marker', 'wa'), _coord_pron, _conj_tam, _crv_obj_bm, _crv_bm,
                                *_crv_obl_parts)
                     processed_indices.add(_crv_obj['orig_index'])
                 else:
@@ -156,10 +156,10 @@ def run(T, tree, m, processed_indices, G_kg, NX_G,
                         _crv_res = _ams(_crv_bm, _morpho_res) if _morpho_res else _crv_bm
                         m['V'] = j(m['V'], G_kg.get('coord_verb_marker', ''), _crv_res, *_crv_obl_parts)
                     elif _crv_needs_nom:
-                        # Transitif sans COD → nominalisé V+li kɛ avec TAM propre
-                        _nom_sfx = G_kg.get('nominalization_verb_suffix', '')
-                        _nom = (_crv_bm + _nom_sfx
-                                if _nom_sfx and not _crv_bm.endswith((G_kg.get('nominalization_verb_suffix', ''), G_kg.get('nominalization_verb_suffix_alt', ''))) else _crv_bm)
+                        # Transitif sans COD → nominalisé (action_noun irrégulier
+                        # du KG, ex: manger→dumuni, ou suffixe régulier -li) kɛ,
+                        # avec TAM propre
+                        _nom = nominalize_verb(_crv_bm, _crv.get('action_noun', ''), G_kg)
                         m['V'] = j(m['V'], G_kg.get('coord_verb_marker', ''), _coord_pron, _crv_tam,
                                    _nom, G_kg.get('coord_action_suffix', ''), *_crv_obl_parts)
                     elif _crv_is_action:
@@ -218,6 +218,18 @@ def run(T, tree, m, processed_indices, G_kg, NX_G,
         # negation ; negation predicative (n'est pas grande) -> vraie negation.
         # On tranche : comparatif si la tete porte une marque SCONJ 'que'
         # placee APRES l'adjectif.
+        #
+        # Mots discontinus (KG FunctionWord.requires_partner, ex: 'plus' pour
+        # 'ne...plus') : négation seulement si un AUTRE token role='negation'
+        # co-occurre dans la phrase. Sans ça, "V toujours plus" (comparatif/
+        # intensifieur, ex: "s'enfonce toujours plus dans le chaos") est
+        # traité à tort comme une négation faute de 'ne'.
+        _surf_tok  = str(tok.get('surface', '')).lower()
+        _func_info = G_kg.get('funcs', {}).get((_surf_tok, tok.get('lang', 'fr')), {})
+        if _func_info.get('requires_partner'):
+            _has_partner = any(t is not tok and t.get('role') == 'negation' for t in tokens)
+            if not _has_partner:
+                return False
         _h = next((t for t in tokens if t.get('orig_index') == tok.get('head_index')), None)
         if not (_h and _h.get('pos') in ('ADJ', 'ADV')):
             return True
@@ -229,9 +241,27 @@ def run(T, tree, m, processed_indices, G_kg, NX_G,
             for x in tokens)
         return not _has_comp_mark
 
+    # Port\u00e9e de la n\u00e9gation restreinte \u00e0 la clause du ROOT : un 'ne...pas'
+    # attach\u00e9 \u00e0 un verbe subordonn\u00e9 (ccomp, ex: "il dit QU'IL NE MANGE PAS")
+    # ne doit pas rendre tree['neg']=True pour la clause PRINCIPALE ("il
+    # dit" reste affirmatif) \u2014 sans cette restriction, _has_neg_adv scanne
+    # TOUT T sans regarder \u00e0 quel verbe la n\u00e9gation est rattach\u00e9e, et
+    # applique la n\u00e9gation trouv\u00e9e n'importe o\u00f9 dans la phrase au TAM du
+    # verbe racine (bug trouv\u00e9 2026-07-20 : "il dit qu'il ne mange pas" \u2192
+    # "a t\u025b f\u0254\u0301 ko a t\u025b d\u00fanli k\u025b", 'dire' n\u00e9gativ\u00e9 \u00e0 tort ; la n\u00e9gation du
+    # ccomp lui-m\u00eame reste g\u00e9r\u00e9e correctement ailleurs, scop\u00e9e \u00e0 son propre
+    # verbe). T\u00eates valides : le ROOT lui-m\u00eame, ou un AUX rattach\u00e9 au ROOT
+    # (temps compos\u00e9 : "il n'est pas parti").
+    _root_clause_neg_heads = {root_tok.get('orig_index')} if root_tok else set()
+    _root_clause_neg_heads |= {
+        x.get('orig_index') for x in T
+        if x.get('dep') in ('aux:tense', 'aux:pass')
+        and x.get('head_index') == root_tok.get('orig_index')
+    } if root_tok else set()
     _has_neg_adv = any(
         str(x.get('surface', '')).lower().rstrip("'").rstrip('\u2019') in _neg_surfaces
         and x.get('dep') in ('advmod', 'fixed', 'mark')
+        and x.get('head_index') in _root_clause_neg_heads
         and _is_genuine_neg(x, T)
         for x in T)
     if _has_neg_adv:
@@ -239,25 +269,34 @@ def run(T, tree, m, processed_indices, G_kg, NX_G,
     for _nt in T:
         surf = str(_nt.get('surface', '')).lower().rstrip("'").rstrip('\u2019')
         if (surf in _neg_surfaces and _nt.get('dep') in ('advmod', 'fixed', 'mark')
+                and _nt.get('head_index') in _root_clause_neg_heads
                 and _is_genuine_neg(_nt, T)):
             processed_indices.add(_nt['orig_index'])
     # Restrictif "ne... que/qu" : marquer 'que/qu' (dep=advmod) comme trait\u00e9
     # pour que step5 ne le convertisse pas en oblique temporel.
+    _complementizer_que_surfaces = G_kg.get('complementizer_que_surfaces', {'que', 'qu'})
     if _has_neg_adv:
         _que_adv = next((x for x in T
                          if x.get('dep') == 'advmod'
-                         and str(x.get('surface', '')).lower().rstrip("'") in ('que', 'qu')), None)
+                         and str(x.get('surface', '')).lower().rstrip("'") in _complementizer_que_surfaces), None)
         if _que_adv:
             processed_indices.add(_que_adv['orig_index'])
 
     # ── RESTRICTIVE NE...QUE (Rule 6) ─────────────────────────────────────
     # Detect: ne + que (restrictive "only") = foyi yé ni X tɛ
     # Example: "tu ne serais qu'un pleutre" → i bɛ yé foyi yé ni sègɛ tɛ
+    # NOTE : ne PAS exclure les tokens déjà processed_indices ici — le bloc
+    # juste au-dessus (ligne ~246) marque déjà 'que' comme traité pour
+    # empêcher step5 de le lire comme oblique temporel, ce qui rendait ce
+    # lookup structurellement aveugle à son propre marqueur et faisait
+    # tomber TOUTES les phrases restrictives sur le repli kg_gateway (qui
+    # s'exécute après step5_obliques et ne peut plus empêcher la fuite d'un
+    # nmod de l'attribut, ex: "bon à rien" → "... [rien] la" en plus de kólon).
     _has_ne = tree.get('neg')
     _que_restrictive = next((x for x in T
-                             if str(x.get('surface', '')).lower().replace(''', "'").replace(''', "'") in ('que', "qu'")
-                             and x.get('dep') in ('mark', 'advmod')
-                             and x.get('orig_index') not in processed_indices), None)
+                             if str(x.get('surface', '')).lower().replace(''', "'").replace(''', "'").rstrip("'")
+                                  in _complementizer_que_surfaces
+                             and x.get('dep') in ('mark', 'advmod')), None)
     if _has_ne and _que_restrictive:
         # This is ne...que restrictive
         _attr = next((x for x in T
@@ -269,6 +308,18 @@ def run(T, tree, m, processed_indices, G_kg, NX_G,
             tree['restrictive_neg'] = bool(_has_ne)  # store neg for TAM in renderer
             processed_indices.add(_que_restrictive['orig_index'])
             processed_indices.add(_attr['orig_index'])
+            # Idiome ADJ/NOUN + nmod déjà absorbé dans restrictive_attr par le
+            # compound-phrase retrieval (ex: "bon à rien" → kólon) : marquer
+            # aussi le nmod et son marqueur 'case' comme traités, sinon ils
+            # fuient vers step5_obliques et produisent un oblique parasite
+            # (ex: "... foyi la" / "... [rien] la" en plus de kólon).
+            for _nm in T:
+                if (_nm.get('dep') in ('nmod', '_absorbed_by_compound')
+                        and _nm.get('head_index') == _attr['orig_index']):
+                    processed_indices.add(_nm['orig_index'])
+                    for _cs in T:
+                        if _cs.get('dep') == 'case' and _cs.get('head_index') == _nm['orig_index']:
+                            processed_indices.add(_cs['orig_index'])
             tree['neg'] = False  # éviter double-négation dans le reste du pipeline
 
     # ── PROHIBITIF ────────────────────────────────────────────────────────────
@@ -330,7 +381,10 @@ def run(T, tree, m, processed_indices, G_kg, NX_G,
 
     if _qu_root and _has_ce_que:
         # This is qu'est-ce que construction (Rule 7)
-        m['QUEST_WORD'] = 'mún'  # What
+        # root_tok EST le pronom interrogatif ("qu'") — déjà tagué bm par le
+        # FunctionWord KG générique au tokenizing (pipeline/tokenizer.py),
+        # comme n'importe quel autre token de surface connue. Pas de littéral.
+        m['QUEST_WORD'] = root_tok.get('bm', '')
         processed_indices.add(root_tok['orig_index'])
 
         # Assign correct TAM for quest_ce_que : tense from modal verb (pourrait=fut, peut=pres)
@@ -509,7 +563,14 @@ def run(T, tree, m, processed_indices, G_kg, NX_G,
                    and root_tok.get('lemma', '').lower() == 'avoir'
                    and root_tok.get('pos') == 'VERB')
     
-    if _has_y_expl and _avoir_root:
+    if (_has_y_expl and _avoir_root
+            and root_tok['orig_index'] not in processed_indices):
+        # Garde ajoutée : step1_avoir.py gère déjà ce même cas existentiel
+        # ('il y a') en amont, y compris l'adjectif épithète sur le nom réel
+        # ("de l'eau CHAUDE"). Sans cette garde, ce bloc (redondant, plus
+        # ancien) retrouvait le même objet et écrasait m['O'] avec la forme
+        # nue du nom seul (perdant l'adjectif) — root_tok est déjà marqué
+        # 'processed' par step1 quand il a traité ce cas.
         tree['_existential_locked'] = True
         m['V'] = ''
         m['S'] = ''
@@ -719,6 +780,7 @@ def run(T, tree, m, processed_indices, G_kg, NX_G,
     #   1. dep='iobj'      → passif réflexif (s'appeler) : is_refl_passive=True
     #   2. dep='obj'/'expl:comp' + singulier → agentif (se blesser) → yɛrɛ
     #   3. dep='expl:comp' + pluriel → réciproque (se battre) → ɲɔgɔn
+    _refl_surfs_main = G_kg.get('reflexive_clitic_surfaces') or set()
     _refl_tok = next((x for x in T
                       if x.get('dep') in ('expl:comp', 'expl:pass', 'obj', 'iobj')
                       and x.get('pos') == 'PRON'
@@ -729,8 +791,15 @@ def run(T, tree, m, processed_indices, G_kg, NX_G,
                       and str(x.get('surface', '')).strip().strip("'''") != ''
                       and ('Reflex=Yes' in str(x.get('morph', ''))
                            # dep='expl:comp'/'expl:pass' sur un PRON = clitique réfléchi (UD fr),
-                           # même quand spaCy omet Reflex=Yes (tagging incohérent)
-                           or x.get('dep') in ('expl:comp', 'expl:pass')
+                           # même quand spaCy omet Reflex=Yes (tagging incohérent) —
+                           # MAIS seulement pour une vraie surface de clitique réfléchi
+                           # (KG: FunctionWord role='reflexive_clitic_surface'). 'y'
+                           # (locatif, "il Y a") reçoit aussi dep='expl:comp' en UD fr
+                           # sans être réflexif (bug trouvé 2026-07-19 : "il n'y a rien
+                           # ici" insérait à tort "a yɛrɛ yé" comme si 'y' était 'se').
+                           or (x.get('dep') in ('expl:comp', 'expl:pass')
+                               and str(x.get('surface', '')).lower().lstrip("'").strip()
+                               in _refl_surfs_main)
                            or any(s.get('dep') in ('nsubj', 'nsubj:pass')
                                   and s.get('pos') == 'PRON'
                                   and str(s.get('surface', '')).lower()
@@ -897,7 +966,17 @@ def run(T, tree, m, processed_indices, G_kg, NX_G,
         # Comportement réflexif depuis KG (annoté par kg_gateway.apply_kg_semantic_behaviors)
         # root_tok['_kg_reflexive'] = 'pronominal'/'posture'/'actif'/'accidentel' selon KG
         _kg_refl = root_tok.get('_kg_reflexive', '')
-        if (root_tok.get('intransitive_type') == 'ABSOLU'
+        # intransitive_type='ABSOLU' est un fait de TRANSITIVITÉ (jamais de COD),
+        # pas de lexique (verbe inexistant sans 'se'). _detect_intransitive_type
+        # marque TOUTE la classe posture (asseoir, lever, coucher…) en ABSOLU
+        # aussi — mais ces verbes ont une forme causative normale ("asseoir
+        # l'enfant"), contrairement aux vrais pronominaux (s'évanouir, se
+        # souvenir). Sans l'exclusion, "il s'est assis" tombait dans ce
+        # branchement 'pronominal' et court-circuitait le fallback posture
+        # (ligne ~929, dans le else ci-dessous) → clause_type restait 'simple'
+        # au lieu de 'refl_absolute' → rendu "a sìgira" au lieu de "a yé a sìgi".
+        if ((root_tok.get('intransitive_type') == 'ABSOLU'
+             and root_tok.get('semantic_class') != 'posture')
                 or (root_tok.get('is_refl_Subjective') and not _locative_xcomp_mark)
                 or _kg_refl == 'pronominal'):
             # KG: biological/pronominal → verbe nu (se réveiller, s'évanouir)
@@ -920,8 +999,19 @@ def run(T, tree, m, processed_indices, G_kg, NX_G,
                                   and x['orig_index'] not in processed_indices), None)
             if _cod_for_refl and _refl_tok.get('dep') in ('expl:comp', 'iobj'):
                 _refl_cat = 'coi_benefactif'
+            elif root_tok.get('semantic_class') == 'posture':
+                # Skip l'appel LLM (_classify_refl_fn) pour la classe posture :
+                # la classe sémantique KG/VerbNet est un signal structurel
+                # fiable, contrairement au verdict LLM qui varie d'un run à
+                # l'autre (memory: project_llm_classifier_nondeterminism) et
+                # faisait flotter yɛrɛ on/off pour la même phrase ("il s'est
+                # assis" → tantôt 'actif'/'accidentel' au lieu de 'posture').
+                _refl_cat = 'posture'
             else:
-                _refl_cat = _classify_refl_fn(_refl_lemma)
+                _refl_context = ' '.join(
+                    x.get('surface', '') for x in sorted(T, key=lambda x: x['orig_index'])
+                    if x.get('surface'))
+                _refl_cat = _classify_refl_fn(_refl_lemma, context=_refl_context)
             # Override KG : si KG a annoté un comportement réflexif spécifique, l'utiliser
             if _kg_refl and _kg_refl != _refl_cat:
                 # KG: posture='posture', perception='actif', spontaneous='accidentel'
@@ -1014,13 +1104,20 @@ def run(T, tree, m, processed_indices, G_kg, NX_G,
         # écraserait sinon m['V'] en V+ra et viderait le TAM.
         tree['refl_verb'] = root_tok.get('bm') or f"[{root_tok.get('lemma')}]"
         tree['refl_semantic_class'] = root_tok.get('semantic_class', '')
-        # Pronom de reprise = pronom sujet si présent, sinon 'a' (3sg)
+        # Pronom de reprise = pronom sujet si présent, sinon 'a' (3sg).
+        # 'mìn' (role='relative') n'est pas le sujet réel : c'est l'opérateur
+        # relatif qui REMPLACE l'antécédent (ex: "Mali, mìn s'enfonce..." —
+        # mìn est mis pour Mali). Le clitique réfléchi ('s'') porte donc sur
+        # cet antécédent, pas sur l'opérateur — reprendre 'mìn' comme objet
+        # réfléchi ("mìn TAM mìn V") le duplique à tort. Utiliser le pronom
+        # anaphorique 3sg par défaut, qui vaut pour l'antécédent implicite.
         _rsubj = next((x for x in T
                        if x.get('dep') in ('nsubj', 'nsubj:pass')), None)
-        if _rsubj and _rsubj.get('pos') == 'PRON' and _rsubj.get('bm'):
+        if (_rsubj and _rsubj.get('pos') == 'PRON' and _rsubj.get('bm')
+                and _rsubj.get('role') != 'relative'):
             tree['refl_pron'] = _rsubj.get('bm')
         else:
-            tree['refl_pron'] = 'a'
+            tree['refl_pron'] = G_kg.get('pronoun_3sg_default', 'a') or 'a'
 
         # Resolve TAM for reflexive clauses (ne pas laisser TAM vide)
         tree['tense'] = root_tok.get('tense', 'pres')
@@ -1063,10 +1160,33 @@ def run(T, tree, m, processed_indices, G_kg, NX_G,
     # groupe verbal, sans équivalent bambara direct.
     # Ajouté à processed_indices pour empêcher step5 de créer un oblique parasite.
     _dative_mk = G_kg.get('dative_marker', 'ma') or 'ma'
-    # Verbes de communication indirecte (dire, parler…) → datif 'yé' plutôt que 'ma'
+    # Marqueur datif/oblique par classe sémantique lu depuis le KG
+    # (SemanticClass.dative_marker), ex: saying→yé (introduit une citation),
+    # communication→fɛ (parler ne prend pas de COD humain, seulement "à/avec
+    # quelqu'un" — sauf cas particulier "parler une langue", traité ailleurs
+    # comme COD réel). Aucun nom de classe en dur ici : la classe sert de clé,
+    # la valeur du marqueur vient entièrement du KG.
     _root_sc_step3 = root_tok.get('semantic_class', '') if root_tok else ''
-    if _root_sc_step3 in ('saying', 'communication'):
-        _dative_mk = 'yé'
+    _dative_marker_by_sc_map = G_kg.get('dative_marker_by_sc', {})
+    # 'ma' n'est légitime QUE pour les classes qui prennent réellement un
+    # destinataire datif (giving/communication/saying, cf. SemanticClass KG) —
+    # sans entrée KG pour la classe du verbe, il n'y a pas de datif du tout :
+    # le pronom iobj est alors un objet direct normal (ex: "aider qqn" est
+    # transitif, pas un transfert vers un destinataire — bug observé où 'ma'
+    # s'appliquait par défaut à N'IMPORTE QUEL verbe sans classe reconnue).
+    _has_dative_sc = _root_sc_step3 in _dative_marker_by_sc_map
+    _dative_mk = _dative_marker_by_sc_map.get(_root_sc_step3, _dative_mk)
+    # Construction support-verbe (faire peur/plaisir/mal à qqn) : le NOUN objet
+    # (peur/plaisir/mal) occupe déjà m['O'] structurellement — l'iobj ('me')
+    # est l'expérient datif de l'idiome, jamais un objet direct concurrent,
+    # quelle que soit la semantic_class du verbe support ('faire'=action,
+    # absent de la carte KG dative_marker_by_sc). Sans ce garde, l'iobj était
+    # traité comme COD faute de classe datif reconnue, puis écrasé en silence
+    # par le NOUN objet posé plus tard en step4 (bug trouvé 2026-07-18).
+    _root_has_noun_obj_step3 = bool(root_tok) and any(
+        t.get('dep') == 'obj' and t.get('pos') == 'NOUN'
+        and t.get('head_index') == root_tok.get('orig_index')
+        for t in T)
     # communication_transitive (appeler, voir…) → objet DIRECT en m['O'], pas de marqueur datif
     for _iobj_tok in T:
         # Also catch mislabeled clitics: dep='dep' + role='object' (e.g. "Dis lui")
@@ -1079,8 +1199,21 @@ def run(T, tree, m, processed_indices, G_kg, NX_G,
                 and root_tok
                 and root_tok.get('semantic_class') not in ('communication', 'saying')):
             continue
+        # Garde de gouverneur : cette boucle ne doit traiter que les iobj du
+        # verbe RACINE (root_tok). Sans ce garde, un iobj d'un verbe enchâssé
+        # dans une relative (acl:relcl, ex: "tout ce QUE mes pères... M'avaient
+        # enseigné") était happé ici avant même que step4/relcl_post ne voie
+        # la relative — la classe sémantique testée (_root_sc_step3) était
+        # alors celle du ROOT (souvent un PRON démonstratif sans classe, ex.
+        # 'ce'), pas celle du vrai verbe régissant l'iobj, donnant un COD/COI
+        # arbitraire complètement déconnecté de sa relative (bug trouvé
+        # 2026-07-26 : "m'" ("m'avaient enseigné") posait m['O'] du clause
+        # principal, orphelin, pendant que la relative entière était perdue).
+        _iobj_head_is_root = (root_tok is not None
+                              and _iobj_tok.get('head_index') == root_tok.get('orig_index'))
         if ((_iobj_tok.get('dep') == 'iobj' or _is_dative_dep)
                 and _iobj_tok.get('pos') == 'PRON'
+                and _iobj_head_is_root
                 and _iobj_tok['orig_index'] not in processed_indices):
             _iobj_bm = str(_iobj_tok.get('bm', ''))
             # Réflexif COI : détecter si le clitique datif est coréférent au sujet
@@ -1123,7 +1256,8 @@ def run(T, tree, m, processed_indices, G_kg, NX_G,
             # ET l'iobj est coréférent au sujet (même bm, sujet inclusif dep='dep') → supprimer datif
             # Guard : 'lui'/'leur' ne sont JAMAIS réflexifs en français (réflexif 3e pers = 'se').
             # Sans ce guard, bm(elle)=bm(lui)='a' → faux positif ("elle lui parle" supprimé).
-            _REFL_SURFS = {'me', "m'", 'm', 'te', "t'", 't', 'se', "s'", 's', 'nous', 'vous'}
+            _REFL_SURFS = G_kg.get('reflexive_clitic_surfaces',
+                                    {'me', "m'", 'm', 'te', "t'", 't', 'se', "s'", 's', 'nous', 'vous'})
             _iobj_surf_lower = str(_iobj_tok.get('surface', '')).lower().lstrip('-')
             if (_refl_tok is None and _iobj_bm_test
                     and _iobj_surf_lower in _REFL_SURFS):
@@ -1134,8 +1268,14 @@ def run(T, tree, m, processed_indices, G_kg, NX_G,
                     processed_indices.add(_iobj_tok['orig_index'])
                     continue
             if _iobj_bm and not _iobj_bm.startswith('['):
-                # communication_transitive (appeler, voir) : objet DIRECT → m['O'] sans marqueur
-                if _root_sc_step3 == 'communication_transitive' and not m.get('O'):
+                # communication_transitive (appeler, voir) : objet DIRECT → m['O'] sans marqueur.
+                # Idem pour toute classe sans marqueur datif KG légitime (action normale
+                # comme 'aider' : le pronom est un objet direct, pas un destinataire).
+                # Exception : le verbe a déjà un objet NOUN structurel (faire
+                # peur/plaisir/mal) → cet objet occupera m['O'], l'iobj est
+                # forcément le datif de l'idiome, pas un COD concurrent.
+                if (_root_sc_step3 == 'communication_transitive' or not _has_dative_sc) \
+                        and not m.get('O') and not _root_has_noun_obj_step3:
                     m['O'] = _iobj_bm
                     processed_indices.add(_iobj_tok['orig_index'])
                 else:
@@ -1182,13 +1322,16 @@ def run(T, tree, m, processed_indices, G_kg, NX_G,
                        and x.get('role') == 'conditional'
                        and x['orig_index'] not in processed_indices), None)
     if _cond_mark:
-        _cond_bm = _cond_mark.get('bm') or 'ní'
+        _cond_marker_default = G_kg.get('conditional_marker', '') or 'ní'
+        _eventuality = G_kg.get('eventuality_marker', '') or 'mána'
+        _cond_bm = _cond_mark.get('bm') or _cond_marker_default
+        _eventuality_triggers = G_kg.get('eventuality_trigger_lemmas', {'jamais'})
         _has_jamais = any(
-            str(x.get('surface', '')).lower() in ('jamais', 'jamais')
+            str(x.get('surface', '')).lower() in _eventuality_triggers
             for x in T if x['orig_index'] not in processed_indices)
-        tree['conditional_marker'] = ('mána'
-                                      if (_cond_bm == 'mána' or _has_jamais)
-                                      else 'ní')
+        tree['conditional_marker'] = (_eventuality
+                                      if (_cond_bm == _eventuality or _has_jamais)
+                                      else _cond_marker_default)
         if tree.get('clause_type') != 'noun_phrase_have':
             pass  # body removed → PatternRule KG
         processed_indices.add(_cond_mark['orig_index'])
@@ -1301,7 +1444,7 @@ def run(T, tree, m, processed_indices, G_kg, NX_G,
         # pas le marqueur temporel habituel mais partie de la construction
         # modale elle-même. Négatif : 'man kan ka V' (inchangé).
         if tree.get('neg', False):
-            tree['tam'] = 'man'
+            tree['tam'] = G_kg.get('obligation_neg_marker', 'man') or 'man'
         elif tree.get('tense', 'pres') == 'pres':
             tree['tam'] = G_kg.get('obligation_pres_marker', 'ka') or 'ka'
         else:
@@ -1338,21 +1481,36 @@ def run(T, tree, m, processed_indices, G_kg, NX_G,
                             and x['orig_index'] not in processed_indices), None)
             _cv_obj_bm = ((_cv_obj.get('bm') or f"[{_cv_obj.get('lemma', '')}]")
                           if _cv_obj else '')
-            _cv_tense = _cv.get('tense', tree.get('tense', 'pres'))
-            _cv_tam   = _resolve_tam(_cv_tense, tree.get('neg', False), G_kg) or 'bɛ'
+            # TAM du verbe coordonné : ne le résoudre ici QUE s'il porte son
+            # propre temps distinct de celui de la clause (rare — coordination
+            # à temps mixtes). Dans le cas normal (même sujet, même temps que
+            # V1), ne pas poser de valeur : le renderer hérite alors du TAM
+            # déjà résolu pour la clause entière (_cc.get('tam', TAM), cf.
+            # rules/renderers/__init__.py) — y compris les constructions dont
+            # le TAM n'est pas une simple fonction de (temps, négation), comme
+            # le futur proche "aller + V" (bɛ na), le passé de venir_de, etc.
+            # Poser ici un TAM par défaut ('bɛ') écrasait silencieusement ces
+            # constructions pour le second verbe coordonné (bug trouvé
+            # 2026-07-19 : "il va manger et boire" perdait 'na' sur "boire").
+            _cv_tense_raw = _cv.get('tense')
+            _cv_tam = (_resolve_tam(_cv_tense_raw, tree.get('neg', False), G_kg) or '') \
+                if (_cv_tense_raw and _cv_tense_raw != tree.get('tense', 'pres')) else ''
             _cc_tok   = next((x for x in T if x.get('dep') == 'cc'
                               and x.get('head_index') == _cv['orig_index']), None)
             _cc_role  = _cc_tok.get('role', '') if _cc_tok else ''
-            _conj_clauses.append({
+            _cv_dict = {
                 'V':                _cv_bm,
                 'O':                _cv_obj_bm,
-                'tam':              _cv_tam,
                 'intransitive_type': _cv.get('intransitive_type', ''),
                 'semantic_class':   _cv.get('semantic_class', ''),
+                'action_noun':      _cv.get('action_noun', ''),
                 'is_liquid':        _cv.get('is_liquid', False),
                 'cc_role':          _cc_role,
                 'cc_bm':            (_cc_tok.get('bm', '') if _cc_tok else ''),
-            })
+            }
+            if _cv_tam:
+                _cv_dict['tam'] = _cv_tam
+            _conj_clauses.append(_cv_dict)
             processed_indices.add(_cv['orig_index'])
             if _cv_obj:
                 processed_indices.add(_cv_obj['orig_index'])
@@ -1439,9 +1597,22 @@ def run(T, tree, m, processed_indices, G_kg, NX_G,
     _has_expletive = any(x.get('role') in G_kg.get('expletive_roles', {'expletive'}) for x in T)
 
     _has_comitative = any(x.get('role') == 'comitative' for x in T)
+    # Garde de gouverneur : le cop doit porter DIRECTEMENT sur root_tok, pas
+    # être niché dans une prédication enchâssée sans rapport (ex: un ADJ conj
+    # de l'amod du ROOT avec son propre nsubj/cop/obl:arg — "maison charmante
+    # ET QUI ÉTAIT digne d'elle" : le cop de 'était' porte sur 'digne', à 3
+    # sauts de root_tok='maison', pas sur root_tok lui-même). Sans ce garde,
+    # `any(x.get('dep')=='cop' for x in T)` matchait N'IMPORTE QUEL cop de la
+    # phrase, fusionnant root_tok+amod dans m['O'] comme si root_tok était le
+    # prédicat copulatif, alors qu'il n'a structurellement rien à voir avec ce
+    # cop (bug trouvé 2026-07-26 : 'maison' → m['O']='só sárama', orpheline,
+    # pendant que toute la relative coordonnée 'qui était digne d'elle' se
+    # perdait faute d'antécédent correctement posé en S).
+    _root_direct_cop = bool(root_tok) and any(
+        x.get('dep') == 'cop' and x.get('head_index') == root_tok.get('orig_index') for x in T)
     if (root_tok
             and root_tok.get('pos') in ('ADJ', 'NOUN')
-            and any(x.get('dep') == 'cop' for x in T)
+            and _root_direct_cop
             and root_tok['orig_index'] not in processed_indices
             and not _root_has_loc_case
             and not root_tok.get('is_participe_passe')

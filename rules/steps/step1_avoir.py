@@ -5,7 +5,7 @@ Extraction des slots AVOIR : possession, il y a, existential.
 Le clause_type est déjà posé par apply_kg_patterns_early (PatternRule KG).
 Ce step remplit uniquement les slots S / O / V et marque processed_indices.
 """
-from rules.core import j, _is_avoir
+from rules.core import j, _is_avoir, _is_avoir_lexeme, adj_man
 
 
 def _resolve_poss_type(obj_tok):
@@ -49,9 +49,9 @@ def run(T, tree, m, processed_indices, G_kg, root_tok):
     # root_tok le verbe "avoir" lui-même — ignorer la classification
     # semantic_class='having' potentiellement erronée du LLM dans ce cas.
     _root_is_other_verb_with_avoir_aux_0 = (
-        str(root_tok.get('lemma', '')).lower() != 'avoir'
+        not _is_avoir_lexeme(root_tok)
         and any(x.get('dep') in ('aux:tense', 'aux:pass')
-                and str(x.get('lemma', '')).lower() == 'avoir'
+                and _is_avoir_lexeme(x)
                 and x.get('head_index') == root_tok.get('orig_index')
                 for x in T))
     if (_has_composite_aux and _is_avoir(root_tok)
@@ -86,8 +86,22 @@ def run(T, tree, m, processed_indices, G_kg, root_tok):
         if _real:
             _bm = _real.get('bm') or f"[{_real.get('lemma')}]"
             if _real.get('is_plural') or str(_real.get('surface', '')).endswith('s'):
-                if not _bm.endswith('w'):
-                    _bm += 'w'
+                _plur_real = G_kg.get('plural_noun_suffix', '') or 'w'
+                if not _bm.endswith(_plur_real):
+                    _bm += _plur_real
+            # Adjectif épithète sur le nom réel ("de l'eau CHAUDE") : en
+            # bambara l'adjectif se postpose toujours au nom (forme épithète
+            # ADJ+suffixe) — sans ce bloc l'amod était traité (classé
+            # QUALIFIANT/CLASSIFIANT plus haut) mais jamais injecté dans O.
+            _real_amods = [x for x in T if x.get('dep') == 'amod'
+                           and x.get('head_index') == _real['orig_index']
+                           and x.get('bm')]
+            for _ra in _real_amods:
+                _ra_bm = _ra.get('bm') or f"[{_ra.get('lemma')}]"
+                if _ra.get('pos') == 'ADJ':
+                    _ra_bm = adj_man(_ra_bm, is_classifying=_ra.get('is_classifying_adj', False))
+                _bm = j(_bm, _ra_bm)
+                processed_indices.add(_ra['orig_index'])
             m['S'] = ''
             m['O'] = _bm
             processed_indices.add(root_tok['orig_index'])
@@ -114,10 +128,10 @@ def run(T, tree, m, processed_indices, G_kg, root_tok):
         # semantic_class='having' du LLM sur root_tok est un misfire (même
         # défaut que le LLM de transitivité : reclassification non-déterministe
         # d'un verbe qui n'a rien à voir avec la possession).
-        _root_lemma_is_avoir = str(root_tok.get('lemma', '')).lower() == 'avoir'
+        _root_lemma_is_avoir = _is_avoir_lexeme(root_tok)
         _avoir_is_aux_of_root = any(
             x.get('dep') in ('aux:tense', 'aux:pass')
-            and str(x.get('lemma', '')).lower() == 'avoir'
+            and _is_avoir_lexeme(x)
             and x.get('head_index') == root_tok.get('orig_index')
             for x in T)
         _root_is_other_verb_with_avoir_aux = (

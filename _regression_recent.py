@@ -28,8 +28,8 @@ TESTS = [
 
     # ─── se mettre à fix ──────────────────────────────────────────────────────
     ("il s'est mis à travailler",
-     lambda r: 'yɛrɛ' in r and 'bìla' in r and 'báara' in r,
-     "doit contenir 'yɛrɛ bìla báara'  →  a yé a yɛrɛ bìla báara la"),
+     lambda r: 'yɛrɛ' in r and 'bìn' in r and 'báara' in r,
+     "doit contenir 'yɛrɛ bìn báara'  →  a yé a yɛrɛ bìn báara la"),
 
     # ─── xcomp obj fix (fusil absent) ─────────────────────────────────────────
     ("cela vaut la peine de prendre un fusil",
@@ -129,7 +129,7 @@ for fr, check, desc in TESTS:
         result = f"[ERREUR: {e}]"
         ok = False
 
-    icon = "✅" if ok else "❌"
+    icon = "" if ok else ""
     if ok:
         passed += 1
     else:
@@ -139,11 +139,11 @@ for fr, check, desc in TESTS:
     print(f"\n{icon}  FR : {fr}")
     print(f"    BM : {result}")
     if not ok:
-        print(f"    ⚠️  attendu : {desc}")
+        print(f"      attendu : {desc}")
 
 print()
 print("═" * 65)
 print(f"  {passed}/{passed+failed} tests passés"
-      + (f"  —  {failed} échec(s)" if failed else "  ✅ tout bon"))
+      + (f"  —  {failed} échec(s)" if failed else "   tout bon"))
 print("═" * 65)
 print()

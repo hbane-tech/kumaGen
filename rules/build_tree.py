@@ -18,6 +18,7 @@ from rules.steps import step5_obliques    # package
 from rules.steps import step6_copule      # package
 from rules.steps import step7_final
 from rules.steps import step_impersonal
+from rules.steps import quoted_speech
 from rules.kg_gateway import apply_kg_rules, apply_kg_semantic_behaviors, apply_kg_patterns_early
 
 
@@ -132,6 +133,15 @@ def build_tree(tokens, db=None, grammar=None):
     aux_tense_tok = step3_verbe.run(
         T, tree, m, processed_indices, G_kg, NX_G,
         root_tok, xcomp_verb_tok, _neg_surfaces)
+
+    # ══════════════════════════════════════════════════════════════
+    # DISCOURS RAPPORTÉ CITÉ : "il dit « bonjour »" → réserver le span
+    # cité (ko-quotatif) AVANT step4_objet. Selon le temps (composé ou
+    # non), spaCy tague le span cité soit obl:arg (présent) soit obj
+    # (passé composé, avec auxiliaire) — step4_objet consommerait ce
+    # dernier cas comme objet normal avant que step5_obliques ne le voie.
+    # ══════════════════════════════════════════════════════════════
+    quoted_speech.handle(T, tree, m, processed_indices, G_kg, root_tok)
 
     # ══════════════════════════════════════════════════════════════
     # STEP 4 : Objet — noun_phrase, objet_standard, relcl_post,

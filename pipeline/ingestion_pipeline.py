@@ -1,6 +1,6 @@
 """
 pipeline/ingestion_pipeline.py
-Scrapes Bamadaba, builds Word/Sense/Concept/Frame nodes in Neo4j,
+Scrapes Bamadaba, builds Word/Sense/Concept nodes in Neo4j,
 and stores clean Word2Vec embeddings on each Sense.
 """
 
@@ -8,7 +8,7 @@ import hashlib
 import numpy as np
 
 from scraper.bamadaba_scraper import scrape_all
-from embeddings.word2vec_encoder import encode
+from embeddings.labse_encoder import encode
 from utils.normalize import clean_gloss, normalize_source
 
 
@@ -20,25 +20,18 @@ class IngestionPipeline:
     # -----------------------------
     # IDS
     # -----------------------------
-    def get_sense_id(self, lemma, pos):
-        return "S_" + hashlib.md5((lemma + pos).encode()).hexdigest()[:12]
+    def get_sense_id(self, lemma, pos, fr=""):
+        # fr inclus dans le hash : un lemme polysémique (ex: "kálo") a
+        # plusieurs sens de même lemme+pos ("lune."/"mois."/"règles.") qui
+        # doivent devenir des Sense nodes DISTINCTS, pas se fondre en un
+        # seul via MERGE (bug trouvé 2026-07-17 : le hash lemma+pos seul
+        # collisionnait tous les sens d'une entrée polysémique, ne gardant
+        # que le dernier importé).
+        return "S_" + hashlib.md5((lemma + pos + fr).encode()).hexdigest()[:12]
 
     def get_concept_id(self, entry):
         base = entry.get("lemma") or ""
         return "C_" + hashlib.md5(base.encode()).hexdigest()[:12]
-
-    # -----------------------------
-    # FRAME DETECTION FROM POS
-    # -----------------------------
-    def infer_frame(self, entry):
-        t = (entry.get("type") or "").lower()
-        if "verb" in t:
-            return "ACTION"
-        if "noun" in t:
-            return "ENTITY"
-        if "adj" in t or "adv" in t:
-            return "QUALITY"
-        return "GENERIC"
 
     # -----------------------------
     # EMBEDDING SOURCE
@@ -58,24 +51,12 @@ class IngestionPipeline:
         return normalize_source(raw)   # lowercase + NFC
 
     # -----------------------------
-    # ENSURE FRAME NODE EXISTS
-    # -----------------------------
-    def ensure_frame(self, frame):
-        self.db.query("""
-        MERGE (f:Frame {name: $frame})
-        """, {"frame": frame})
-
-    # -----------------------------
     # MAIN PIPELINE
     # -----------------------------
     def run(self):
 
         entries = scrape_all()
-        print(f"\n📥 Ingesting {len(entries)} entries...\n")
-
-        # Pre-create all Frame nodes
-        for frame in ("ACTION", "ENTITY", "QUALITY", "GENERIC"):
-            self.ensure_frame(frame)
+        print(f"\n Ingesting {len(entries)} entries...\n")
 
         for i, e in enumerate(entries, 1):
 
@@ -83,10 +64,11 @@ class IngestionPipeline:
             fr    = e.get("fr")    or ""
             en    = e.get("en")    or ""
             pos   = e.get("type")  or "Other"
+            sense_index = e.get("sense_index") or 1
+            corpus_freq = e.get("corpus_freq") or 0
 
-            sense_id   = self.get_sense_id(lemma, pos)
+            sense_id   = self.get_sense_id(lemma, pos, fr)
             concept_id = self.get_concept_id(e)
-            frame      = self.infer_frame(e)
 
             embedding_source = self.build_embedding_source(e)
             emb = np.array(encode(embedding_source), dtype=np.float32)
@@ -103,15 +85,17 @@ class IngestionPipeline:
                 s.fr        = $fr,
                 s.en        = $en,
                 s.pos       = $pos,
-                s.frame     = $frame,
-                s.embedding = $emb
+                s.embedding = $emb,
+                s.sense_index = $sense_index,
+                s.corpus_freq = $corpus_freq
             """, {
                 "id":    sense_id,
                 "bm":    lemma,
                 "fr":    fr,
                 "en":    en,
                 "pos":   pos,
-                "frame": frame,
+                "sense_index": sense_index,
+                "corpus_freq": corpus_freq,
                 "emb":   emb.tolist(),
             })
 
@@ -129,14 +113,7 @@ class IngestionPipeline:
             MERGE (s)-[:MAPS_TO]  ->(c)
             """, {"w": lemma, "sid": sense_id, "cid": concept_id})
 
-            # -- LINK: Sense->Frame (fixes FrameParser) --
-            self.db.query("""
-            MATCH (s:Sense {id:    $sid})
-            MATCH (f:Frame {name:  $frame})
-            MERGE (s)-[:IN_FRAME]->(f)
-            """, {"sid": sense_id, "frame": frame})
-
             if i % 500 == 0:
-                print(f"  ✔ {i}/{len(entries)} ingested...")
+                print(f"   {i}/{len(entries)} ingested...")
 
-        print("\n✅ KG built successfully\n")
+        print("\n KG built successfully\n")

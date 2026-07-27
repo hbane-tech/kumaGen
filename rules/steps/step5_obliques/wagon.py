@@ -6,6 +6,7 @@ Utilisé par locatif, temporel, simple.
 """
 import networkx as nx
 from rules.core import j, apply_affixes, adj_man
+from rules.steps.step4_objet.objet_standard import _build_genitive_chain
 
 
 def _nmod_has_loc_adp(nmod_t, T, loc_markers, tmp_markers):
@@ -64,17 +65,33 @@ def append(tok_item, T, m, processed_indices, G_kg, NX_G,
                           and str(x.get('surface', '')).lower() in _distrib_surfaces]
     _distrib_idx = {d['orig_index'] for d in _distrib_dets_pre}
 
+    # Restreint aux enfants DIRECTS de tok_item (head_index == tok_item) : sans
+    # cette garde, obl_chunk (sous-arbre COMPLET, via get_bounded_chunk_tokens)
+    # peut contenir des tokens 'nmod'/'nummod'/'det' arbitrairement profonds —
+    # ex: une relative attachée à un nmod imbriqué ("logiques de pouvoir des
+    # élites QUI VEULENT...") ramène les 'det' internes à cette relative
+    # ("la masse", "l'écart", "la gouvernance") dans le compound du nom
+    # racine, aplatissant/mélangeant des niveaux de génitif sans rapport
+    # (bug trouvé 2026-07-18 : "sémako [élite] [logique]" au lieu de la
+    # chaîne génitive correcte "logiques de pouvoir des élites").
     compound_toks = sorted(
         [x for x in obl_chunk
          if x.get('dep') in ('nmod', 'nummod', 'det')
          and x != tok_item
+         and x.get('head_index') == tok_item['orig_index']
          and x['orig_index'] not in _distrib_idx
          and x.get('role') not in ('article', 'pronoun', 'demonstrative')
          and not (x.get('pos') == 'DET' and not x.get('bm'))
          and not _nmod_has_loc_adp(x, T, _loc_markers, _tmp_markers)],
         key=lambda x: x['orig_index'])
 
-    demo_tok = next((x for x in obl_chunk if x.get('role') == 'demonstrative'), None)
+    # Exclure tok_item : quand l'oblique EST lui-même le pronom démonstratif
+    # ("ça"/"cela" seul, role='demonstrative'), il ne faut pas le retrouver ici
+    # comme un déterminant démonstratif séparé modifiant un nom — sinon head_base
+    # et demo_tok pointent sur le même token et pref_val duplique head_base
+    # ("o" + "o" → "o o" au lieu de "o").
+    demo_tok = next((x for x in obl_chunk
+                     if x.get('role') == 'demonstrative' and x is not tok_item), None)
 
     head_base = tok_item.get('bm') or f"[{tok_item.get('lemma')}]"
     if tok_item.get('bm_suffix'):
@@ -117,8 +134,44 @@ def append(tok_item, T, m, processed_indices, G_kg, NX_G,
     # Compound
     compound_elements = []
     absorbed_amods    = set()
-    for c_tok in compound_toks:
-        compound_elements.append(c_tok.get('bm') or f"[{c_tok.get('lemma')}]")
+    # Chaîne "N1 de N2 de N3" ("logiques DE POUVOIR DES ÉLITES") : spaCy
+    # attache souvent N2 et N3 comme deux nmod FRÈRES du même head (N1), au
+    # lieu d'imbriquer N3 sous N2 — alors que le sens est "[N3] ka N2", pas
+    # deux qualificatifs indépendants de N1. On restitue l'ordre possesseur-
+    # possédé en inversant les frères (le dernier de la phrase, le plus
+    # "profond" sémantiquement, doit apparaître EN PREMIER) plutôt qu'en les
+    # concaténant dans l'ordre de surface (bug trouvé 2026-07-19 : "sé
+    # [élite]" au lieu de "[élite] sé"). _build_genitive_chain reste
+    # nécessaire pour un VRAI nmod imbriqué (nmod-du-nmod). Le possesseur
+    # (premier élément inversé) reçoit en plus le marqueur génitif KG s'il
+    # n'est pas relationnel (ex: "élite" = personne, non parenté/partie du
+    # corps → "[élite] ka sé", pas juxtaposition nue) (bug trouvé
+    # 2026-07-19 : "élite" définit une personne → aliénable, marqueur requis).
+    _reversed_compound = list(reversed(compound_toks))
+    _relational_bms = (G_kg or {}).get('relational_bms', set())
+    _gen_marker = (G_kg or {}).get('genitive_marker', '') or ''
+    for _i, c_tok in enumerate(_reversed_compound):
+        piece = _build_genitive_chain(c_tok, T, G_kg)
+        if _i < len(_reversed_compound) - 1:
+            _c_is_rel = c_tok.get('is_relational', False) or (c_tok.get('bm') or '') in _relational_bms
+            if not _c_is_rel and _gen_marker:
+                piece = j(piece, _gen_marker)
+        compound_elements.append(piece)
+        # _build_genitive_chain inclut déjà TOUS les amod DIRECTS de c_tok
+        # dans la chaîne retournée (ses propres _classifiants/_qualifiants,
+        # potentiellement plusieurs — ex: "apprentissage COOPÉRATIF JAPONAIS"
+        # a deux amod) — sans les marquer TOUS comme absorbés ici, la boucle
+        # _compound_amods ci-dessous retrouve celui/ceux non marqués (next()
+        # singulier ne capturait que le premier) et les rajoute une SECONDE
+        # fois dans mod_compiled, dupliquant l'adjectif dans le rendu final
+        # (bug trouvé 2026-07-20 : "des relations internationales" →
+        # 'ɛntɛrinasiyɔnali' dupliqué avec un seul amod ; "programme
+        # d'apprentissage coopératif japonais" → 'zapɔnɛ' dupliqué avec deux
+        # amod, le fix à un seul next() ne couvrait que 'coopératif').
+        _c_own_amods = [x for x in obl_chunk if x.get('dep') == 'amod'
+                        and x.get('head_index') == c_tok['orig_index']]
+        for _c_own_amod in _c_own_amods:
+            absorbed_amods.add(_c_own_amod['orig_index'])
     compound_base = j(*compound_elements) if compound_elements else ''
 
     # mod_compiled
@@ -174,6 +227,7 @@ def append(tok_item, T, m, processed_indices, G_kg, NX_G,
             'COMPOUND': '', 'MOD': '', 'DEM_PREF': '', 'DEM_SUFF': '',
             'DEP_TYPE': 'case', 'COMPOUND_IS_QUANTIFIER': False,
             'MARKER_IS_PREFIX': False,
+            '_HEAD_IDX': loc_nmod['orig_index'],
         })
         processed_indices.add(loc_nmod['orig_index'])
         if loc_adp: processed_indices.add(loc_adp['orig_index'])
@@ -194,10 +248,10 @@ def append(tok_item, T, m, processed_indices, G_kg, NX_G,
             clause_type_val == 'temporal'
             and dep_case
             and (
-                (dep_case.get('role') == 'temporal'
-                 and dep_case.get('bm_marker', '') in {'Kabini', "k'an bɔ"})
+                bool(dep_case.get('is_prefix_marker'))
                 or bool(marker_val and marker_val.startswith('['))
             )
         ),
+        '_HEAD_IDX': tok_item['orig_index'],
     })
     processed_indices.update([t['orig_index'] for t in obl_chunk])

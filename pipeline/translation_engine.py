@@ -37,17 +37,20 @@ Low-signal guard (FIX):
 import re
 import requests
 from pipeline.tokenizer import tokenize
-from pipeline.frame_parser import FrameParser
-from kg.retriever import KGRetriever
-from embeddings.word2vec_encoder import encode as _embed
+from kg.retriever import KGRetriever, _primacy_key
+from embeddings.labse_encoder import encode as _embed
 from rules import build_tree, tree_to_bambara, RuleEngine
+from rules.core import _is_avoir
 from config.settings import (LLM_BACKEND, LLM_MODEL, GEMINI_API_KEY, GEMINI_MODEL,
                              OLLAMA_GENERATE_URL)
 import os
-from embeddings.word2vec_encoder import _get_model
+from embeddings.labse_encoder import _get_model
 
-MIN_SCORE      = 12    # 0-100 point scale
-TOP_K          = 10
+# Floor set above the maximum possible bonus contribution (POS +2, conciseness
+# +1 = 3 pts max) so no candidate can be accepted on bonuses alone — it must
+# always carry some genuine gloss or embedding signal (G(s,t) or 40*cosine > 0).
+MIN_SCORE      = 5     # 0-100 point scale
+TOP_K          = 5
 ADJ_CONFIDENCE = 70    # 0-100 point scale
 VERB_MIN_SCORE = 75    # 0-100 point scale
 
@@ -61,7 +64,6 @@ class TranslationEngine:
     def __init__(self, db):
         self.db                = db
         self.retriever         = KGRetriever(db)
-        self.frame_parser      = FrameParser(db)
         self.rule_engine       = RuleEngine(db)
         self._current_sentence = ''
         self.model = _get_model()
@@ -84,18 +86,18 @@ class TranslationEngine:
                 r = _req.post(OLLAMA_GENERATE_URL,
                               json=payload, timeout=wait)
                 r.raise_for_status()
-                print(f"✅  LLM Ollama prêt ({model})")
+                print(f"  LLM Ollama prêt ({model})")
                 return
             except _req.exceptions.ConnectionError:
-                print("⚠️  Ollama non joignable — vérifier que 'ollama serve' tourne")
+                print("  Ollama non joignable — vérifier que 'ollama serve' tourne")
                 return
             except _req.exceptions.Timeout:
                 if attempt == 1:
-                    print(f"⚠️  Ollama lent au démarrage (>{wait}s), nouvelle tentative...")
+                    print(f"  Ollama lent au démarrage (>{wait}s), nouvelle tentative...")
                 else:
-                    print(f"⚠️  Ollama timeout ({wait}s) — fonctionnement sans LLM")
+                    print(f"  Ollama timeout ({wait}s) — fonctionnement sans LLM")
             except Exception as e:
-                print(f"⚠️  LLM Ollama erreur : {type(e).__name__}: {e}")
+                print(f"  LLM Ollama erreur : {type(e).__name__}: {e}")
                 return
 
     # ------------------------------------------------------------------
@@ -133,7 +135,7 @@ class TranslationEngine:
                     requests.exceptions.ConnectionError) as _e:
                 TranslationEngine._llm_circuit_open_until = (
                     _time.time() + TranslationEngine._LLM_RETRY_GAP)
-                print(f"⚠️  Ollama _call_llm échoué : {type(_e).__name__} — model={LLM_MODEL}")
+                print(f"  Ollama _call_llm échoué : {type(_e).__name__} — model={LLM_MODEL}")
 
         return ''
 
@@ -160,6 +162,20 @@ class TranslationEngine:
         """
         lemma = tok.get('lemma', '').lower().strip()
         if not lemma:
+            return
+
+        # Garde structurel : ROOT + enfant dep='cop' = attribut du sujet, sans
+        # ambiguïté possible ("le travail... est meilleur" → 'meilleur' ROOT,
+        # 'être' cop) — pas besoin de deviner via LLM, qui peut se tromper
+        # (ex: 'meilleur' classé à tort 'modified_noun' au lieu de 'predicate',
+        # ce qui filtre le candidat KG fìsaman/Adjective au profit du candidat
+        # fìsamannci/Noun, un mismatch de POS). Décision 2026-07-13.
+        _orig_idx = tok.get('orig_index')
+        if (tok.get('dep') == 'ROOT'
+                and any(t.get('dep') == 'cop' and t.get('head_index') == _orig_idx
+                        for t in all_tokens)):
+            tok['context_type'] = 'predicate'
+            print(f"     [CONTEXT] '{lemma}' → context_type=predicate (structurel : ROOT+cop)")
             return
 
         # Build sentence for context
@@ -219,6 +235,21 @@ class TranslationEngine:
             return candidates
 
         for c in candidates[:5]:  # Only check top 5 for speed
+            # Un candidat déjà à 100 pts (match exact ou premier sens d'une
+            # liste "mot, synonyme") n'a aucune ambiguïté à lever : le LLM
+            # (petit modèle, verdict instable d'un candidat à l'autre pour
+            # des gloses qui dénotent pourtant le même mot-sens) ne fait
+            # qu'introduire du bruit non-déterministe dans le départage —
+            # ex: "ami." jugé NO mais "ami, bien-aimé." jugé YES pour le
+            # même context_type='possessive', alors que les deux DÉNOTENT
+            # "ami" (bug trouvé 2026-07-20 : "mon ami" → 'díyanyemɔgɔ'
+            # (freq=0, sens "bien-aimé") au lieu de 'téri' (freq=253, sens
+            # "ami." simple), le boost écrasant le départage par fréquence).
+            # Réserver le LLM aux matches déjà imparfaits (<100 pts), où il
+            # sert réellement à distinguer un sens approximatif pertinent
+            # d'un faux-positif substring.
+            if c.get('final_score', 0) >= 100:
+                continue
             gloss = c.get('fr', '').lower().rstrip('.').strip()
             if not gloss:
                 continue
@@ -247,65 +278,19 @@ class TranslationEngine:
                 # else:
                     # print(f"     [CONTEXT SKIP] '{gloss}' → {context_type}: no match")
             except Exception as e:
-                print(f"     ⚠️  Context boost failed for '{gloss}': {e}")
+                print(f"       Context boost failed for '{gloss}': {e}")
 
-        # Re-sort by final_score after context boosts
-        candidates.sort(key=lambda x: x['final_score'], reverse=True)
+        # Re-sort by final_score after context boosts — départage via
+        # _primacy_key (kg/retriever.py), identique au tri du retriever
+        # (attesté d'abord, puis sense_index, puis corpus_freq) — un tuple
+        # ad-hoc local divergeait sur le filtre "attesté d'abord" (bug
+        # trouvé 2026-07-21 : 'homme' → un sens sense_index=1 jamais
+        # attesté pouvait battre 'cɛ̀' sense_index=2/freq=3223).
+        candidates.sort(key=lambda x: (
+            x['final_score'],
+            _primacy_key(x.get('sense_index', 1), x.get('corpus_freq', 0), x.get('fr', ''))
+        ), reverse=True)
         return candidates
-
-    def _needs_synonym(self, tok_lemma: str, candidates: list,
-                       all_embed: bool) -> bool:
-        """
-        Decide whether synonym fallback should be attempted (0-100 point scale).
-
-        Do NOT attempt synonym when:
-        - A candidate's French gloss already contains the search word
-          (embedding found semantically correct result)
-        - Top candidate is an exact match with high score
-        - FIX: all_embed AND top_score < _EMBED_DEAD_ZONE
-          The embedding space has zero useful signal; synonym candidates
-          retrieved via the same embedding will be equally unreliable.
-          Short-circuit to placeholder immediately.
-
-        DO attempt synonym when:
-        - No candidates
-        - Top score < 70 pts
-        - All embedding results AND no gloss contains the search word
-        """
-        if not candidates:
-            return True
-
-        top_score   = candidates[0]['final_score']
-        lemma_lower = tok_lemma.lower()
-
-        # Check if any candidate's French gloss contains the search word
-        gloss_match = any(
-            lemma_lower in c.get('fr', '').lower()
-            for c in candidates[:5]
-        )
-        if gloss_match:
-            return False
-
-        # FIX: dead embedding zone — synonym from the same space won't help.
-        # Score this low means the model found nothing semantically related;
-        # any synonym it retrieves will be equally random. Emit placeholder.
-        if all_embed and top_score < _EMBED_DEAD_ZONE:
-            print(f"     [{tok_lemma}] — embed dead zone "
-                  f"(score={top_score:.1f} < {_EMBED_DEAD_ZONE}), "
-                  f"skipping synonym fallback")
-            return False
-
-        # Low confidence → try synonym ONLY if top_score very low
-        # Raised threshold from 70 to 50 pts to reduce bad synonyms
-        # (e.g., "belle" for "gentil" - different semantic field)
-        if top_score < 50:
-            return True
-
-        # All embedding with very low score → try synonym as last resort
-        if all_embed and top_score < 60:
-            return True
-
-        return False
 
     # ------------------------------------------------------------------
     # ------------------------------------------------------------------
@@ -392,11 +377,12 @@ class TranslationEngine:
         """
         Use LLM to pick the best candidate sense (0-100 point scale).
 
-        Triggers:
-        1. Multiple exact matches with close scores AND simpler exists
-        2. All embedding results with low confidence (< 75 pts)
-        3. VERB with multiple exact matches very close (<=5 pts gap)
-           AND top candidate has compound gloss
+        Trigger: ONLY when there is no reliable exact match at all (every
+        candidate came from the embedding fallback). If any exact match is
+        present, the KG's own ordering (score + corpus_freq/sense_index tie-
+        break) is trusted as-is — the LLM is never asked to arbitrate between
+        exact matches, since it has no real signal for near-duplicate glosses
+        and can override a common word with a rare synonym at random.
         """
         if len(candidates) < 2:
             return candidates
@@ -404,65 +390,37 @@ class TranslationEngine:
         top       = candidates[0]
         top_score = top['final_score']
         all_embed = all(c.get('match') == 'embed' for c in candidates)
-        # Un score élevé ne court-circuite le rerank que pour un match EXACT.
-        # Un top 'embed' à score élevé est souvent un faux ami (espace
-        # dégénéré : "monté" → fɔ/dire à 0.97) → toujours passer par le LLM.
-        if top_score >= 80 and not all_embed:
-            return candidates
-        # Exception : embed très haute confiance (score bien au-dessus du max
-        # cosinus 85 pts grâce aux bonus frame+gloss) → le LLM ne peut pas faire mieux.
-        # Le seuil 105 ne se déclenche pas pour les faux amis à 85 pts.
-        if all_embed and top_score >= 105:
-            return candidates
-
         exact_matches = [c for c in candidates if c.get('match') == 'exact']
-        close         = [c for c in candidates
-                         if top_score - c['final_score'] <= 10]
-        top_fr_words  = len(top['fr'].strip().rstrip('.').split())
-        has_simpler   = any(
-            len(c['fr'].strip().rstrip('.').split()) < top_fr_words
-            for c in candidates[1:]
-        )
-        second_exact_score = exact_matches[1]['final_score'] \
-                             if len(exact_matches) >= 2 else 0
 
-        context_match_in_lower = any(
-            any(ctx.lower() in c.get('fr','').lower()
-                for ctx in (context_tokens or []))
-            for c in candidates[1:4]
-        ) if context_tokens else False
+        # Le LLM ne tranche QUE quand il n'y a AUCUN match exact fiable —
+        # avec un exact match, l'ordre KG (score + tri corpus_freq/sense_index
+        # déjà appliqué en amont) est le signal de confiance. Un appel LLM
+        # pour départager deux exacts (même à égalité parfaite) n'a souvent
+        # aucun signal sémantique réel à exploiter (gloses quasi-identiques,
+        # ex: "argent" vs "argent.") et peut écraser un mot 100x plus fréquent
+        # (wári, corpus_freq=1360) par un synonyme rare (ɲàga, corpus_freq=13)
+        # au hasard (bug trouvé 2026-07-22).
+        if exact_matches:
+            return candidates
 
-        is_context_sensitive = (
-            tok_pos == 'VERB'
-            and not all_embed
-            and len(exact_matches) >= 2
-            and (top_score - second_exact_score) <= 5
-            and (top_fr_words >= 2 or context_match_in_lower)
-        )
+        # Exception : embed très haute confiance (score au max du barème
+        # 0-100 pts) → le LLM ne peut pas faire mieux.
+        if all_embed and top_score >= 100:
+            return candidates
 
-        should_rerank = (
-            (len(exact_matches) >= 2 and len(close) >= 2 and has_simpler)
-            or all_embed   # tout embed → score peu fiable, toujours reranker
-            or is_context_sensitive
-        )
+        should_rerank = all_embed  # tout embed → score peu fiable, toujours reranker
 
         if not should_rerank:
             return candidates
 
-        if all_embed:
-            # Pool serré pour all_embed : 5 pts max (vs 10 avant).
-            # Un écart de 10 pts inclut des candidats sémantiquement éloignés
-            # (ex: "réellement" → hàáli/très au lieu de bɛ́rɛ/vraiment).
-            rerank_pool = [c for c in candidates
-                           if top_score - c['final_score'] <= 5]
-            if len(rerank_pool) < 2:
-                rerank_pool = candidates[:3]  # fallback : top 3 si pool trop petit
-        elif is_context_sensitive:
-            rerank_pool = [c for c in candidates
-                           if top_score - c['final_score'] <= 15]
-        else:
-            rerank_pool = [c for c in candidates
-                           if top_score - c['final_score'] <= 10]
+        # should_rerank == all_embed ici (seul cas restant) : pool serré,
+        # 5 pts max (vs 10 avant) — un écart de 10 pts inclut des candidats
+        # sémantiquement éloignés (ex: "réellement" → hàáli/très au lieu de
+        # bɛ́rɛ/vraiment).
+        rerank_pool = [c for c in candidates
+                       if top_score - c['final_score'] <= 5]
+        if len(rerank_pool) < 2:
+            rerank_pool = candidates[:3]  # fallback : top 3 si pool trop petit
 
         if len(rerank_pool) < 2:
             return candidates
@@ -506,10 +464,18 @@ class TranslationEngine:
                 if chosen in candidates:
                     candidates.remove(chosen)
                     candidates.insert(0, chosen)
-                    print(f"     🧠 LLM reranked → #{chosen_idx+1} "
+                    # Le rerank est un jugement sémantique explicite du LLM parmi
+                    # un pool de candidats à score faible (souvent tous ~0 pts,
+                    # cf. all_embed) — sans ce plancher, le choix validé est
+                    # aussitôt rejeté par le seuil MIN_SCORE en aval et remplacé
+                    # par un placeholder, rendant le rerank sans effet (bug
+                    # observé sur 'appel' → wélewele choisi puis jeté).
+                    if chosen['final_score'] < MIN_SCORE:
+                        chosen['final_score'] = MIN_SCORE
+                    print(f"      LLM reranked → #{chosen_idx+1} "
                           f"'{chosen['bm']}' ({chosen['fr']})")
         except Exception as e:
-            print(f"     ⚠️  LLM rerank failed: {e}")
+            print(f"       LLM rerank failed: {e}")
 
         return candidates
 
@@ -546,46 +512,276 @@ class TranslationEngine:
         original_scores = {i: c.get('score', 0) for i, c in enumerate(candidates[:top_k])}
         invalidated_count = 0
 
+        def _ensure_min_score(c):
+            # Un candidat validé sémantiquement par le LLM ne doit pas être
+            # rejeté par le seuil MIN_SCORE en aval juste parce que son score
+            # de récupération (souvent un embed faible) est bas — même
+            # logique que le plancher du rerank ci-dessus (ligne ~548).
+            if c.get('final_score', c.get('score', 0)) < MIN_SCORE:
+                c['final_score'] = MIN_SCORE
+                c['score'] = MIN_SCORE
+
+        _tok_is_person_cache = {}
+
+        def _tok_is_person():
+            # Calculé au plus une fois par token (paresseux — coûte un appel
+            # LLM), pas par candidat.
+            if 'v' not in _tok_is_person_cache:
+                _tok_is_person_cache['v'] = bool(
+                    tok and tok.get('pos') == 'NOUN'
+                    and self._classify_common_noun_is_person(token_lower))
+            return _tok_is_person_cache['v']
+
         for i, c in enumerate(candidates[:top_k]):
             score = c.get('score', 0)
 
-            # Perfect exact (100 pts) — trust it unconditionally
-            if score >= 100:
+            # Perfect exact (100 pts) OU premier segment d'une glose multi-sens
+            # (90 pts, ex: "jour" == 1er élément de "jour, date.") — les deux
+            # sont des matches textuels structurellement certains, pas des
+            # heuristiques floues à re-vérifier par LLM. Seuil relevé de 100
+            # à 90 (bug trouvé 2026-07-17 : le LLM qwen2.5:3b invalidait à
+            # tort 'jour, date.' pour 'jour', mettant 'dón' [fréquent, 3110
+            # occurrences] à 0 pts au profit de 'dá' [rare, 27 occurrences]
+            # qui passait à 100 pts et échappait à cette vérification).
+            if score >= 90:
                 continue
 
-            # Validate all candidates ≥ 20 pts with LLM semantic check
-            if score >= 20:
-                gloss_fr = c.get('fr', '').lower().rstrip('.').strip()
+            # Décision 2026-07-20 : plus de plancher de score pour
+            # proposer un candidat à la validation LLM — TOUT candidat
+            # (y compris un embed à 5-15 pts) est soumis au LLM, qui
+            # tranche seul par le sens plutôt qu'un seuil numérique
+            # arbitraire pré-filtrant ce qui a même le droit d'être jugé.
+            # Le score sert ensuite uniquement à départager les candidats
+            # validés entre eux (ordre), pas à décider qui est validable.
+            gloss_fr = c.get('fr', '').lower().rstrip('.').strip()
 
-                # Ask LLM: is gloss semantically equivalent to token?
-                # The gloss may be a synonym list ("trop, très, beaucoup")
-                # or a compound noun ("plaque de cuisson").
+            # Identité orthographique avec la forme de SURFACE (pas le
+            # lemme) : spaCy lemmatise l'adjectif à sa forme canonique
+            # (masculin, "coopératif"), mais le KG peut ne stocker que la
+            # forme fléchie réellement utilisée dans la phrase (ex:
+            # "programme coopérative" → surface="coopérative", glose KG=
+            # "coopérative." — taguée Noun dans le dico source, mais c'est
+            # littéralement le même mot que l'adjectif cherché, variante de
+            # genre). Une correspondance EXACTE avec la forme de surface est
+            # aussi certaine structurellement qu'un match sur le lemme — le
+            # LLM, lui, juge seulement le sens du gloss isolé et rejette à
+            # tort ces variantes cross-POS car il ne voit pas ce contexte
+            # flexionnel (bug trouvé 2026-07-20 : "programme coopératif" →
+            # placeholder alors que 'kóperatifu' est la traduction correcte).
+            _tok_surface = (tok.get('surface') or '').lower().strip() if tok else ''
+            if _tok_surface and gloss_fr == _tok_surface:
+                c['_llm_validated'] = True
+                _ensure_min_score(c)
+                print(f"      Identité de surface (variante flexionnelle) : "
+                      f"'{gloss_fr}' == '{_tok_surface}' → {c['bm']}")
+                continue
+
+            # ADJ cherché vs candidat NOUN de la même famille dérivationnelle
+            # (ex: "coopératif" vs "coopérative." — glosé comme une
+            # INSTITUTION en français, un concept réellement différent de la
+            # qualité "coopératif"). Le check générique juge à raison EN
+            # FRANÇAIS que ces deux sens divergent — mais un emprunt bambara
+            # ('kóperatifu') sert souvent aux deux catégories à la fois, sans
+            # distinction de genre/POS. Décidé par similarité FastText
+            # (composition en n-grammes de caractères, modèle entraîné sur
+            # le corpus des gloses KG — cf. embeddings/fasttext_encoder.py),
+            # PAS par similarité de forme brute (rejeté : la ressemblance
+            # orthographique seule ne garantit pas le sens, ex. "sur"/"sûr")
+            # ni par un prompt LLM à exemples figés (rejeté : mémorise des
+            # mots précis au lieu de généraliser). Seuil 0.85 calibré sur
+            # des paires connues : coopératif/coopérative=0.99, final/
+            # finale=0.87 (racine partagée) vs cuisson/cuisant=0.41,
+            # sur/sûr=0.31 (mots différents malgré la ressemblance). Bug
+            # trouvé 2026-07-20 : "programme coopératif" → placeholder alors
+            # que 'kóperatifu' est correct.
+            if tok and tok.get('pos') == 'ADJ' and str(c.get('pos', '')).lower() in ('noun', 'nom'):
+                _gloss_root = gloss_fr.split(',')[0].split()[0] if gloss_fr else ''
+                from embeddings.fasttext_encoder import same_root, root_similarity
+                if _gloss_root and same_root(token_lower, _gloss_root):
+                    c['_llm_validated'] = True
+                    _ensure_min_score(c)
+                    print(f"      Même racine FastText ({root_similarity(token_lower, _gloss_root):.2f}) : "
+                          f"'{_gloss_root}' ≈ '{token_lower}' → {c['bm']}")
+                    continue
+
+            # PERSONNE cherchée vs glose ABSTRAITE de même racine (action/
+            # événement) : dérivation bambara 'tigi' ("possesseur/personne
+            # associée à X") transforme un nom abstrait en référent-personne
+            # — ex. jɔ̀yɔrɔ (participation) + tigi = jɔ̀yɔrɔtigi (celui qui a
+            # une participation = un participant). Règle structurelle
+            # générale (pas un mot précis) : seulement pour un candidat
+            # EMBED à score significatif (similarité sémantique/lexicale
+            # réelle établie, pas un nom abstrait choisi au hasard) — que ce
+            # candidat vienne du repêchage cross-POS ou déjà du pool normal
+            # (même POS=Noun des deux côtés, comme "participation"/
+            # "participant"). Bug trouvé 2026-07-20 : "participants" →
+            # 'jɔ̀yɔrɔ' rejeté à raison par le check générique (ce n'est PAS
+            # un participant, c'est la participation elle-même) faute d'un
+            # candidat KG "personne" générique — 'jɔ̀yɔrɔtigi' comble ce trou
+            # sans rien halluciner de neuf.
+            if (c.get('match') == 'embed' and c.get('score', 0) >= 25
+                    and tok and tok.get('pos') == 'NOUN' and _tok_is_person()):
+                _cand_is_person = self._classify_common_noun_is_person(gloss_fr)
+                if not _cand_is_person:
+                    c['bm'] = (c.get('bm') or '') + 'tigi'
+                    c['_llm_validated'] = True
+                    # Dérivation SYNTHÉTISÉE (jamais attestée telle quelle
+                    # dans le KG) : ne doit jamais surclasser un candidat
+                    # réellement attesté qui a, lui, passé la validation
+                    # sémantique normale. Remise à l'échelle proportionnelle
+                    # (facteur, pas plancher fixe) : un plancher unique à
+                    # MIN_SCORE effaçait aussi l'ordre RELATIF entre
+                    # dérivations tigi elles-mêmes, faisant perdre le
+                    # meilleur match ("participation"→jɔ̀yɔrɔtigi) au profit
+                    # d'un moins bon ("réunion"→jɛ̀ɛrɛtigi) une fois tous à
+                    # égalité (bug trouvé 2026-07-23, "participants"). Un
+                    # facteur multiplicatif préserve cet ordre tout en
+                    # gardant l'ensemble sous un vrai mot attesté (ex.
+                    # 'bànbaganci'=23.2 pts, non affecté ici) — corrige
+                    # "djihadistes" → 'bólofaratigi' [affluent+tigi, gonflé
+                    # à 29-32 pts] sans régresser "participants".
+                    c['score'] = max(MIN_SCORE, round(c.get('score', 0) * 0.3, 1))
+                    c['final_score'] = c['score']
+                    print(f"      Personne↔abstrait : '{gloss_fr}' (non-personne) + "
+                          f"'tigi' → '{c['bm']}' pour '{token_lower}' (personne)")
+                    continue
+
+            # Verbe réflexif ("il SE lève") : une glose "se {verbe}" n'est
+            # PAS une variante restreinte du verbe nu à pénaliser — c'est
+            # exactement le sens cherché ICI, le clitique réfléchi de la
+            # phrase le confirme structurellement. Sans ce garde, la
+            # validation générique (ci-dessous) traite "se lever" comme
+            # un sens plus spécifique que "lever" (vrai en isolation :
+            # "lever" nu peut aussi être transitif) et l'invalide au
+            # profit d'un faux-ami non-réfléchi mieux placé dans une glose-
+            # liste (bug trouvé 2026-07-20 : "il se lève" → 'láyɛ̀lɛn'
+            # ["hausser, faire monter, lever"] au lieu de 'wúli' ["se
+            # lever."], le vrai clitique réfléchi ignoré par la validation).
+            _tok_is_reflexive_here = bool(tok) and any(
+                x.get('dep') in ('expl:comp', 'expl:pass')
+                and x.get('head_index') == tok.get('orig_index')
+                and ('Reflex=Yes' in str(x.get('morph', ''))
+                     or x.get('role') == 'reflexive')
+                for x in (all_tokens or []))
+            if _tok_is_reflexive_here and (
+                    gloss_fr == f'se {token_lower}'
+                    or gloss_fr == f"s'{token_lower}"):
+                c['_llm_validated'] = True
+                _ensure_min_score(c)
+                print(f"      Réflexif structurel : '{gloss_fr}' ≈ 'se {token_lower}' → {c['bm']}")
+                continue
+
+            # Ask LLM: is gloss semantically equivalent to token?
+            # The gloss may be a synonym list ("trop, très, beaucoup")
+            # or a compound noun ("plaque de cuisson").
+            #
+            # max_tokens=3 forçait un verdict immédiat sans aucun
+            # raisonnement — le petit modèle local (qwen2.5:3b) échouait
+            # alors de façon déterministe (5/5) même sur des cas triviaux.
+            # Autoriser un raisonnement bref avant un marqueur terminal
+            # 'REPONSE=' (même technique que _classify_refl_verb) restaure
+            # un verdict fiable — mais SEULEMENT si la question posée
+            # correspond à la STRUCTURE réelle de la glose (bug trouvé
+            # 2026-07-19, deux formes très différentes) :
+            #   - glose-liste ("méticuleusement, clairement et dans le
+            #     détail...") : le mot cherché est-il un des sens listés ?
+            #     → "clairement" dans cette liste = OUI.
+            #   - glose qualifiée SANS virgule ("gens de caste", "main
+            #     droite") : le qualificatif RESTREINT le sens du mot nu
+            #     à une sous-catégorie — ce n'est PAS un synonyme direct.
+            #     Sans ce garde, "gens de caste" (caste artisanale
+            #     spécifique) validait à tort pour "gens" (personnes en
+            #     général), pareil "main droite" pour "main".
+            # Piège supplémentaire au sein même des gloses-listes : un mot
+            # peut apparaître à l'INTÉRIEUR d'un des segments sans EN
+            # ÊTRE un lui-même (ex: "air sympathique, qualité d'être
+            # sympathique, don de plaire aux gens" — "gens" y est le
+            # complément du 3e segment, pas un synonyme listé de "gens" ;
+            # contraste avec "clairement" qui EST le 2e segment de sa
+            # liste). D'où "LUI-MÊME" : il ne suffit pas que le mot soit
+            # présent dans le texte, il doit être un sens/synonyme à part
+            # entière de la liste.
+            _is_list_gloss = ',' in gloss_fr
+            if _is_list_gloss:
+                # Le verdict "LUI-MÊME" seul (sans exemples) oscillait selon
+                # la formulation. Isoler le SEGMENT contenant le mot (au lieu
+                # de faire raisonner le LLM sur la liste entière) + des
+                # exemples travaillés (renforçateur→OUI vs complément d'un
+                # autre mot→NON) stabilise le verdict. Exemples neutres
+                # (aucun ne nomme le mot réellement recherché — sinon on
+                # fige la réponse pour CE mot précis au lieu d'enseigner
+                # la règle générale, cf. décision 2026-07-19 sur 'regarder'/
+                # 'observer' : le fix doit généraliser, pas mémoriser un cas).
+                import re as _re_seg
+                _segments = [s.strip() for s in gloss_fr.split(',')]
+                _segment = next(
+                    (s for s in _segments
+                     if _re_seg.search(r'(^|\s)' + _re_seg.escape(token_lower) + r'($|\s)', s)),
+                    gloss_fr)
+                # Identité triviale : le segment isolé EST le mot cherché,
+                # sans rien d'autre (ex: glose "statut, situation." pour
+                # "situation" → segment="situation"). Structurellement
+                # certain, comme le score>=90 plus haut — inutile de
+                # demander au LLM, qui produisait des réponses incohérentes
+                # sur ce cas dégénéré non représenté dans les exemples
+                # few-shot (bug trouvé 2026-07-20 : "situation" rejeté à
+                # tort pour 'jɔ̀sen'/"statut, situation." et 'kísa').
+                if _segment.strip().lower() == token_lower:
+                    c['_llm_validated'] = True
+                    _ensure_min_score(c)
+                    print(f"      Segment = mot cherché (identité) : "
+                          f"'{gloss_fr}' ⊇ '{token_lower}' → {c['bm']}")
+                    continue
+                prompt = (
+                    f'Exemples :\n'
+                    f'- Segment "encore aujourd\'hui", mot "aujourd\'hui" -> REPONSE=OUI '
+                    f'(encore est un simple renforçateur, aujourd\'hui garde son sens plein)\n'
+                    f'- Segment "envie de parler aux voisins", mot "voisins" -> REPONSE=NON '
+                    f'(voisins est le complément de "parler à", le sens central du segment est '
+                    f'"envie/désir de parler", pas "voisins")\n'
+                    f'- Segment "très grand", mot "grand" -> REPONSE=OUI (très est un renforçateur)\n'
+                    f'- Segment "chemin de fer", mot "fer" -> REPONSE=NON (fer est un complément '
+                    f'du nom "chemin", le sens du segment est un TYPE de chemin, pas "fer")\n\n'
+                    f'Maintenant applique la même logique :\n'
+                    f'Segment "{_segment}", mot "{token_lower}" -> ?\n'
+                    f'Réponds uniquement par REPONSE=OUI ou REPONSE=NON (pas d\'explication).'
+                )
+            else:
                 prompt = (
                     f'Dans un dictionnaire, la glose d\'un mot bambara est: \"{gloss_fr}\".\n'
-                    f'Le mot français cherché est: \"{token_lower}\".\n'
-                    f'Est-ce que \"{token_lower}\" correspond à l\'une des significations '
-                    f'ou synonymes de cette glose (liste ou expression)?\n'
-                    f'Réponds uniquement par OUI ou NON.'
+                    f'Le mot français cherché (SEUL, sans qualificatif) est: \"{token_lower}\".\n'
+                    f'Réfléchis brièvement (1 phrase) : cette glose désigne-t-elle la même chose '
+                    f'que \"{token_lower}\" EN GÉNÉRAL, ou seulement une catégorie/variante '
+                    f'restreinte de \"{token_lower}\" (auquel cas ce N\'EST PAS un synonyme '
+                    f'direct du mot seul) ?\n'
+                    f'Termine ta réponse par une nouvelle ligne : REPONSE=OUI (synonyme direct, '
+                    f'sens général identique) ou REPONSE=NON (sens plus restreint/spécifique)'
                 )
 
-                try:
-                    resp = self._call_llm(prompt, max_tokens=3).strip().upper()
-                    is_valid = resp.startswith('O')
+            try:
+                resp = self._call_llm(prompt, max_tokens=100).strip().upper()
+                _tail = resp.rsplit('REPONSE=', 1)[-1] if 'REPONSE=' in resp else resp
+                is_valid = _tail.strip().startswith('OUI')
 
-                    if is_valid:
-                        print(f"     ✅ LLM valide: '{gloss_fr}' ≈ '{token_lower}' → {c['bm']}")
-                    else:
-                        # Candidate is semantically wrong → disqualify completely
-                        c['score'] = 0
-                        c['final_score'] = 0
-                        invalidated_count += 1
-                        # print(f"     ⚠️  LLM invalide: '{gloss_fr}' ≠ '{token_lower}' → {c['bm']} (→ 0 pts)")
+                if is_valid:
+                    c['_llm_validated'] = True
+                    _ensure_min_score(c)
+                    print(f"      LLM valide: '{gloss_fr}' ≈ '{token_lower}' → {c['bm']}")
+                else:
+                    # Candidate sémantiquement rejeté → exclu de la sélection
+                    # via un flag, jamais en écrasant son score à 0 (le score
+                    # d'origine reste une donnée de diagnostic valable — c'est
+                    # l'exclusion de la liste plus bas qui l'empêche d'être
+                    # choisi, pas une falsification de son score).
+                    c['_llm_invalidated'] = True
+                    invalidated_count += 1
+                    # print(f"       LLM invalide: '{gloss_fr}' ≠ '{token_lower}' → {c['bm']} (exclu)")
 
-                except Exception as e:
-                    print(f"     ⚠️  LLM validation failed: {e}")
-                    # Conservative: penalize on LLM failure
-                    c['score'] = max(0, score - 15)
-                    c['final_score'] = c['score']
+            except Exception as e:
+                print(f"       LLM validation failed: {e}")
+                # LLM indisponible : score conservé tel quel (pas de pénalité
+                # arbitraire ni de mise à 0), le candidat reste jugeable sur
+                # son mérite de récupération.
 
         # FALLBACK: if all EXACT matches were invalidated and KG has no bare match,
         # restore only if the compound is linguistically very close to the bare token.
@@ -593,7 +789,7 @@ class TranslationEngine:
         # but "plaque de cuisson" is far from "cuisson" (2+ words apart, different starting word).
         # This handles compound verbs without hardcoding.
         exact_matches = [c for c in candidates[:top_k] if c.get('match') == 'exact']
-        invalid_exact = sum(1 for c in exact_matches if c.get('final_score', 0) == 0)
+        invalid_exact = sum(1 for c in exact_matches if c.get('_llm_invalidated'))
 
         if invalid_exact > 0 and invalid_exact == len(exact_matches) and exact_matches:
             # Find the best exact match by original score
@@ -626,194 +822,129 @@ class TranslationEngine:
             if is_close_variant and tok is not None and all_tokens:
                 _extra_words = [w for w in words_in_gloss if w != token_lower]
                 _tok_idx = tok.get('orig_index')
-                _complement_lemmas = {
+                # Include both lemma and surface: adjective lemmas get normalized
+                # to masculine singular by spaCy (e.g. "douces" -> "doux"), which
+                # doesn't lexically match a feminine gloss form like "patate douce".
+                # Comparing surface forms too (via prefix match, since "douces"
+                # starts with "douce") catches these irregular agreement cases.
+                _complement_forms = {
                     (t.get('lemma') or t.get('bm') or '').lower()
                     for t in all_tokens
                     if t.get('head_index') == _tok_idx
-                    and t.get('dep') in ('obj', 'nmod', 'obl:arg', 'xcomp')
+                    and t.get('dep') in ('obj', 'nmod', 'obl:arg', 'xcomp', 'amod')
+                    and t.get('role') not in ('interrogative', 'relative')
+                } | {
+                    (t.get('surface') or t.get('text') or '').lower()
+                    for t in all_tokens
+                    if t.get('head_index') == _tok_idx
+                    and t.get('dep') in ('obj', 'nmod', 'obl:arg', 'xcomp', 'amod')
                     and t.get('role') not in ('interrogative', 'relative')
                 }
-                if _extra_words and not (_complement_lemmas & set(_extra_words)):
+                _forms_match = any(
+                    ew == cf or cf.startswith(ew) or ew.startswith(cf)
+                    for ew in _extra_words for cf in _complement_forms if cf
+                )
+                if _extra_words and not _forms_match:
                     is_close_variant = False
-                    print(f"     ⚠️  [FALLBACK] '{best_gloss}' rejeté : aucun "
+                    print(f"       [FALLBACK] '{best_gloss}' rejeté : aucun "
                           f"complément réel du token ne correspond à {_extra_words}")
 
             if best_orig_score > 0 and is_close_variant:
                 restore_score = int(best_orig_score * 0.5)  # 50% of original
                 best_exact['score'] = restore_score
                 best_exact['final_score'] = restore_score
+                best_exact['_llm_invalidated'] = False
                 # Move this restored exact match to the front after re-sorting
                 candidates.remove(best_exact)
                 candidates.insert(0, best_exact)
-                print(f"     ⚠️  [FALLBACK] Restauré exact match à {restore_score} pts "
+                print(f"       [FALLBACK] Restauré exact match à {restore_score} pts "
                       f"(50% de {best_orig_score}): '{best_gloss}' est proche de '{token_lower}' "
                       f"(distance={word_distance})")
 
-        # Re-sort by score
-        candidates.sort(key=lambda x: x.get('final_score', x.get('score', 0)), reverse=True)
+        # Candidats invalidés par le LLM et non restaurés ci-dessus : exclus
+        # de la liste plutôt que laissés avec un score mis à 0 — le score
+        # n'est jamais falsifié, un candidat rejeté disparaît simplement des
+        # options considérées.
+        candidates = [c for c in candidates if not c.get('_llm_invalidated')]
+
+        # Re-sort by score — départage via _primacy_key (cf. décision 2026-07-21).
+        candidates.sort(key=lambda x: (
+            x.get('final_score', x.get('score', 0)),
+            _primacy_key(x.get('sense_index', 1), x.get('corpus_freq', 0), x.get('fr', ''))
+        ), reverse=True)
 
         # FINAL FALLBACK: if all exact matches failed validation AND we only have
         # embedding results left, prefer a placeholder over a weak embedding match.
         # This prevents "cuisson" from falling back to "jírisi" (menuiserie) just because
-        # it's an embedding match.
+        # it's an embedding match — UNLESS that embedding candidate was itself
+        # explicitly confirmed by the LLM check above (_llm_validated), in which
+        # case wiping it out here would silently discard a positive semantic
+        # judgment just because its retrieval score happens to be low (bug
+        # trouvé 2026-07-19 : "fructueux" → nàfama validé " LLM valide:
+        # 'profitable, rentable' ≈ 'fructueux'" puis effacé quand même par ce
+        # garde, produisant un placeholder [fructueux] au lieu du mot validé).
         exact_matches = [c for c in candidates if c.get('match') == 'exact']
-        embed_only = not exact_matches or all(c.get('final_score', 0) == 0 for c in exact_matches)
+        embed_only = not exact_matches
         top_is_embed = candidates and candidates[0].get('match') == 'embed'
         top_score = candidates[0].get('final_score', 0) if candidates else 0
-
-        if embed_only and top_is_embed and top_score < 30:
+        top_validated = candidates and candidates[0].get('_llm_validated')
+        # NOTE (bug trouvé 2026-07-20, revert) : un plancher basé sur
+        # corpus_freq>0 pour contourner ce seuil a été essayé ici, dans
+        # l'idée qu'une fréquence positive signale un "vrai" mot. Ça a
+        # laissé passer 'pàriti'="parti." (candidat NON validé, jamais
+        # passé par la boucle LLM ci-dessus) pour "participant" — la
+        # fréquence atteste que le MOT existe, pas qu'il est sémantiquement
+        # lié à la requête. Retour au comportement strict : sans validation
+        # LLM positive, un embed <30 pts reste un placeholder.
+        if embed_only and top_is_embed and top_score < 30 and not top_validated:
             # All exact matches failed validation; only weak embedding remains
             # Clear candidates to force placeholder fallback downstream
-            print(f"     📭 [NO FALLBACK TO EMBED] All exact matches invalidated & "
+            print(f"      [NO FALLBACK TO EMBED] All exact matches invalidated & "
                   f"top embed too weak ({top_score} pts) → use placeholder instead")
             return []
 
         return candidates
 
     # ------------------------------------------------------------------
-    # SYNONYM FALLBACK
+    # GLOSS MATCH VALIDATION (fast KG-label lookup path)
     # ------------------------------------------------------------------
 
-    def _validate_synonym_candidate(self, original_lemma: str,
-                                    syn: str, best: dict) -> bool:
+    def _validate_gloss_match(self, token_fr: str, gloss_fr: str) -> bool:
         """
-        Validate that a KG candidate is a genuine translation of `syn`
-        (and therefore of `original_lemma`).
-
-        FIX: The previous approach compared cosine(embed(syn), embed(gloss)).
-        This is circular: the same embedding model that retrieved a wrong
-        candidate (e.g. tíminandi/appliqué for assaillir/attaquer) will
-        also report high similarity between 'assaillir' and 'appliqué'
-        because both words live near the same compressed cluster.
-
-        New approach: ask the LLM directly. A one-shot yes/no call is
-        cheap (max_tokens=3) and semantically correct.
-
-        Fallback (if LLM call fails): check whether the gloss textually
-        starts with or contains the synonym stem. This is weaker but
-        safe — it never accepts completely unrelated glosses.
+        Validate that a KG gloss genuinely carries the meaning of the
+        source French word, for the quick surface/lemma/gloss-prefix
+        lookup in _translate_token (bypasses the full retrieve+rerank
+        pipeline). A dictionary gloss can textually contain the source
+        word (e.g. "tout, tout entier") while the Bambara headword
+        actually carries a narrower or idiomatic connotation not visible
+        in the gloss text alone (e.g. bákuru ~ "tout perdu/ruiné", not a
+        neutral pre-adjectival intensifier) — only a semantic check
+        catches this, not string matching.
         """
-        best_fr   = best.get('fr', '').lower().rstrip('.').strip()
-        syn_lower = syn.lower().strip()
+        gloss_clean = (gloss_fr or '').lower().rstrip('.').strip()
+        token_clean = (token_fr or '').lower().strip()
+        if not gloss_clean or not token_clean:
+            return bool(gloss_clean)
 
-        # Fast text pass: if the gloss contains the synonym word directly,
-        # it's clearly valid — skip the LLM call.
-        if syn_lower in best_fr or best_fr.startswith(syn_lower):
-            return True
-
-        # LLM semantic judge — breaks out of the embedding space.
-        # Q: does the French gloss mean approximately the same as the synonym?
         prompt = (
-            f'Does the French word or expression "{best_fr}" mean '
-            f'approximately the same as "{syn}"?\n'
-            f'Reply with YES or NO only.'
+            f'Dans un dictionnaire, la glose d\'un mot bambara est: "{gloss_clean}".\n'
+            f'Le mot français cherché est: "{token_clean}".\n'
+            f'Est-ce que "{token_clean}" correspond vraiment au sens de cette glose '
+            f'dans un usage courant (pas seulement un chevauchement de mots) ?\n'
+            f'Réponds uniquement par OUI ou NON.'
         )
         try:
             resp = self._call_llm(prompt, max_tokens=3).strip().upper()
-            is_valid = resp.startswith('Y')
-            if not is_valid:
-                print(f"     ⚠️  LLM semantic check: "
-                      f"'{best_fr}' ≠ '{syn}' → rejected "
-                      f"(bm='{best.get('bm')}', "
-                      f"original='{original_lemma}')")
-            return is_valid
+            return resp.startswith('O')
         except Exception as e:
-            print(f"     ⚠️  LLM validation failed: {e}")
-            # Conservative fallback: only accept if gloss contains
-            # at least the first 5 characters of the synonym
-            stem = syn_lower[:5]
-            return len(stem) >= 4 and stem in best_fr
+            print(f"       [KG-LABEL] Validation LLM échouée: {e}")
+            # Conservatif : sans validation possible, ne pas faire confiance
+            # à un match non-exact.
+            return False
 
-    def _try_synonym_fallback(self, tok: dict, frame: str,
-                               context_lemmas: list):
-        """
-        Ask LLM for synonyms, retrieve KG candidates, return best dict.
-
-        The returned candidate is injected into the main candidate list
-        so it competes fairly by score.
-
-        Guard in _needs_synonym() prevents false positives.
-        Validation in _validate_synonym_candidate() uses LLM (not
-        embedding cosine) to break out of the compressed embedding space.
-        """
-        lemma = tok['lemma']
-        lang  = tok.get('lang', 'fr')
-        pos   = tok.get('pos', 'VERB')
-
-        pos_label = {
-            'VERB': 'verbs',
-            'NOUN': 'nouns',
-            'ADJ':  'adjectives',
-            'ADV':  'adverbs',
-        }.get(pos, 'words')
-
-        prompt = (
-            f'Donne 3 {pos_label} français qui signifient EXACTEMENT la même chose que "{lemma}".\n'
-            f'Synonymes VRAIS seulement, pas de sens différent.\n'
-            f'Ne PAS inclure "{lemma}" lui-même.\n'
-            f'Réponds UNIQUEMENT par 3 mots séparés par des virgules.'
-        )
-
-        try:
-            response = self._call_llm(prompt, max_tokens=25)
-            if not response:
-                return None
-
-            synonyms = [s.strip().lower()
-                        for s in response.replace('->', '').split(',')]
-            lemma_lower = lemma.lower()
-            synonyms = [
-                s for s in synonyms
-                if s
-                and len(s) > 1
-                and s != lemma_lower
-                and lemma_lower not in s
-            ][:3]
-
-            if not synonyms:
-                return None
-
-            print(f"     🔧 Synonyms for '{lemma}': {synonyms}")
-
-            for syn in synonyms:
-                syn_candidates = self.retriever.retrieve(
-                    syn, frame,
-                    spacy_pos=pos,
-                    top_k=3,
-                    lang=lang,
-                )
-
-                best = syn_candidates[0] if syn_candidates else None
-                if not best or best['final_score'] < 0.90:
-                    continue
-
-                # FIX: LLM-based semantic validation instead of
-                # embedding cosine similarity.
-                # Embedding cosine is circular — the same compressed
-                # vector space that produced the wrong retrieval will
-                # also report high similarity between an unrelated gloss
-                # and the synonym (observed: assaillir ≈ appliqué @ 0.986).
-                is_valid = self._validate_synonym_candidate(
-                    original_lemma=lemma,
-                    syn=syn,
-                    best=best,
-                )
-
-                if is_valid:
-                    best['via_synonym'] = syn
-                    print(f"🔧 Synonym match: '{syn}' → "
-                          f"'{best['bm']}' ({best['fr']}) "
-                          f"score={best['final_score']:.3f}")
-                    return best
-                else:
-                    print(f"⚠️  Rejected: '{best['bm']}' "
-                          f"({best['fr']}) — LLM: '{best.get('fr','')}' "
-                          f"≠ '{syn}'")
-
-        except Exception as e:
-            print(f"⚠️  Synonym fallback failed: {e}")
-
-        return None
+    # ------------------------------------------------------------------
+    # SYNONYM FALLBACK
+    # ------------------------------------------------------------------
 
     def _detect_possession_type(self, lemma: str, semantic_class: str = '') -> str:
         """
@@ -832,7 +963,7 @@ class TranslationEngine:
             if _kg_pt and _kg_pt[0].get('pt'):
                 _pt = str(_kg_pt[0]['pt']).upper()
                 if _pt in ('AGE', 'MATERIAL', 'EXPERIENCER', 'ABSTRACT', 'STATIF'):
-                    print(f"  🔍 [POSS_TYPE KG] '{lemma}' → {_pt}")
+                    print(f"   [POSS_TYPE KG] '{lemma}' → {_pt}")
                     return _pt
         except Exception:
             pass
@@ -865,7 +996,7 @@ class TranslationEngine:
             try:
                 result = self._call_llm(prompt, max_tokens=5).strip().upper()
                 if result in ('AGE', 'MATERIAL', 'EXPERIENCER', 'ABSTRACT', 'STATIF'):
-                    print(f"  🔍 [POSS_TYPE] '{lemma}' sc={semantic_class!r} → {result}")
+                    print(f"   [POSS_TYPE] '{lemma}' sc={semantic_class!r} → {result}")
                     return result
             except Exception:
                 continue
@@ -898,35 +1029,44 @@ class TranslationEngine:
         for _attempt in range(3):
             try:
                 raw = self._call_llm(prompt, max_tokens=5).strip().upper().split()[0]
-                print(f"     🔍 LLM classify? '{raw}'")
+                print(f"      LLM classify? '{raw}'")
                 result = raw if raw in ('STATIF', 'PARTICIPE', 'QUALITE', 'VALEUR') else 'QUALITE'
                 return result
             except Exception as e:
-                print(f"     🔍 attempt {_attempt+1} failed: {e}")
+                print(f"      attempt {_attempt+1} failed: {e}")
 
         return 'QUALITE'
 
     def _detect_classifying_adj(self, lemma: str) -> bool:
         """Returns True if the adjective is CLASSIFIANT (no -man), False if QUALIFIANT (needs -man).
-        CLASSIFIANT = nationality, category, domain, type (français, international, médical).
-        QUALIFIANT = quality, property, characteristic (grand, beau, rouge, chaud)."""
+
+        L'ancienne version demandait au LLM de trancher directement entre
+        QUALIFIANT/CLASSIFIANT sur une définition abstraite (catégorie/
+        nationalité/domaine vs qualité) — verdict non fiable et répétable à
+        tort (température=0, vérifié via appel direct Ollama) pour "français"
+        (répondait QUALIFIANT alors qu'il figurait en PREMIER exemple
+        CLASSIFIANT de son propre prompt) ; une reformulation en termes de
+        grammaire française pure ("adjectif qualificatif" vs "adjectif de
+        relation") échoue aussi totalement (qwen2.5:3b répond QUALIFICATIF
+        pour tous les mots testés, aucune discrimination). Remplacé par un
+        test étroit et empiriquement fiable : "{lemma} est-il une couleur ?"
+        (bug trouvé 2026-07-20, décision utilisateur : ne suffixer -man QUE
+        pour les couleurs, classifiant par défaut sinon — cf. bìlen/bìlenman
+        déjà présents comme entrées KG distinctes pour les couleurs)."""
         prompt = (
-            f'The French adjective "{lemma}" is used as an epithet (modifying a noun).\n'
-            f'QUALIFIANT: describes a quality, property or characteristic of the noun — '
-            f'grand, beau, vieux, rouge, rapide, chaud, intelligent, bon, mauvais, simple.\n'
-            f'CLASSIFIANT: indicates a category, nationality, domain or type, NOT a quality — '
-            f'français, international, européen, médical, électronique, national, politique.\n'
-            f'Reply with ONLY one word: QUALIFIANT or CLASSIFIANT.'
+            'Q: "bleu" est-il une couleur ? R: OUI\n'
+            'Q: "grand" est-il une couleur ? R: NON\n'
+            f'Q: "{lemma}" est-il une couleur ? R:'
         )
         for _attempt in range(3):
             try:
-                raw = self._call_llm(prompt, max_tokens=5).strip().upper().split()[0]
-                print(f"     🔍 adj_classify? '{lemma}' → '{raw}'")
-                if raw in ('QUALIFIANT', 'CLASSIFIANT'):
-                    return raw == 'CLASSIFIANT'
+                raw = self._call_llm(prompt, max_tokens=5).strip().upper()
+                _is_color = raw.startswith('OUI')
+                print(f"      adj_classify (couleur?) '{lemma}' → {'OUI' if _is_color else 'NON'}")
+                return not _is_color
             except Exception as e:
-                print(f"     🔍 adj_classify attempt {_attempt+1} failed: {e}")
-        return False  # fallback: assume qualifying → add -man
+                print(f"      adj_classify attempt {_attempt+1} failed: {e}")
+        return True  # fallback: pas prouvé couleur → classifiant, pas de -man
 
     def _classify_adj_state(self, tok, all_embed=False):
         """Classe un ADJ prédicatif en STATIF/PARTICIPE/VALEUR/QUALITE et pose
@@ -949,6 +1089,19 @@ class TranslationEngine:
             and t.get('head_index') == tok.get('orig_index')
             for t in _clause_toks))
         if _has_obl_arg:
+            _result = 'STATIF'
+        elif not self._detect_classifying_adj(tok.get('lemma', '')):
+            # _detect_classifying_adj retourne False précisément pour les
+            # couleurs (cf. sa docstring) — les couleurs sont STATIF en
+            # bambara (V+-len/-nen dòn : "bìlenlen dòn"), PAS qualitatif
+            # (S ka ADJ). _detect_statif_adj lui-même liste pourtant "rouge"
+            # comme exemple QUALITE dans son propre prompt, garantissant la
+            # mauvaise classification à chaque appel pour tout adjectif de
+            # couleur (bug trouvé 2026-07-20 : "ce légume est rouge" →
+            # "nin lègimu in ka bìlen" au lieu de "nin lègimu in bìlenlen
+            # dòn", régression du fix couleur=statif du commit 07d26fe une
+            # fois le tag KG semantic_class='color' disparu). Réutilise le
+            # test couleur déjà validé fiable pour le suffixe -man.
             _result = 'STATIF'
         else:
             _result = self._detect_statif_adj(tok.get('lemma', ''))
@@ -995,11 +1148,11 @@ class TranslationEngine:
                 if not parts:
                     raise ValueError('empty response')
                 raw = parts[0]
-                print(f"     🔍 reflexive_type? '{raw}'")
+                print(f"      reflexive_type? '{raw}'")
                 result = raw if raw in ('RECIPROCAL', 'REFLEXIVE', 'PASSIVE', 'SUBJECTIVE') else 'SUBJECTIVE'
                 return result
             except Exception as e:
-                print(f"     🔍 attempt {_attempt+1} failed: {e}")
+                print(f"      attempt {_attempt+1} failed: {e}")
         return 'SUBJECTIVE'
 
     def _load_semantic_classes(self) -> str:
@@ -1013,44 +1166,194 @@ class TranslationEngine:
         except Exception:
             return []
 
-    def _detect_relational_noun(self, lemma: str, bm: str) -> bool:
+    def _classify_common_noun_is_person(self, surface: str, is_substantivized_adjective: bool = False) -> bool:
+        """
+        LLM en dernier recours pour pipeline/possession_ner.py::detect_category :
+        un nom COMMUN français (pas une entité nommée) désigne-t-il une
+        personne (ex: "frère", "maître", "ami") ? Appelé seulement quand
+        spaCy NER + regex année + is_currency n'ont rien trouvé — voir le
+        docstring du module pour la liste des alternatives non-LLM essayées
+        et rejetées (spaCy NER/vecteurs, Stanza NER, LEFFF).
+
+        is_substantivized_adjective : fait structurel transmis par l'appelant
+        (le token est tagué ADJ par spaCy mais employé ici sans nom tête,
+        ex: "le VIEUX" comme possesseur) — jamais une liste de mots figée,
+        seulement l'information grammaticale réelle issue du parse.
+        """
+        if not surface:
+            return False
+        # Format Q/R avec exemples positifs (parenté ET rôle social) + un
+        # négatif : la formulation déclarative précédente ("désigne-t-il...
+        # Exemples OUI/NON...") répondait NON à tort et de façon répétable
+        # (température=0, pas un aléa — un biais du prompt, vérifié via appel
+        # direct Ollama) pour des noms de parenté pourtant listés dans ses
+        # propres exemples ("mère" — bug trouvé 2026-07-20, même famille que
+        # le biais déjà corrigé pour _classify_noun_is_object). Le style Q/R
+        # ci-dessous suit le patron déjà validé par l'utilisateur pour cette
+        # même classe de biais.
+        _structural_hint = (
+            f'Note grammaticale : "{surface}" est ici un adjectif employé '
+            f'sans nom, donc substantivé (il joue le rôle d\'un nom).\n'
+            if is_substantivized_adjective else ''
+        )
+        prompt = (
+            f'{_structural_hint}'
+            'Q: "frère" désigne-t-il une personne ? R: OUI\n'
+            'Q: "roi" désigne-t-il une personne ? R: OUI\n'
+            'Q: "voiture" désigne-t-il une personne ? R: NON\n'
+            f'Q: "{surface}" désigne-t-il une personne ? R:'
+        )
+        for _ in range(2):
+            result = self._call_llm(prompt, max_tokens=5).strip().upper()
+            if 'OUI' in result:
+                print(f"   [PER_NOUN] '{surface}' → personne (OUI)")
+                return True
+            if 'NON' in result:
+                print(f"   [PER_NOUN] '{surface}' → non-personne (NON)")
+                return False
+        return False
+
+    def _classify_noun_is_object(self, lemma: str) -> bool:
+        """
+        Sous un déterminant possessif pronominal ("sa maison", "mes devoirs"),
+        le possesseur est toujours une personne — seul le nom possédé décide
+        de l'aliénabilité. Une partie du corps ou un lien de parenté est
+        inaliénable (pas de 'ka' : "n bolo" = ma main) ; un objet/possession
+        ordinaire est aliénable ("n ka bìlakun" = mes devoirs).
+        """
+        if not lemma:
+            return False
+        # Nom COLLECTIF (famille, équipe, communauté, peuple...) : associé au
+        # vocabulaire de la parenté/des personnes mais désigne un GROUPE, pas
+        # un lien de parenté individuel (père, frère) — la question corps/
+        # parenté ci-dessous répond systématiquement OUI pour "famille" faute
+        # de cette distinction (bug trouvé 2026-07-20, décision utilisateur :
+        # "ma famille" doit être ALIÉNABLE avec 'ka', contrairement à un lien
+        # de parenté individuel). Question isolée sans exemple contrastif
+        # (aucun mot de parenté à citer comme contre-exemple) — vérifiée
+        # stable sur famille/équipe/communauté/peuple (OUI) vs jambe/main/
+        # livre/voiture (NON).
+        _collective_prompt = (
+            f'Est-ce que "{lemma}" désigne un groupe de plusieurs personnes '
+            f'(pas un individu) ?\nRéponds UNIQUEMENT par OUI ou NON.'
+        )
+        _collective_result = self._call_llm(_collective_prompt, max_tokens=5).strip().upper()
+        if _collective_result.startswith('OUI'):
+            print(f"   [ALIENABLE_NOUN] '{lemma}' → objet (aliénable, nom collectif)")
+            return True
+        # Format Q/R avec exemples positifs (corps ET parenté) + un négatif :
+        # une formulation déclarative ("désigne-t-il...Exemples OUI/NON...")
+        # répondait NON à tort et de façon répétable pour "main"/"tête" même
+        # à température=0 (pas un aléa — un biais du prompt). Le style Q/R
+        # ci-dessous a été vérifié manuellement stable sur main/tête/œil/
+        # frère/père/devoir/sac/voiture/maison.
+        prompt = (
+            'Q: "jambe" est-il une partie du corps ou un lien de parenté ? R: OUI\n'
+            'Q: "père" est-il une partie du corps ou un lien de parenté ? R: OUI\n'
+            'Q: "livre" est-il une partie du corps ou un lien de parenté ? R: NON\n'
+            f'Q: "{lemma}" est-il une partie du corps ou un lien de parenté ? R:'
+        )
+        result = self._call_llm(prompt, max_tokens=5).strip().upper()
+        _is_object = 'NON' in result
+        _mark = 'objet (aliénable)' if _is_object else 'corps/parenté (inaliénable)'
+        print(f"  {'' if _is_object else ''} [ALIENABLE_NOUN] '{lemma}' → {_mark}")
+        return _is_object
+
+    def _detect_relational_noun(self, tok, bm: str) -> bool:
         """
         Détermine si un nom est INALIENABLE en bambara → pas de 'ka'.
-        Principe linguistique : possession inalienable = relation constitutive et
-        indissociable entre possesseur et possédé. Possession aliénable = le possédé
-        existe indépendamment du possesseur et peut en être séparé → 'ka'.
+
+        Bug fixé 2026-07-07 : l'ancienne heuristique (LLM + liste lexicale
+        parenté/corps vs objets physiques) ne regardait QUE le nom possédé,
+        jamais le possesseur — "les maîtres du jeu" traitait 'maître' comme
+        ALIÉNABLE isolément, ignorant que le possesseur ('jeu') n'est même
+        pas une entité nommée. Remplacé par une table possesseur×possédé
+        basée sur la catégorie NER des deux (voir pipeline/possession_ner.py) :
+        l'aliénabilité dépend de la PAIRE de catégories, pas du nom possédé
+        seul (ex: PER possesseur + tout sauf PER → ALIÉNABLE ; presque tout
+        le reste → NON-ALIÉNABLE).
+
         Retourne True  → inalienable → pas de 'ka'
         Retourne False → aliénable   → 'ka' requis
         Fallback : True (pas de 'ka') — plus sûr grammaticalement.
         """
+        lemma = tok.get('lemma', '') if isinstance(tok, dict) else str(tok)
         if not lemma or not bm:
             return True
 
-        prompt = (
-            f"En bambara, RÈGLE ABSOLUE : deux entités de même nature ne prennent JAMAIS 'ka'.\n"
-            f"Les relations de parenté, de famille, et les relations sociales entre personnes "
-            f"sont toujours INALIENABLES (sans 'ka') : père, mère, frère, sœur, fils, fille, "
-            f"oncle, tante, cousin, grand-père, grand-mère, mari, femme, enfant, ami, ennemi, "
-            f"voisin, collègue, patron, maître, chef, roi, dirigeant, responsable, leader, etc.\n"
-            f"Les parties du corps sont aussi INALIENABLES (sans 'ka') : tête, bras, jambe, main, etc.\n"
-            f"Seuls les objets physiques SÉPARABLES et TRANSFÉRABLES prennent 'ka' (possession ALIÉNABLE) : "
-            f"maison, voiture, livre, vêtement, argent, champ, outil, etc.\n"
-            f"Le mot français '{lemma}' représente-t-il une relation INALIENABLE (OUI) "
-            f"ou un objet ALIÉNABLE (NON) ?\n"
-            f"Réponds UNIQUEMENT par : OUI ou NON"
-        )
-        for _ in range(2):
-            result_str = self._call_llm(prompt, max_tokens=5).strip().upper()
-            if 'OUI' in result_str:
-                print(f"  🔗 [RELATIONAL] '{lemma}' ({bm}) → INALIENABLE (sans 'ka')")
-                return True
-            if 'NON' in result_str:
-                print(f"  📦 [RELATIONAL] '{lemma}' ({bm}) → ALIÉNABLE (avec 'ka')")
-                return False
+        from pipeline.possession_ner import detect_category, is_alienable
 
-        # LLM indisponible → pas de 'ka' par défaut (plus sûr grammaticalement)
-        print(f"  ❓ [RELATIONAL] '{lemma}' ({bm}) → LLM indisponible, pas de 'ka' par défaut")
-        return True
+        # Lemme (forme canonique singulier), pas surface fléchie : le pluriel
+        # ("enfants") fait échouer la classification LLM person alors que le
+        # lemme singulier ("enfant") — pourtant l'exemple même du prompt —
+        # réussit à 100% (bug trouvé 2026-07-17, reproductible à chaque essai,
+        # pas de la non-déterminisme LLM comme d'abord supposé).
+        possessed_cat = detect_category(
+            lemma, self._classify_common_noun_is_person)
+
+        # Chercher le possesseur : nom en dep='nmod' dont le head est ce token
+        # ("le maître DU JEU" : jeu.dep='nmod', jeu.head_index=maître.orig_index).
+        # ADJ inclus : un adjectif substantivé ("le VIEUX", "le jeune"...) peut
+        # lui-même être le possesseur ("le champ DU VIEUX" = "the old man's
+        # field") — spaCy le tague ADJ (nature lexicale) même en emploi
+        # nominal, donc l'exclure ratait ces cas et retombait à tort sur "pas
+        # de possesseur trouvé" → aucun 'ka' (bug pré-existant, corrigé
+        # 2026-07-16).
+        _clause_toks = getattr(self, '_current_clause_tokens', [])
+        _tok_idx = tok.get('orig_index') if isinstance(tok, dict) else None
+        _possessor_tok = next((t for t in _clause_toks
+                               if t.get('dep') == 'nmod'
+                               and t.get('head_index') == _tok_idx
+                               and t.get('pos') in ('NOUN', 'PROPN', 'ADJ')), None)
+
+        if _possessor_tok is not None:
+            _possessor_is_adj = _possessor_tok.get('pos') == 'ADJ'
+            if _possessor_is_adj:
+                # Adjectif substantivé employé comme possesseur ("le champ DU
+                # VIEUX", "la maison DU JEUNE") : structurellement, un ADJ
+                # sans nom tête employé en position de possesseur nominal
+                # désigne quasi-toujours une personne — pas besoin du LLM
+                # (qui s'est trompé sur "vieux", classé à tort non-personne).
+                possessor_cat = 'PER'
+            else:
+                _possessor_lemma = _possessor_tok.get('lemma') or _possessor_tok.get('surface', '')
+                possessor_cat = detect_category(
+                    _possessor_lemma, self._classify_common_noun_is_person)
+        else:
+            # Pas de possesseur nominal explicite trouvé (déterminant possessif
+            # pronominal : "sa maison", "mes devoirs"...). Le possesseur est
+            # toujours une PERSONNE (son/ma/ton...). Si le possédé DÉNOTE
+            # LUI-MÊME une personne (ami, collègue, voisin...), la même règle
+            # PER×PER=inaliénable que pour un possesseur nominal explicite
+            # ("le fils DU ROI" → sans 'ka') s'applique directement — "son
+            # ami" est structurellement identique à "l'ami DE PIERRE" une
+            # fois le possesseur substitué par un pronom, ce n'est pas parce
+            # que le déterminant est pronominal que la paire de catégories
+            # change (bug trouvé 2026-07-20 : "ses amis" recevait 'ka' à
+            # tort, la vérification corps/parenté ne reconnaissant "ami" ni
+            # comme partie du corps ni comme lien de parenté). Seulement si
+            # le possédé N'EST PAS une personne (maison, devoirs, main...) on
+            # retombe sur le test corps/parenté vs objet, qui lui distingue
+            # correctement une partie du corps (inaliénable) d'un bien
+            # ordinaire (aliénable) — distinction que la table PER/ORG/LOC
+            # ne sait pas faire (aucune des deux n'étant "PER").
+            _possede_is_person = detect_category(
+                lemma, self._classify_common_noun_is_person) == 'PER'
+            if _possede_is_person:
+                _alienable_pp = is_alienable('PER', 'PER')
+                _mark = "ALIÉNABLE (avec 'ka')" if _alienable_pp else "INALIENABLE (sans 'ka')"
+                print(f"   [RELATIONAL] possessif pronominal × possédé='{lemma}'(PER) → {_mark}")
+                return not _alienable_pp
+            _is_object = self._classify_noun_is_object(lemma)
+            _mark = "ALIÉNABLE (avec 'ka')" if _is_object else "INALIENABLE (sans 'ka')"
+            print(f"   [RELATIONAL] possessif pronominal × possédé='{lemma}' → {_mark}")
+            return not _is_object
+
+        _alienable = is_alienable(possessor_cat, possessed_cat)
+        _mark = 'ALIÉNABLE (avec \'ka\')' if _alienable else "INALIENABLE (sans 'ka')"
+        print(f"   [RELATIONAL] possesseur={_possessor_tok.get('surface')}"
+              f"({possessor_cat}) × possédé='{lemma}'({possessed_cat}) → {_mark}")
+        return not _alienable
 
     def _detect_intransitive_type(self, lemma: str, semantic_class: str = '') -> str:
 
@@ -1059,7 +1362,7 @@ class TranslationEngine:
         _INTRANSITIVE_SC = {'motion', 'biological', 'posture', 'spontaneous',
                             'meteorological'}
         if semantic_class in _INTRANSITIVE_SC:
-            print(f"  🔍 [TRANSITIVITY] '{lemma}' class={semantic_class} "
+            print(f"   [TRANSITIVITY] '{lemma}' class={semantic_class} "
                   f"→ ABSOLU (classe autonome, LLM ignoré)")
             return 'ABSOLU'
 
@@ -1067,7 +1370,7 @@ class TranslationEngine:
         # → V+li kɛ / action_noun kɛ dans step7_final). Pas de LLM nécessaire.
         _TRANSITIVE_SC = {'consumption', 'preparation', 'action', 'craft', 'perception'}
         if semantic_class in _TRANSITIVE_SC:
-            print(f"  🔍 [TRANSITIVITY] '{lemma}' class={semantic_class} "
+            print(f"   [TRANSITIVITY] '{lemma}' class={semantic_class} "
                   f"→ ACTION (classe transitive, LLM ignoré)")
             return 'ACTION'
 
@@ -1078,7 +1381,7 @@ class TranslationEngine:
         prompt = (
             f"Le verbe français '{lemma}' peut-il prendre un COD (complément d'objet direct) ?\n"
             f"ABSOLU  → jamais de COD (intransitif strict) : courir, dormir, régner, exister\n"
-            f"ACTION  → COD possible (transitif) : manger, couper, aider, donner\n"
+            f"ACTION  → COD possible (transitif) : manger, couper, aider\n"
             f"Réponds UNIQUEMENT par ABSOLU ou ACTION."
         )
         _result = None
@@ -1086,7 +1389,7 @@ class TranslationEngine:
         for attempt in range(3):
             try:
                 _raw = self._call_llm(prompt, max_tokens=5).strip().upper()
-                print(f"  🔬 [TRANSITIVITY raw] attempt {attempt+1}: {_raw!r}")
+                print(f"   [TRANSITIVITY raw] attempt {attempt+1}: {_raw!r}")
                 if _raw.startswith('ABSOLU'):
                     _result = 'ABSOLU'; break
                 if _raw.startswith('ACTION'):
@@ -1095,10 +1398,10 @@ class TranslationEngine:
                 continue
 
         verdict = _result
-        print(f"  🔍 [TRANSITIVITY] LLM verdict for '{lemma}' (class={semantic_class}) → {verdict}  [raw: {_raw!r}]")
+        print(f"   [TRANSITIVITY] LLM verdict for '{lemma}' (class={semantic_class}) → {verdict}  [raw: {_raw!r}]")
         return verdict
 
-    def _classify_refl_verb(self, lemma: str) -> str:
+    def _classify_refl_verb(self, lemma: str, context: str = '') -> str:
         """
         Classe un verbe réfléchi français selon son comportement syntaxique
         (catégories alignées sur les classes VerbeNet — le VerbNet français
@@ -1133,24 +1436,50 @@ class TranslationEngine:
         # Pas de cache KG : un verdict LLM périmé/erroné (timeout → défaut
         # 'actif') se figeait sinon indéfiniment. On rappelle le LLM à chaque
         # fois.
+        # Le verbe seul est souvent ambigu/figuré (sens propre vs métaphorique)
+        # → le LLM tranche sans contexte et varie d'un run à l'autre. Fournir
+        # la phrase complète quand disponible ancre le verdict dans l'usage réel.
+        _context_line = f'Phrase : "{context}"\n\n' if context else ''
         prompt = (
-            f'Verbe réfléchi à classer : "{lemma}". Catégorie :\n\n'
+            f'{_context_line}'
+            f'Verbe réfléchi à classer (dans le sens où il est employé ci-dessus '
+            f'si une phrase est donnée) : "{lemma}". Catégorie :\n\n'
             f'PRONOMINAL : "se" transforme V transitif en son équivalent INTRANSITIF automatique\n'
             f'  (le sujet subit l\'événement sans agir délibérément sur lui-même),\n'
             f'  OU verbe impossible sans "se", OU sens différent de V.\n'
             f'  Ex: réveiller qqn → se réveiller (le réveil arrive), endormir → s\'endormir,\n'
-            f'      fermer → se fermer, évanouir → s\'évanouir, taire → se taire, tromper → se tromper.\n\n'
-            f'SOIN_CORPOREL : action d\'hygiène/toilette ACTIVE et intentionnelle sur son propre corps.\n'
-            f'  Ex: laver, raser, coiffer, maquiller, habiller, brosser.\n\n'
-            f'POSTURE : UNIQUEMENT changement de POSITION PHYSIQUE du corps (où le corps EST).\n'
+            f'      fermer → se fermer, évanouir → s\'évanouir, taire → se taire, tromper → se tromper,\n'
+            f'      souvenir → se souvenir (aucun sens sans "se").\n'
+            f'  ATTENTION : si le verbe garde EXACTEMENT son sens transitif normal, avec "se"\n'
+            f'  comme simple complément d\'objet réfléchi (le sujet fait V à lui-même au lieu\n'
+            f'  de qqn d\'autre — ex: juger qqn → se juger = juger soi-même), CE N\'EST PAS\n'
+            f'  pronominal → c\'est ACTIF.\n\n'
+            f'SOIN_CORPOREL : action d\'hygiène/toilette ACTIVE et intentionnelle sur son propre corps,\n'
+            f'  où les MAINS manipulent physiquement le corps (laver, raser, coiffer...).\n'
+            f'  Ex: laver, raser, coiffer, maquiller, habiller, brosser.\n'
+            f'  ATTENTION : la perception sensorielle SEULE (voir/regarder/écouter, même dans\n'
+            f'  un miroir, sans manipulation physique) N\'EST PAS du soin corporel → ACTIF.\n\n'
+            f'POSTURE : UNIQUEMENT changement de POSITION PHYSIQUE du corps humain/animal\n'
+            f'  (où le corps EST : debout, assis, allongé, penché...), PAS un déplacement\n'
+            f'  vers/dans un lieu ou un état.\n'
             f'  Ex: asseoir (debout→assis), coucher (debout→allongé), pencher, agenouiller.\n'
-            f'  ATTENTION : réveiller et endormir NE SONT PAS des postures (états de conscience).\n\n'
-            f'ACCIDENTEL : blessure ou dommage physique que subit le sujet (volontaire ou non).\n'
-            f'  → blesser, couper, brûler, casser (bras/jambe), écorcher = TOUJOURS ACCIDENTEL.\n\n'
-            f'ACTIF : autre action intentionnelle du sujet sur lui-même.\n'
-            f'  Ex: déguiser, défendre, préparer (mental).\n\n'
-            f'Réponds OBLIGATOIREMENT par UN SEUL MOT parmi : PRONOMINAL, SOIN_CORPOREL, POSTURE, ACCIDENTEL ou ACTIF\n'
-            f'NE répète PAS le verbe.'
+            f'  ATTENTION : réveiller et endormir NE SONT PAS des postures (états de conscience) ;\n'
+            f'  voir, regarder, écouter, sentir NE SONT PAS des postures (perception sensorielle,\n'
+            f'  aucun changement de position du corps) — ce sont des actions intentionnelles\n'
+            f'  du sujet (→ ACTIF quand dirigées sur soi-même).\n\n'
+            f'ACCIDENTEL : dommage, dégradation ou détérioration progressive que subit le sujet\n'
+            f'  (volontaire ou non), y compris au sens figuré (le sujet SUBIT un processus\n'
+            f'  négatif progressif, ce n\'est PAS une posture du corps, même si le verbe\n'
+            f'  évoque littéralement un mouvement ou une position).\n'
+            f'  → blesser, couper, brûler, casser (bras/jambe), écorcher, sombrer, effondrer,\n'
+            f'  dégrader = TOUJOURS ACCIDENTEL.\n\n'
+            f'ACTIF : autre action intentionnelle du sujet sur lui-même, y compris une\n'
+            f'  perception dirigée sur soi (le sujet observe/perçoit sa propre personne).\n'
+            f'  Ex: déguiser, défendre, préparer (mental), observer qqn → s\'observer\n'
+            f'  (percevoir soi-même, ex. dans un miroir).\n\n'
+            f'Réfléchis brièvement (1-2 phrases) à ce que fait le sujet, PUIS termine\n'
+            f'ta réponse par une nouvelle ligne exactement : CATEGORIE=<mot>\n'
+            f'où <mot> est UN SEUL MOT parmi : PRONOMINAL, SOIN_CORPOREL, POSTURE, ACCIDENTEL, ACTIF.'
         )
 
         _CATS = ('PRONOMINAL', 'SOIN_CORPOREL', 'POSTURE', 'ACCIDENTEL', 'ACTIF')
@@ -1158,12 +1487,18 @@ class TranslationEngine:
         _raw = ''
         for attempt in range(3):
             try:
-                # timeout court (15s) : réponse attendue = un seul mot-catégorie,
-                # pas besoin du ceiling 90s — échoue vite sur les 3 tentatives
-                # plutôt que de bloquer jusqu'à 4'30 quand Ollama est indisponible.
-                _raw = self._call_llm(prompt, max_tokens=6, timeout=15).strip().upper()
-                print(f"  🔬 [REFL_CAT raw] attempt {attempt+1}: {_raw!r}")
-                _hit = next((c for c in _CATS if c in _raw), None)
+                # max_tokens=6 empêchait tout raisonnement et forçait un
+                # verdict immédiat, souvent faux sur ce petit modèle local
+                # (bug trouvé 2026-07-19 : "se regarder" → POSTURE/PRONOMINAL
+                # à froid, mais ACTIF une fois qu'un raisonnement bref est
+                # autorisé avant la catégorie finale). Le marqueur
+                # 'CATEGORIE=' ancre l'extraction sur le VERDICT FINAL plutôt
+                # que sur un nom de catégorie mentionné en passant pendant le
+                # raisonnement ("ce n'est pas PRONOMINAL, donc...").
+                _raw = self._call_llm(prompt, max_tokens=120, timeout=20).strip().upper()
+                print(f"   [REFL_CAT raw] attempt {attempt+1}: {_raw!r}")
+                _tail = _raw.rsplit('CATEGORIE=', 1)[-1] if 'CATEGORIE=' in _raw else _raw
+                _hit = next((c for c in _CATS if c in _tail), None)
                 if _hit:
                     _result = _hit.lower(); break
                 # LLM a répété la construction réflexive au lieu d'une catégorie.
@@ -1182,7 +1517,7 @@ class TranslationEngine:
                 continue
 
         cat = _result or 'actif'  # défaut si LLM indisponible
-        print(f"  🔄 [REFL_CAT] '{lemma}' → {cat}  [LLM, raw={_raw!r}]")
+        print(f"   [REFL_CAT] '{lemma}' → {cat}  [LLM, raw={_raw!r}]")
         return cat
 
     def _classify_privative_noun(self, lemma: str) -> str:
@@ -1226,12 +1561,24 @@ class TranslationEngine:
 
         prompt = (
             f'Trouve la forme infinitive du verbe français "{verb}".\n\n'
-            f'Exemples:\n'
+            f'Exemples (formes conjuguées):\n'
             f'- lave, laves, lavent → laver\n'
             f'- mange, manges, mangent → manger\n'
             f'- viens, venons, vient → venir\n'
             f'- suis, sommes, êtes, sont → être\n'
             f'- ai, avons, avez, ont → avoir\n\n'
+            f'Exemples (participes passés irréguliers, parfois employés comme '
+            f'adjectifs — attention aux verbes en -uire/-uire dont le participe '
+            f'ne se devine pas par simple suffixe "-er"):\n'
+            f'- cuit, cuite, cuits, cuites → cuire\n'
+            f'- fait, faite → faire\n'
+            f'- pris, prise → prendre\n'
+            f'- mis, mise → mettre\n'
+            f'- dit, dite → dire\n'
+            f'- écrit, écrite → écrire\n'
+            f'- ouvert, ouverte → ouvrir\n'
+            f'- né, née → naître\n'
+            f'- mort, morte → mourir\n\n'
             f'Réponds UNIQUEMENT par l\'infinitif (un seul mot), minuscules, sans ponctuation.'
         )
 
@@ -1241,7 +1588,7 @@ class TranslationEngine:
                 if infinitive and len(infinitive) > 1:
                     return infinitive
             except Exception as e:
-                print(f"     ⚠️  Infinitive normalization failed (attempt {attempt+1}): {e}")
+                print(f"       Infinitive normalization failed (attempt {attempt+1}): {e}")
 
         return verb
 
@@ -1258,17 +1605,20 @@ class TranslationEngine:
             'meteorological', 'copula', 'stative_cognitive', 'psych_emotion', 'modal', 'obligation',
             'action', 'consumption_liquid', 'consumption',
             'preparation', 'technique', 'craft', 'communication', 'communication_transitive',
-            'having', 'other', 'color',
+            'having', 'giving', 'other', 'color',
         }
         try:
             _kg_sc = self.db.query(
-                "MATCH (n:Sense) WHERE toLower(n.fr) = toLower($fr) AND n.semantic_class IS NOT NULL "
-                "RETURN n.semantic_class AS sc LIMIT 1",
+                "MATCH (n:Sense) WHERE (toLower(n.fr) = toLower($fr) "
+                "OR toLower(n.fr) = toLower($fr) + '.') AND n.semantic_class IS NOT NULL "
+                "RETURN n.semantic_class AS sc "
+                "ORDER BY CASE WHEN toLower(n.fr) = toLower($fr) THEN 0 ELSE 1 END "
+                "LIMIT 1",
                 {'fr': lemma})
             if _kg_sc and _kg_sc[0].get('sc'):
                 _sc = str(_kg_sc[0]['sc']).lower()
                 if _sc in _VALID_SC:
-                    print(f"     🏷️  semantic_class('{lemma}') = {_sc}  [KG]")
+                    print(f"       semantic_class('{lemma}') = {_sc}  [KG]")
                     return _sc
         except Exception:
             pass
@@ -1310,20 +1660,30 @@ class TranslationEngine:
             f'  action=ACTIVITÉ INTRANSITIVE par nature (pas de COD habituel) :\n'
             f'    travailler, courir, marcher, nager, danser, voyager, jouer (sans objet),\n'
             f'    étudier (intransitif), lire (intransitif).\n'
-            f'    ⚠️ NE PAS classer ici les verbes qui prennent normalement un COD :\n'
-            f'    acheter, vendre, donner, prendre, chercher, trouver → utiliser "other".\n'
+            f'     NE PAS classer ici les verbes qui prennent normalement un COD :\n'
+            f'    acheter, vendre, prendre, chercher, trouver → utiliser "other"\n'
+            f'    (donner, envoyer, offrir… → utiliser "giving", voir plus bas).\n'
             f'  consumption_liquid=ingestion de LIQUIDE (boire, siroter — jamais consumption pour boire)\n'
             f'  consumption=ingestion SOLIDE uniquement (manger, croquer, dévorer, avaler qqch de solide — ≠ boire)\n'
             f'  preparation=transformation (cuisiner, préparer...)\n'
             f'  technique=travail spécialisé (construire, réparer...)\n'
             f'  craft=création artistique (peindre, écrire...)\n'
-            f'  communication=parole (dire, raconter, demander...)\n'
+            f'  communication=parole SANS lien fixe entre sujet et interlocuteur '
+            f'(dire, raconter, demander...)\n'
+            f'  communication_transitive=verbe de DÉNOMINATION qui attribue une '
+            f'étiquette/un nom à quelqu\'un ou dont l\'action lie durablement deux '
+            f'personnes l\'une à l\'autre (appeler [nommer], nommer, surnommer, nomination).\n'
+            f'     "appeler" au sens de "téléphoner à" ou "héler" reste communication.\n'
             f'  having=ÉTAT de POSSESSION STATIQUE uniquement (posséder, détenir, contenir,\n'
             f'    appartenir, garder, tenir). Avoir = having UNIQUEMENT au sens possessif.\n'
-            f'    ⚠️ acheter ≠ having (acheter = transaction → other)\n'
+            f'     acheter ≠ having (acheter = transaction → other)\n'
+            f'  giving=TRANSFERT DE POSSESSION vers un destinataire — VerbNet classe 13.1\n'
+            f'    (Give Verbs) : donner, envoyer, offrir, prêter, remettre, céder, expédier,\n'
+            f'    livrer, transmettre, rendre. Le sujet cesse de posséder, le destinataire\n'
+            f'    commence à posséder — jamais "having" (qui est un ÉTAT statique sans\n'
+            f'    transfert ni destinataire).\n'
+            f'     donner ≠ having (donner = transfert → giving, jamais possession statique)\n'
             f'  other=verbe transitif direct standard sans catégorie propre :\n'
-            f'    acheter, vendre, donner, prendre, chercher, trouver, voir, rencontrer,\n'
-            f'    envoyer, recevoir, ouvrir, fermer, casser, porter, mettre, garder...\n\n'
             f'Réponds UNIQUEMENT par le nom de la catégorie.'
         )
         try:
@@ -1334,10 +1694,31 @@ class TranslationEngine:
             # Chercher la première correspondance exacte avec une classe valide
             cls = next((w for w in words if w in _VALID_SC), 'other')
 
-            print(f"     🏷️  semantic_class('{lemma}') = {cls}  [LLM]")
+            # 'having' route tout root_tok vers noun_phrase_have (rules/core.py
+            # _is_avoir), une reclassification structurelle lourde — un faux
+            # positif y est bien plus coûteux qu'ailleurs (le vrai verbe
+            # disparaît du rendu). La classification multi-catégories ci-
+            # dessus s'est montrée non-fiable spécifiquement pour ce bucket
+            # (bug trouvé 2026-07-20 : "bénir" classé 'having' → "Que Dieu
+            # vous bénisse" rendu "aw bɛ Dieu", verbe et sens perdus). Second
+            # avis via un test étroit OUI/NON, même patron que le test
+            # couleur déjà validé fiable pour le suffixe -man.
+            if cls == 'having':
+                _confirm_prompt = (
+                    'Q: "posséder" signifie-t-il avoir/détenir quelque chose ? R: OUI\n'
+                    'Q: "donner" signifie-t-il avoir/détenir quelque chose ? R: NON\n'
+                    f'Q: "{lemma}" signifie-t-il avoir/détenir quelque chose ? R:'
+                )
+                _confirm = self._call_llm(_confirm_prompt, max_tokens=5).strip().upper()
+                if not _confirm.startswith('OUI'):
+                    print(f"       semantic_class('{lemma}') = having rejeté "
+                          f"(second avis: NON) → other  [LLM]")
+                    return 'other'
+
+            print(f"       semantic_class('{lemma}') = {cls}  [LLM]")
             return cls
         except Exception as e:
-            print(f"     ⚠️  semantic class detection failed: {e}")
+            print(f"       semantic class detection failed: {e}")
             return 'other'
         
     # ------------------------------------------------------------------
@@ -1355,7 +1736,118 @@ class TranslationEngine:
             mapping = {}
         return mapping.get(spacy_pos)
 
-    def _translate_token(self, tok: dict, frame: str,
+    def _classify_verb_transitivity(self, tok: dict) -> None:
+        """Classifie intransitive_type + action_noun pour un VERB dont le bm est
+        déjà connu. Centralisé et appelé depuis LES DEUX chemins de _translate_token
+        (bm pré-assigné par le parseur/KG label, ou résolu ici via KG retrieval)
+        pour que la même règle grammaticale (transitivité, COD, semantic_class)
+        s'applique quel que soit l'endroit du pipeline où le verbe apparaît —
+        ROOT d'une clause simple ou xcomp infinitif sous un modal ('il faut
+        manger'). Avant cette centralisation, le chemin bm-pré-assigné ne posait
+        que semantic_class et retournait immédiatement, sans jamais classifier
+        intransitive_type/action_noun → 'manger' sans COD sous 'falloir' perdait
+        la nominalisation irrégulière (dumuni) que 'il mange' recevait bien.
+        """
+        # Ne pas recalculer si déjà posé (ex: depuis s.semantic_class du KG,
+        # spécifiquement pour éviter un appel LLM nondéterministe redondant).
+        if not tok.get('semantic_class'):
+            tok['semantic_class'] = self._detect_semantic_class(tok['lemma'])
+        # Validation linguistique : stative_cognitive exige un sujet Experiencer.
+        # Si context_type='agent' (le sujet fait l'action), c'est une contradiction
+        # → le verbe est une activité dynamique, pas un état cognitif statique.
+        if (tok['semantic_class'] == 'stative_cognitive'
+                and tok.get('context_type') == 'agent'):
+            tok['semantic_class'] = 'action'
+            print(f"       semantic_class('{tok['lemma']}') reclassifié "
+                  f"stative_cognitive→action [context_type=agent]")
+        _sc = tok.get('semantic_class', '')
+
+        _morph_str = str(tok.get('morph', ''))
+        _is_part_pass = ('VerbForm=Part' in _morph_str
+                         and 'Voice=Pass' in _morph_str)
+        if _is_part_pass:
+            if _sc in ('posture', 'biological', 'spontaneous', 'consumption'):
+                _is_statif = True
+            else:
+                # _detect_statif_adj renvoie une des 4 catégories
+                # QUALITE/STATIF/VALEUR/PARTICIPE (jamais vide) : seule
+                # 'STATIF' correspond à un participe-adjectif statif
+                # (-len/-nen dòn). Un check de vérité générique sur la
+                # chaîne était toujours vrai (VALEUR/QUALITE/PARTICIPE
+                # sont aussi des chaînes non-vides) → tout participe
+                # passif finissait classé statif (ex: 'faire' → VALEUR
+                # → is_statif=True à tort).
+                try:
+                    _is_statif = (self._detect_statif_adj(tok['lemma']) == 'STATIF')
+                except Exception:
+                    _is_statif = False
+            if _is_statif:
+                tok['is_statif'] = True
+                tok['pos'] = 'ADJ'
+                print(f"       participe_statif('{tok['lemma']}') = True")
+
+        # Signal lexical KG : nom support dédié → action_noun + kɛ
+        try:
+            _res = self.db.query(
+                "MATCH (s:Sense {bm: $bm, pos: 'Verb'}) "
+                "RETURN s.action_noun AS an LIMIT 1",
+                {'bm': tok['bm']})
+            _an = _res[0].get('an') if _res and _res[0] else None
+        except Exception:
+            _an = None
+        if _an:
+            tok['intransitive_type'] = 'support'
+            tok['action_noun'] = _an
+
+        # Catégorie B1 : intransitif absolu → verbe nu
+        # NB: 'perception' EXCLU — voir/entendre/sentir sont TRANSITIFS
+        #   (il l'a vu = a yé a yé ; il voit = a bɛ yéli kɛ). Sans objet
+        #   ils suivent le chemin ACTION (V+li kɛ), pas l'intransitif absolu.
+        elif _sc in ('motion', 'biological', 'posture', 'spontaneous',
+                   'meteorological'):
+            tok['intransitive_type'] = 'ABSOLU'
+
+        # Catégorie B2 : nom support dédié → action_noun + kɛ
+        elif _sc in ('consumption', 'preparation'):
+            tok['intransitive_type'] = 'support'
+
+        # Catégorie B3 : nominalisation -li/-ni → V+li + kɛ
+        elif _sc in ('action', 'technique', 'craft', 'communication'):
+            tok['intransitive_type'] = 'nominalized'
+
+    def _try_deverbal_noun_fallback(self, verb_lemma: str) -> dict:
+        """Verbe sans AUCUN candidat KG direct de pos=Verb (ex: 'recruter') :
+        retenter la recherche embedding SANS filtre de POS. Le nom d'action
+        dérivé (recrutement, organisation, nettoyage...) a souvent une
+        similarité embedding TRÈS élevée avec le verbe source ("recruter" vs
+        "recrutement." → cosine 0.93) mais était structurellement exclu par
+        le filtre spacy_pos='VERB' de la recherche principale (allowed_pos=
+        ['Verb'] uniquement) — le candidat ne participait même pas au calcul
+        de similarité. Utilisé ensuite comme nom-support (V_ACTION kɛ), même
+        mécanisme que Sense.action_noun déjà pour 'manger'→dumuni kɛ.
+        Bug trouvé 2026-07-20 : 'recruter' n'a ni entrée verbe directe ni
+        action_noun KG ; 'recrutement.'→cɛ̀ta existe et matche très fort en
+        embedding, mais jamais vu par la recherche filtrée pos=Verb."""
+        if not verb_lemma:
+            return None
+        try:
+            _cands = self.retriever.retrieve(
+                verb_lemma, spacy_pos=None, top_k=5, lang='fr')
+        except Exception:
+            return None
+        _noun_cands = [c for c in _cands
+                       if str(c.get('pos', '')).lower() in ('noun', 'nom')
+                       and c.get('match') == 'embed' and c.get('bm')]
+        if not _noun_cands:
+            return None
+        best = _noun_cands[0]
+        if best.get('score', 0) < 30:  # cosine < 0.75 sur l'échelle 0-40 pts
+            return None
+        return {'bm': best['bm'], 'fr': best.get('fr', ''),
+                'final_score': MIN_SCORE, 'score': MIN_SCORE,
+                'match': 'deverbal_noun'}
+
+    def _translate_token(self, tok: dict,
                          context_lemmas: list, all_tokens: list = None):
         surface = tok['surface']
         lemma   = tok['lemma']
@@ -1367,9 +1859,18 @@ class TranslationEngine:
 
         if tok.get('bm'):
             if pos == 'NOUN' and not tok['bm'].startswith('[') and 'is_relational' not in tok:
-                tok['is_relational'] = self._detect_relational_noun(tok['lemma'], tok['bm'])
+                tok['is_relational'] = self._detect_relational_noun(tok, tok['bm'])
             elif pos == 'ADJ':
                 self._classify_adj_state(tok)
+                # Classification épithète QUALIFIANT/CLASSIFIANT manquait sur
+                # ce chemin bm-pré-assigné (bug trouvé 2026-07-19 : "français",
+                # "international" en amod prenaient toujours le suffixe -man
+                # comme un adjectif qualifiant ordinaire, faute d'avoir jamais
+                # atteint ce check plus bas dans la fonction, réservé au
+                # chemin de retrieval complet).
+                if tok.get('dep') == 'amod' and 'is_classifying_adj' not in tok:
+                    if self._detect_classifying_adj(tok['lemma']):
+                        tok['is_classifying_adj'] = True
             elif pos == 'VERB' and 'semantic_class' not in tok:
                 # bm pré-assigné (parseur/KG) : détecter quand même la classe
                 # sémantique pour que la transitivité (li kɛ / la / nu) soit juste.
@@ -1379,7 +1880,13 @@ class TranslationEngine:
                 _pre_inf = self._normalize_verb_to_infinitive(_pre_lem)
                 if _pre_inf and _pre_inf != _pre_lem:
                     tok['lemma'] = _pre_inf
-                tok['semantic_class'] = self._detect_semantic_class(tok['lemma'])
+                # Classification centralisée (intransitive_type + action_noun) :
+                # un verbe avec bm déjà posé (ex: infinitif xcomp sous 'falloir')
+                # doit recevoir EXACTEMENT la même règle grammaticale qu'un verbe
+                # résolu par KG retrieval plus bas dans cette fonction — sinon
+                # "il ne faut pas manger" perdait le nom d'action (dumuni) et le
+                # statut support-verbe que "il mange" recevait correctement.
+                self._classify_verb_transitivity(tok)
             return tok, []
 
         if pos == 'PUNCT':
@@ -1399,7 +1906,31 @@ class TranslationEngine:
             return tok, []
 
         if pos == 'PROPN':
-            tok['bm'] = tok.get('lemma') or surface
+            # La plupart des PROPN (noms propres/personnes/lieux : Marie,
+            # Moussa) n'ont pas de "traduction" — la forme française est
+            # gardée telle quelle. Mais certains PROPN dénotent un référent
+            # commun que le KG traduit explicitement (ex: "Dieu" → 'Ála',
+            # Sense.fr='Dieu.'), pas un nom propre arbitraire. Match EXACT
+            # uniquement (pas de fuzzy/substring) pour ne jamais mistraduire
+            # un vrai nom de personne qui ressemblerait à un mot commun (bug
+            # trouvé 2026-07-20 : "Que Dieu vous bénisse" gardait "Dieu" en
+            # français au lieu de 'Ála', faute de tenter le KG pour les PROPN).
+            _lemma_propn = tok.get('lemma') or surface
+            try:
+                _propn_res = self.db.query(
+                    "MATCH (n:Sense) WHERE toLower(n.fr) = toLower($lemma) "
+                    "OR toLower(n.fr) = toLower($lemma) + '.' "
+                    "RETURN n.bm AS bm "
+                    "ORDER BY CASE WHEN coalesce(n.corpus_freq,0) > 0 THEN 0 ELSE 1 END, "
+                    "coalesce(n.sense_index,1) ASC, "
+                    "coalesce(n.corpus_freq,0) DESC LIMIT 1",
+                    {'lemma': _lemma_propn})
+            except Exception:
+                _propn_res = None
+            if _propn_res and _propn_res[0].get('bm'):
+                tok['bm'] = _propn_res[0]['bm']
+            else:
+                tok['bm'] = _lemma_propn
             return tok, []
 
         # ── PRÉ-CONTRÔLE SYNTAXIQUE : rôle nominal vs adjectif ───────────────
@@ -1419,7 +1950,81 @@ class TranslationEngine:
                 if _has_det_on_adj:
                     tok['is_nominal_adj'] = True
 
+        # "se mettre à V" ≠ "mettre" : construction réfléchie-inchoative
+        # (clitic expl:comp + xcomp marqué locatif 'à') — même structure que
+        # celle déjà reconnue par step3_verbe.py::_xcomp_locative_mark. Le
+        # lookup exact bare-lemme ci-dessous est ambigu pour certains verbes
+        # dans CETTE construction précise (ex: 'mettre.' a 2 sens KG au même
+        # gloss exact, kɛ́ et bìla, sans signal distinctif) et pioche
+        # arbitrairement le mauvais ("il s'est mis à travailler" → kɛ́/faire
+        # au lieu du sens inchoatif). Chercher "se X à" (phrase complète, pas
+        # juste un contexte) laisse le KG trancher via son propre sens dédié
+        # sans ambiguïté (ex: 'se mettre à.' → bìn, 100 pts exact, contre
+        # 70 pts pour un match partiel "se X ..." générique).
+        # Portée volontairement étroite : SEULEMENT quand la xcomp locative
+        # est présente — les réfléchis sans cette structure (se blesser, se
+        # regarder, se laver, se lever, se préparer…) ne passent jamais ce
+        # test et gardent leur résolution actuelle inchangée.
+        _refl_clitic = next((
+            t for t in (all_tokens or [])
+            if t.get('dep') == 'expl:comp' and t.get('role') == 'reflexive'
+            and t.get('head_index') == tok.get('orig_index')), None)
+        _refl_xcomp_locative_mark = next((
+            m.get('surface', '') for x in (all_tokens or [])
+            if x.get('dep') == 'xcomp' and x.get('head_index') == tok.get('orig_index')
+            for m in (all_tokens or [])
+            if m.get('dep') == 'mark' and m.get('role') == 'locative'
+            and m.get('head_index') == x.get('orig_index')
+        ), None) if (pos == 'VERB' and _refl_clitic) else None
+        if _refl_xcomp_locative_mark:
+            _refl_query = 'se ' + lemma + ' ' + str(_refl_xcomp_locative_mark).lower()
+            _refl_candidates = self.retriever.retrieve(
+                _refl_query, spacy_pos='VERB', top_k=1, lang=lang)
+            _top_refl = _refl_candidates[0] if _refl_candidates else None
+            if (_top_refl and _top_refl.get('match') == 'exact'
+                    and _top_refl.get('score', 0) >= 90):
+                tok['bm'] = _top_refl['bm']
+                tok['sens_fr'] = _top_refl.get('fr', '')
+                print(f"      [REFLEXIVE-SENSE] '{_refl_query}' → match KG dédié : "
+                      f"{tok['bm']} (\"{_top_refl.get('fr')}\", {_top_refl.get('score')} pts)")
+                self._classify_verb_transitivity(tok)
+                return tok, _refl_candidates
+
         kg_label = self._get_kg_label(pos)
+
+        # PRON substantivé avec article ("le vieux", "la petite") : spaCy
+        # tague ces ADJ employés comme noms en PRON faute d'antécédent
+        # explicite. Un vrai pronom clitique (il/elle/eux/celui...) n'a
+        # jamais de déterminant enfant. Sans ce garde-fou, le lookup KG
+        # {Pronoun} échoue (ces mots n'existent que sous Sense/adj ou
+        # Sense/nom), et le token retombe dans le chemin "mot-outil" (LLM
+        # EMPTY/un-mot, ligne ~2394) qui suppose à tort qu'un PRON n'a
+        # jamais de contenu lexical propre → bm reste vide → le token est
+        # ensuite silencieusement éliminé par le filtre PRON-sans-bm de
+        # step5_obliques, perdant tout le complément (bug trouvé 2026-07-25 :
+        # "il va causer avec le vieux" perdait tout le comitatif "avec le
+        # vieux"). Reclassifier en NOUN avant le lookup KG lui donne la même
+        # recherche Sense complète qu'un nom ordinaire.
+        if pos == 'PRON' and all_tokens:
+            _has_det = any(t.get('dep') == 'det' and t.get('head_index') == tok.get('orig_index')
+                           for t in all_tokens)
+            if _has_det:
+                tok['pos'] = 'NOUN'
+                pos = 'NOUN'
+                kg_label = self._get_kg_label('NOUN')
+
+        # ADJ prédicatif (copule) : le bambara exprime souvent "être ADJ" par
+        # un VERBE qualitatif plutôt qu'un adjectif (ex: 'ɲì' [vq, très
+        # fréquent] pour "beau/bon", vs 'ɲùman' [adjectif, rare]). Autoriser
+        # un Verb à concurrencer un Adjective sur la fréquence UNIQUEMENT en
+        # position prédicative — pas en position attributive ("belle maison"),
+        # où un verbe ne peut pas se substituer syntaxiquement à l'adjectif.
+        # Bug trouvé 2026-07-17 : 'ɲì' (freq=857) perdait systématiquement
+        # contre 'ɲùman' (freq=0) car le palier POS de cette requête bloquait
+        # tout candidat Verb avant même que la fréquence ne soit consultée.
+        _adj_predicative = (
+            pos == 'ADJ' and tok.get('dep') == 'ROOT'
+            and any(t.get('dep') == 'cop' for t in (all_tokens or [])))
 
         if kg_label:
             try:
@@ -1429,50 +2034,170 @@ class TranslationEngine:
                        OR toLower(n.lemma)   = toLower($lemma)
                        OR toLower(n.fr)      = toLower($lemma)
                        OR toLower(n.fr)      = toLower($lemma) + '.'
-                    RETURN n.bm AS bm, n.pos AS sense_pos, n.semantic_class AS sense_sc
+                       // gloss multi-mots séparés par virgule (ex: 'meilleur,
+                       // préférable.') : reconnaître le lemme comme PREMIER
+                       // sens listé, pas seulement en gloss unique exacte —
+                       // sinon un sens de bon POS (fìsaman/Adjective,
+                       // fr='meilleur, préférable.') est invisible à cette
+                       // requête et un sens de mauvais POS mais gloss exacte
+                       // (fìsamannci/Noun, fr='meilleur') gagne par défaut.
+                       // Décision 2026-07-13.
+                       OR toLower(n.fr) STARTS WITH toLower($lemma) + ','
+                    RETURN n.bm AS bm, n.pos AS sense_pos, n.semantic_class AS sense_sc, n.fr AS fr,
+                        (toLower(n.surface) = toLower($surface)
+                         OR toLower(n.lemma) = toLower($lemma)
+                         OR toLower(n.fr) = toLower($lemma)
+                         OR toLower(n.fr) = toLower($lemma) + '.'
+                         // Glose multi-sens dont le PREMIER segment est le lemme
+                         // exact ("jour, date." pour lemma='jour') : même
+                         // confiance qu'un match exact, pas une simple
+                         // ressemblance textuelle à valider par LLM — sinon
+                         // routé à tort vers _validate_gloss_match (non-déterministe,
+                         // a rejeté 'jour, date.' pour 'jour', perdant tout le
+                         // candidat correct 'dón'. Bug trouvé 2026-07-17).
+                         // MAIS seulement si le POS concorde : un homographe
+                         // français peut recouvrir DEUX MOTS SANS RAPPORT de
+                         // catégories différentes ("ferme" nom=exploitation
+                         // agricole vs "ferme, solide, bien dur..." adverbe=
+                         // solide) — un même texte de surface, pas le même
+                         // sens. Sans ce garde-fou, ce candidat sautait la
+                         // validation LLM et gagnait à tort (bug trouvé
+                         // 2026-07-17 : "il travaille dans une ferme" →
+                         // 'gójogojo' [ferme=solide, Adverbe] au lieu d'un
+                         // mot pour l'exploitation agricole).
+                         OR (toLower(n.fr) STARTS WITH toLower($lemma) + ','
+                             AND (toLower(coalesce(n.pos,'')) IN ['verb','verbe'] AND $pos='VERB'
+                                  OR toLower(coalesce(n.pos,'')) IN ['noun','nom','n'] AND $pos='NOUN'
+                                  OR toLower(coalesce(n.pos,'')) IN ['adjective','adj'] AND $pos='ADJ'
+                                  OR toLower(coalesce(n.pos,'')) IN ['adverb','adv'] AND $pos='ADV'
+                                  OR toLower(coalesce(n.pos,'')) IN ['verb','verbe'] AND $pos='ADJ' AND $adj_predicative))
+                        ) AS is_exact_match
                     ORDER BY
                         CASE WHEN toLower(n.surface) = toLower($surface)
                              THEN 0 ELSE 1 END,
-                        CASE WHEN toLower(n.fr) = toLower($lemma) THEN 0
-                             WHEN toLower(n.fr) = toLower($lemma) + '.' THEN 1
-                             ELSE 2 END,
+                        // POS-match AVANT l'exactitude du gloss FR : un gloss FR
+                        // identique mais de POS incompatible (ex: 'fìsamannci'
+                        // Noun, fr='meilleur' exact) ne doit pas l'emporter sur
+                        // un gloss FR proche mais de bon POS (ex: 'fìsaman'
+                        // Adjective, fr='meilleur, préférable.') — sinon le tok
+                        // ADJ se fait "corriger" à tort en NOUN plus bas
+                        // (décision 2026-07-13, bug : "meilleur" ADJ→NOUN).
                         CASE WHEN toLower(coalesce(n.pos,'')) IN ['verb','verbe'] AND $pos='VERB'
                              THEN 0
                              WHEN toLower(coalesce(n.pos,'')) IN ['noun','nom','n'] AND $pos='NOUN'
                              THEN 0
                              WHEN toLower(coalesce(n.pos,'')) IN ['adjective','adj'] AND $pos='ADJ'
                              THEN 0
-                             ELSE 1 END
+                             WHEN toLower(coalesce(n.pos,'')) IN ['verb','verbe'] AND $pos='ADJ' AND $adj_predicative
+                             THEN 0
+                             WHEN toLower(coalesce(n.pos,'')) IN ['adverb','adv'] AND $pos='ADV'
+                             THEN 0
+                             ELSE 1 END,
+                        // Exact bare/point/premier-segment-virgule = même palier
+                        // (tous structurellement certains — voir kg/retriever.py
+                        // _gloss_match_score pour la même logique côté retriever
+                        // générique). Départage réel ensuite par fréquence corpus
+                        // puis primauté du sens (bug trouvé 2026-07-17 : ce
+                        // chemin KG-LABEL séparé, emprunté par tous les VERB,
+                        // n'appliquait JAMAIS ces signaux — 'jí' [eau, freq=5]
+                        // gagnait contre 'mìn' [boire, freq=8] pour 'boire',
+                        // faute de tie-break ici).
+                        CASE WHEN toLower(n.fr) = toLower($lemma) THEN 0
+                             WHEN toLower(n.fr) = toLower($lemma) + '.' THEN 0
+                             WHEN toLower(n.fr) STARTS WITH toLower($lemma) + ',' THEN 0
+                             ELSE 2 END,
+                        // Filtre attesté/non-attesté d'abord (freq=0 vs freq>0,
+                        // ex: 'fòlofolo' freq=0 ne doit jamais battre 'bàn'
+                        // freq=240 malgré un sense_index plus bas), PUIS
+                        // sense_index (sens canonique du headword) départage
+                        // entre candidats déjà également attestés/non-attestés,
+                        // corpus_freq seulement pour départager un sense_index
+                        // égal — même logique que kg/retriever.py::_primacy_key
+                        // (décision utilisateur 2026-07-20 : l'ancienne tranche
+                        // log10(freq) plaçait 'tìle' [jour, sens 3, freq=3726]
+                        // avant 'dón' [jour, sens 1, freq=3110] à cause d'un
+                        // simple artefact de seuil d'arrondi entre deux
+                        // fréquences pourtant du même ordre de grandeur,
+                        // empêchant sense_index de jamais trancher).
+                        CASE WHEN coalesce(n.corpus_freq, 0) > 0 THEN 0 ELSE 1 END,
+                        coalesce(n.sense_index, 1) ASC,
+                        coalesce(n.corpus_freq, 0) DESC,
+                        CASE WHEN n.fr CONTAINS ',' THEN 1 ELSE 0 END ASC
                     LIMIT 1
-                """, {'surface': surface, 'lemma': lemma, 'pos': pos})
+                """, {'surface': surface, 'lemma': lemma, 'pos': pos,
+                      'adj_predicative': _adj_predicative})
+                # Rang 1 non-exact (matché seulement via le préfixe de glose
+                # multi-sens, ex. lemma='tout' ⊆ fr='tout, tout entier') : la
+                # glose peut porter une nuance/connotation absente du texte
+                # brut (ex. bákuru = "tout perdu/ruiné", pas un intensificateur
+                # neutre) → valider sémantiquement avant d'adopter, au lieu de
+                # faire confiance à la seule correspondance textuelle. Match
+                # exact (surface/lemma/fr identique) : confiance directe, comme
+                # le seuil ≥100 pts dans _validate_candidate_semantics.
+                if res and res[0].get('bm') and not res[0].get('is_exact_match'):
+                    if not self._validate_gloss_match(lemma, res[0].get('fr', '')):
+                        print(f"       [KG-LABEL] Rejeté : glose '{res[0].get('fr','')}' "
+                              f"ne correspond pas à '{lemma}' → repli sur le retriever complet")
+                        res = None
                 if res and res[0].get('bm'):
                     tok['bm'] = res[0]['bm']
                     _sense_pos = str(res[0].get('sense_pos') or '').lower()
                     _sense_sc  = res[0].get('sense_sc') or ''
                     _sense_fr  = str(res[0].get('fr') or res[0].get('bm', '')).strip()
+                    tok['sens_fr'] = _sense_fr
                     # Lire semantic_class depuis KG si disponible (évite appel LLM nondéterministe)
                     if _sense_sc and not tok.get('semantic_class'):
                         tok['semantic_class'] = _sense_sc
-                    # Si spaCy a mal tagué un nom comme ADJ, corriger via le KG
-                    if pos == 'ADJ' and _sense_pos in ('noun', 'n', 'nom'):
+                    # Si spaCy a mal tagué un nom comme ADJ, corriger via le KG —
+                    # SAUF si le token est en position amod (épithète d'un autre
+                    # nom, ex: "étudiants JAPONAIS") : cette position est
+                    # structurellement adjectivale quel que soit le POS lexical
+                    # du sens KG retenu ("Japonais." peut être glosé comme nom
+                    # de nationalité), et la reclassifier en NOUN le fait sortir
+                    # du filtre build_np._pos(t)=='ADJ', perdant l'épithète
+                    # silencieusement (bug trouvé 2026-07-20 : "étudiants
+                    # japonais" → "kàlandenbaw" sans 'zapɔnɛ').
+                    if (pos == 'ADJ' and _sense_pos in ('noun', 'n', 'nom')
+                            and tok.get('dep') != 'amod'):
                         tok['pos'] = 'NOUN'
                         pos = 'NOUN'
                     if pos == 'NOUN' and not tok['bm'].startswith('['):
-                        tok['is_relational'] = self._detect_relational_noun(tok['lemma'], tok['bm'])
+                        tok['is_relational'] = self._detect_relational_noun(tok, tok['bm'])
                     elif pos == 'ADJ':
                         self._classify_adj_state(tok)
+                        if tok.get('dep') == 'amod' and 'is_classifying_adj' not in tok:
+                            if self._detect_classifying_adj(tok['lemma']):
+                                tok['is_classifying_adj'] = True
+                    elif pos == 'VERB':
+                        # Même règle de classification (intransitive_type +
+                        # action_noun) qu'ailleurs dans le pipeline — ce chemin
+                        # de résolution KG-label (match exact lemme/surface)
+                        # retourne juste après (ligne ~1557) sans jamais passer
+                        # par les deux autres points d'appel de cette méthode,
+                        # ce qui laissait "il ne faut pas manger"/"il mange"
+                        # sans action_noun (dumuni) ni intransitive_type='support'.
+                        self._classify_verb_transitivity(tok)
                     # Pour les NOUN avec correspondance KG courte (fr = lemma exact en 1 mot),
                     # continuer vers le retriever sémantique : le modèle embedding peut trouver
                     # une traduction plus précise (ex: fille→dénmuso plutôt que mùsoma).
                     # Si fr contient plusieurs mots ou ponctuation, la correspondance est
                     # déjà spécifique → retour anticipé justifié.
                     _kg_fr_words = [w for w in _sense_fr.rstrip('.').split() if w]
-                    if pos == 'NOUN' and len(_kg_fr_words) <= 1:
-                        pass  # continuer vers le retriever sémantique
+                    # ADJ avec nmod enfant (ex: "bon" + "à rien") : le sens KG
+                    # trouvé pour l'ADJ seul (ɲùman) peut être correct pour "bon"
+                    # isolé mais faux si l'ADJ+nmod forme un idiome dédié ("bon à
+                    # rien" → kólon). Laisser tomber vers le retriever plus bas,
+                    # qui tente d'abord la phrase composée ADJ+nmod (ligne ~1821)
+                    # avant de retomber sur ce sens mot-à-mot déjà trouvé.
+                    _adj_has_nmod = (pos == 'ADJ' and all_tokens and any(
+                        t.get('dep') == 'nmod' and t.get('head_index') == tok.get('orig_index')
+                        for t in all_tokens))
+                    if (pos == 'NOUN' and len(_kg_fr_words) <= 1) or _adj_has_nmod:
+                        pass  # continuer vers le retriever sémantique / phrase composée
                     else:
                         return tok, []
             except Exception as e:
-                print(f"     ⚠️  KG label query failed ({kg_label}): {e}")
+                print(f"       KG label query failed ({kg_label}): {e}")
 
         structural_labels = {'Preposition', 'Article', 'Auxiliary'}
         if kg_label in structural_labels:
@@ -1508,7 +2233,7 @@ class TranslationEngine:
                 if result and result.upper() != 'EMPTY':
                     tok['bm'] = result
             except Exception as e:
-                print(f"     ⚠️  LLM function word failed: {e}")
+                print(f"       LLM function word failed: {e}")
             return tok, []
 
         # ── NORMALISER LES VERBES À L'INFINITIF AVANT KG RETRIEVAL ─────────────
@@ -1522,7 +2247,7 @@ class TranslationEngine:
                 kg_search_lemma = infinitive
                 tok['raw_lemma'] = lemma   # conserver le lemme spacy original avant normalisation
                 tok['lemma'] = infinitive  # propager l'infinitif → VerbNet/semantic_class/refl utilisent la forme correcte
-                print(f"     🔄 Verbe normalisé: '{lemma}' → '{kg_search_lemma}'")
+                print(f"      Verbe normalisé: '{lemma}' → '{kg_search_lemma}'")
 
         # Enrich token with grammatical context (LLM analysis)
         if all_tokens:
@@ -1532,14 +2257,280 @@ class TranslationEngine:
             else:
                 print(f"     [CONTEXT] '{lemma}' → NONE (LLM may have failed)")
 
+        # ── COMPOUND-PHRASE RETRIEVAL: try "N de N2" / "ADJ à N2" as a fixed KG entry first ──
+        # Ex: "raison de la venue" a un sens KG dédié (jɔ̀kun/nàkun) distinct
+        # de "raison" seule (jó). "bon à rien" a de même un sens KG dédié
+        # (kólon/fàdensago) distinct de "bon" seul (ɲùman) — sans ce chemin,
+        # 'bon' se traduit isolément et 'rien' (nmod orphelin) fuit vers un
+        # oblique indépendant en aval (ex: "... foyi la" parasite).
+        # Une recherche mot-à-mot ne peut jamais préférer le composé (score
+        # borné par un simple bonus additif) même quand le composé est la
+        # traduction la plus juste. On cherche donc d'abord la phrase entière
+        # (reconstituée depuis le texte source, avec ses articles) ; en cas de
+        # match KG net, on l'utilise directement et on neutralise le modifieur
+        # (déjà inclus dans le sens composé).
+        # Sinon repli intégral sur la traduction mot-à-mot ci-dessous.
+        if pos in ('NOUN', 'ADJ') and all_tokens:
+            _tok_idx0 = tok.get('orig_index')
+            # 'nmod' EN PRIORITÉ, 'amod' en repli (ex: "patates douces" —
+            # aucun nmod ici, seulement l'amod "douces") : même mécanisme
+            # de repêchage phrase-entière, juste élargi au type de
+            # dépendant. Toujours construit depuis les formes de SURFACE
+            # (jamais le lemme) — priorité au mot tel qu'écrit dans la
+            # phrase, la normalisation ne doit pas intervenir avant cette
+            # recherche (bug trouvé 2026-07-21 : "douces" lemmatisé en
+            # "doux" par spaCy ne correspondait plus à la glose KG "patate
+            # douce" accordée au féminin — chercher la PHRASE surface
+            # directement contourne le problème sans jamais comparer de
+            # lemme).
+            _nmod_tok = next((t for t in all_tokens
+                              if t.get('dep') == 'nmod'
+                              and t.get('head_index') == _tok_idx0
+                              and t.get('lemma')), None) or next(
+                (t for t in all_tokens
+                 if t.get('dep') == 'amod'
+                 and t.get('head_index') == _tok_idx0
+                 and t.get('lemma')), None)
+            if _nmod_tok is not None and _nmod_tok.get('orig_index') is not None and _tok_idx0 is not None:
+                _lo, _hi = sorted((_tok_idx0, _nmod_tok['orig_index']))
+                _span = sorted((t for t in all_tokens
+                                if t.get('orig_index') is not None
+                                and _lo <= t['orig_index'] <= _hi
+                                and t.get('pos') != 'PUNCT'),
+                               key=lambda t: t['orig_index'])
+                _compound_phrase = ' '.join(t.get('surface', '') for t in _span).strip()
+                if _compound_phrase and _compound_phrase.lower() != lemma.lower():
+                    _compound_candidates = self.retriever.retrieve(
+                        _compound_phrase, spacy_pos=pos, top_k=3, lang=lang)
+                    _top_compound = _compound_candidates[0] if _compound_candidates else None
+                    # Repli SINGULIER si le pluriel de surface ne matche rien
+                    # d'exact : le KG stocke ses gloses au singulier ("patate
+                    # douce"), la phrase de surface peut être au pluriel
+                    # ("patates douces") — un simple retrait du 's' final de
+                    # chaque mot est une normalisation orthographique de
+                    # NOMBRE, pas une lemmatisation de genre/POS (qui, elle,
+                    # perdrait l'accord féminin, cf. "doux" vs "douce" plus
+                    # haut) : "douces" → "douce" reste le mot féminin exact
+                    # de la glose, seul le nombre change. Bug trouvé
+                    # 2026-07-21 : "patates douces" → 0 match exact (pluriel)
+                    # alors que "patate douce" matche à 100 pts.
+                    if not (_top_compound and _top_compound.get('match') == 'exact'
+                            and _top_compound.get('score', 0) >= 70):
+                        _singular_phrase = ' '.join(
+                            w[:-1] if w.endswith('s') and len(w) > 3 else w
+                            for w in _compound_phrase.split())
+                        if _singular_phrase != _compound_phrase:
+                            _sg_candidates = self.retriever.retrieve(
+                                _singular_phrase, spacy_pos=pos, top_k=3, lang=lang)
+                            _sg_top = _sg_candidates[0] if _sg_candidates else None
+                            if (_sg_top and _sg_top.get('match') == 'exact'
+                                    and _sg_top.get('score', 0) >= 70):
+                                _compound_candidates = _sg_candidates
+                                _top_compound = _sg_top
+                                _compound_phrase = _singular_phrase
+                    # score==100 (glose == phrase composée mot pour mot) : confiance
+                    # directe, comme is_exact_match plus bas. score∈[70,100) (glose
+                    # liste/préfixe, ex. "raison de la venue, motif" ⊇ phrase) :
+                    # le texte matche mais le sens réel du mot bambara peut différer
+                    # (même faille que le raccourci KG-label single-mot) → valider
+                    # sémantiquement avant d'adopter, sans quoi le résultat est
+                    # accepté sur la seule preuve d'un chevauchement textuel.
+                    if (_top_compound and _top_compound.get('match') == 'exact'
+                            and _top_compound.get('score', 0) >= 70
+                            and (_top_compound.get('score', 0) >= 100
+                                 or self._validate_gloss_match(_compound_phrase, _top_compound.get('fr', '')))):
+                        tok['bm'] = _top_compound['bm']
+                        tok['sens_fr'] = _top_compound.get('fr', '')
+                        _nmod_tok['bm'] = ''
+                        _nmod_tok['_consumed_by_compound'] = True
+                        # Le modifieur absorbé peut lui-même avoir ses propres
+                        # dépendants non consommés par la phrase composée (ex:
+                        # "venue DE QUELQU'UN" : 'quelqu'un' est nmod de 'venue',
+                        # hors du span "raison de la venue"). Sans reroutage,
+                        # ce complément resterait orphelin (tête='venue' muette)
+                        # → on le rattache à la tête du composé pour qu'il soit
+                        # repris comme un nmod normal de celle-ci en aval.
+                        for _orph in all_tokens:
+                            if (_orph.get('head_index') == _nmod_tok['orig_index']
+                                    and not (_lo <= _orph.get('orig_index', -1) <= _hi)):
+                                _orph['head_index'] = _tok_idx0
+                        # Neutraliser le dep du modifieur absorbé : sinon il
+                        # reste visible comme nmod de tok (même head_index) et
+                        # court-circuite en premier les recherches `next(...)`
+                        # en aval (ex: _build_subj_chain), masquant le vrai
+                        # dépendant reroute juste au-dessus.
+                        _nmod_tok['dep'] = '_absorbed_by_compound'
+                        print(f"      [COMPOUND] '{_compound_phrase}' → match KG exact : "
+                              f"{tok['bm']} (\"{_top_compound.get('fr')}\", {_top_compound.get('score')} pts)")
+                        return tok, _compound_candidates
+                    elif (_top_compound and _top_compound.get('match') == 'exact'
+                          and _top_compound.get('score', 0) >= 70):
+                        print(f"       [COMPOUND] Rejeté : glose \"{_top_compound.get('fr')}\" "
+                              f"({_top_compound.get('score')} pts) ne correspond pas sémantiquement "
+                              f"à '{_compound_phrase}' → repli sur la traduction mot-à-mot")
+
+        # ── PARTICIPE PASSÉ EMPLOYÉ COMME ADJ PRÉDICATIF : normaliser AVANT la
+        # recherche KG. spaCy lemmatise parfois un participe passé adjectivé
+        # ("cuit", "c'est cuit") sous sa propre forme au lieu de l'infinitif
+        # du verbe source ("cuire"). Le KG stocke ces sens sous l'infinitif
+        # (ex: tóbi = "cuire."), donc chercher "cuit" tel quel ne trouve que
+        # du bruit lexical (biscuit, riz cuit, mi-cuit...). Sans cette
+        # normalisation précoce, la classification PARTICIPE n'arrivait
+        # qu'après la recherche KG (trop tard pour corriger le lemme).
+        # spaCy tag ADJ("cuit") ne décrit plus le mot une fois normalisé vers
+        # son infinitif verbal ("cuire") : chercher avec spacy_pos='ADJ' fait
+        # pénaliser le KG comme cross_pos (85 pts au lieu de 100/exact) et
+        # expose le résultat à la validation sémantique LLM, peu fiable sur
+        # le petit modèle local pour ce genre de cas. On recherche donc avec
+        # spacy_pos='VERB' une fois le lemme normalisé.
+        _search_pos = tok['pos']
+        if (pos == 'ADJ' and tok.get('dep') == 'ROOT'
+                and not (tok.get('is_statif') or tok.get('is_participe_passe') or tok.get('is_valeur'))
+                and any(t.get('dep') == 'cop' for t in getattr(self, '_current_clause_tokens', []))):
+            _r0 = self._detect_statif_adj(lemma)
+            _rn0 = str(_r0).upper() if _r0 else ''
+            if _rn0 == 'PARTICIPE':
+                tok['is_participe_passe'] = True
+                _infinitive0 = self._normalize_verb_to_infinitive(lemma)
+                if _infinitive0 and _infinitive0 != lemma:
+                    kg_search_lemma = _infinitive0
+                    tok['raw_lemma'] = lemma
+                    tok['lemma'] = _infinitive0
+                    lemma = _infinitive0
+                    _search_pos = 'VERB'
+                    print(f"      Participe normalisé: '{tok['raw_lemma']}' → '{kg_search_lemma}'")
+                # semantic_class du verbe source : certaines classes (ex.
+                # 'preparation'/'technique', comme 'cuire') rendent le participe
+                # passé prédicatif en V+ra/la/na résultatif plutôt qu'en V+len
+                # dòn statif générique — step6_copule en a besoin pour aiguiller.
+                tok['semantic_class'] = self._detect_semantic_class(tok['lemma'])
+            elif _rn0 == 'STATIF':
+                tok['is_statif'] = True
+            elif _rn0 == 'VALEUR':
+                tok['is_valeur'] = True
+
+        # Bambara VQ (verbe de qualité) : un sens KG tagué pos='Verb' peut
+        # être l'équivalent exact d'un adjectif français EN POSITION
+        # PRÉDICATIVE (ROOT+cop) — le bambara n'a pas de copule séparée pour
+        # les VQ, d'où la glose "être ADJ." sur une entrée Verb (cf. ligne
+        # ~1871 pour le même calcul sur le chemin KG-label). Sans ce signal,
+        # ces sens ne sont trouvés qu'en repêchage cross-POS et plafonnés
+        # sous le seuil de confiance automatique (bug trouvé 2026-07-19 :
+        # 'jɛ́'="être sûr." rejeté pour 'sûr').
+        _adj_predicative_retr = (
+            _search_pos == 'ADJ' and tok.get('dep') == 'ROOT'
+            and any(t.get('dep') == 'cop' for t in (all_tokens or [])))
+
         candidates = self.retriever.retrieve(
-            kg_search_lemma, frame,
-            spacy_pos=tok['pos'],
+            kg_search_lemma,
+            spacy_pos=_search_pos,
             top_k=TOP_K,
             lang=lang,
             context_tokens=context_lemmas,
             is_verbal_noun=tok.get('is_verbal_noun', False),
+            adj_predicative=_adj_predicative_retr,
         )
+
+        # ── RECHERCHE AUSSI SUR LA SURFACE ORIGINALE (pas seulement le lemme) ──
+        # Un adjectif français fléchi en genre/nombre ("finale") peut être la
+        # forme sous laquelle le KG stocke sa glose (fr="finale", pas "final"),
+        # alors que le lemme masculin canonique ("final") ne matche plus rien
+        # d'exact ("finale" ne finit pas sur une frontière de mot après
+        # "final" → score 0 partout). Bug trouvé 2026-07-17 : "la décision
+        # finale" tombait en placeholder alors que 'fínali' (fr="finale")
+        # existe bel et bien dans le KG.
+        #
+        # Exclusion : un VERBE en dep='acl' (participe modifiant un nom, ex.
+        # "chercheur associé" — "associé" rattaché à "chercheur") a DÉJÀ
+        # tranché structurellement pour le sens verbal via l'infinitif
+        # ("associer") — rechercher aussi la forme brute du participe
+        # ("associé") réintroduit un homographe NOM sans rapport (ɲɔ̀gɔn =
+        # "un associé/collègue", personne) qui n'est pas une variante
+        # d'inflexion du même mot, contrairement à "finale"/"final". Bug
+        # trouvé 2026-07-19 : "chercheur associé à l'Institut..." perdait le
+        # sens verbal 'jɛ̀' (s'associer à) au profit du nom 'ɲɔ̀gɔn'.
+        _is_participle_acl = tok.get('pos') == 'VERB' and tok.get('dep') == 'acl'
+        if surface and surface.lower() != kg_search_lemma.lower() and not _is_participle_acl:
+            _surface_candidates = self.retriever.retrieve(
+                surface,
+                spacy_pos=_search_pos,
+                top_k=TOP_K,
+                lang=lang,
+                context_tokens=context_lemmas,
+                is_verbal_noun=tok.get('is_verbal_noun', False),
+            )
+            _seen_bm = {c.get('bm') for c in candidates}
+            for _sc in _surface_candidates:
+                if _sc.get('bm') not in _seen_bm:
+                    candidates.append(_sc)
+                    _seen_bm.add(_sc.get('bm'))
+            candidates.sort(key=lambda x: (
+                x.get('final_score', x.get('score', 0)),
+                _primacy_key(x.get('sense_index', 1), x.get('corpus_freq', 0), x.get('fr', ''))
+            ), reverse=True)
+
+        # ── CROSS-POS EMBEDDING RETRY quand la recherche stricte POS n'a
+        # rien trouvé de confiant ──
+        # Certains mots français partagent l'orthographe presque à
+        # l'identique avec un sens KG d'une AUTRE catégorie grammaticale
+        # (variante de genre régulière : "coopératif"(ADJ)/"coopérative."
+        # (Noun), "actif"/"active"...) mais le filtre spacy_pos (eff_pos)
+        # s'applique aussi à la recherche embedding, pas seulement au match
+        # exact — le sens reste donc invisible même en embedding, quel que
+        # soit son score de similarité réel (même défaut structurel que pour
+        # les verbes sans entrée directe, cf. _try_deverbal_noun_fallback /
+        # bug 'recruter', 2026-07-20). Déclenché seulement quand AUCUN match
+        # exact/textuel n'existe (candidats uniquement embed ou absents) —
+        # PAS dès que le score est bas, car des candidats exacts de bonne
+        # qualité (ex: gloses composées "participant de fête.") peuvent
+        # légitimement scorer sous 90 pts sans être un trou lexical ; les y
+        # ajouter du bruit cross-POS (28 candidats hors-sujet) a fait
+        # dérailler le rerank LLM vers un faux-ami plausible (bug trouvé
+        # 2026-07-20 : "participants" → 'jɔ̀yɔrɔ'="participation." au lieu
+        # d'un des 7 vrais candidats "participant de ..."). La validation
+        # sémantique plus bas (identité de surface ou jugement LLM) reste
+        # seule responsable d'accepter ou rejeter le résultat — cette
+        # relance ne fait qu'élargir le pool quand il n'y a structurellement
+        # rien d'autre à juger.
+        if not any(c.get('match') == 'exact' for c in candidates):
+            # top_k=10 (pas le TOP_K=5 global) : cette relance interroge SANS
+            # filtre POS, un pool structurellement plus bruité (adjectifs,
+            # verbes... mélangés aux noms) où le bon candidat peut se
+            # retrouver noyé sous des voisins vectoriels fortuits, en
+            # particulier une fois la requête augmentée par le contexte de
+            # la phrase (context_tokens) — un candidat par ailleurs correct
+            # ("rebelle, terroriste." pour "djihadiste") disparaissait sous
+            # top_k=5 alors qu'il ressortait avec un pool plus large, laissant
+            # la place à des faux-amis sans rapport (bug trouvé 2026-07-21).
+            _cross_pos_cands = []
+            try:
+                _cross_pos_cands += self.retriever.retrieve(
+                    kg_search_lemma, spacy_pos=None, top_k=10,
+                    lang=lang, context_tokens=context_lemmas,
+                )
+            except Exception:
+                pass
+            if surface and surface.lower() != kg_search_lemma.lower():
+                try:
+                    _cross_pos_cands += self.retriever.retrieve(
+                        surface, spacy_pos=None, top_k=10,
+                        lang=lang, context_tokens=context_lemmas,
+                    )
+                except Exception:
+                    pass
+            _seen_bm = set()
+            for _cc in _cross_pos_cands:
+                if _cc.get('bm') and _cc.get('bm') not in _seen_bm:
+                    _cc['_cross_pos'] = True
+                    candidates.append(_cc)
+                    _seen_bm.add(_cc.get('bm'))
+            if candidates:
+                candidates.sort(key=lambda x: (
+                    x.get('final_score', x.get('score', 0)),
+                    _primacy_key(x.get('sense_index', 1), x.get('corpus_freq', 0), x.get('fr', ''))
+                ), reverse=True)
+                print(f"      [CROSS-POS RETRY] '{lemma}' — {len(candidates)} "
+                      f"candidat(s) trouvé(s) hors filtre POS={_search_pos}")
 
         # ── CONTEXT-AWARE BOOSTING: LLM validates grammatical match ──
         # If token has a context_type, boost scores for matching candidates
@@ -1566,17 +2557,42 @@ class TranslationEngine:
                     _fr = _c.get('fr', '').lower()
                     if any(_ml in _fr for _ml in _modifier_lemmas):
                         _c['final_score'] = _c.get('final_score', 0) + 25
-                candidates.sort(key=lambda x: x.get('final_score', 0), reverse=True)
+                candidates.sort(key=lambda x: (
+                    x.get('final_score', 0),
+                    _primacy_key(x.get('sense_index', 1), x.get('corpus_freq', 0), x.get('fr', ''))
+                ), reverse=True)
+
+        # Conservé AVANT validation pour le repli "plus proche mot existant"
+        # (cf. plus bas, cas 'élite' : rien ne passe la validation LLM
+        # stricte, mais un placeholder [élite] est moins utile qu'un mot
+        # imparfait mais réel). Décision 2026-07-21 de l'utilisateur : PAS
+        # de mot inventé par le LLM (risque d'hallucination sur une langue
+        # peu dotée) — seulement le meilleur candidat KG déjà attesté, choisi
+        # par similarité CamemBERT brute (FastText écarté : pas discriminant
+        # pour une proximité sémantique générale, seulement pour la parenté
+        # de racine, cf. décision précédente sur 'élite'/'soldat'=0.84).
+        _pre_validation_candidates = list(candidates)
 
         # ── SEMANTIC VALIDATION: Filter out false positives ──
         # LLM checks if candidate gloss actually matches the token semantically
-        candidates = self._validate_candidate_semantics(lemma, candidates, top_k=10,
+        # top_k=20 (pas 10) : la relance cross-POS fusionne DEUX requêtes
+        # (lemme singulier + surface, ex: 'djihadiste'+'djihadistes'), chacune
+        # pouvant remonter jusqu'à ~15-19 candidats embed après l'extension
+        # _min_embed du retriever — un candidat pertinent de la 1ère requête
+        # peut donc se retrouver classé après les ~9 premiers résultats de la
+        # 2e requête (dont les scores embed, gonflés sur une forme plurielle,
+        # ne reflètent pas une pertinence réelle) et ne jamais atteindre la
+        # validation si la fenêtre reste à 10 (bug trouvé 2026-07-23 :
+        # 'bànbaganci'="rebelle, terroriste." classé 11e pour "djihadistes",
+        # juste hors fenêtre, laissant gagner des candidats "+tigi" fabriqués
+        # à partir de gloses sans rapport comme "affluent").
+        candidates = self._validate_candidate_semantics(lemma, candidates, top_k=20,
                                                         tok=tok, all_tokens=all_tokens)
 
         # ── AFFICHAGE DU TOP 5/6 DES CANDIDATS SENSE DU KG (DIAGNOSTIC VISUEL) ──
-        print(f"\n     🔎 [TRANSLATION ENGINE] Jeton: '{surface}' | Lemme: '{lemma}' | POS: {pos}")
+        print(f"\n      [TRANSLATION ENGINE] Jeton: '{surface}' | Lemme: '{lemma}' | POS: {pos}")
         if not candidates:
-            print("        📭 Aucun candidat disponible dans la liste du moteur.")
+            print("         Aucun candidat disponible dans la liste du moteur.")
         else:
             # On affiche les 5 ou 6 premiers candidats présents dans la pile finale de décision [S4]
             for idx, cand in enumerate(candidates[:6]):
@@ -1589,10 +2605,36 @@ class TranslationEngine:
                 print(f"        Rang #{idx+1} Score: {score:.1f} pts | Bambara: '{bm_glose}' → Sens FR: \"{fr_sens}\"{via_syn}")
         print("     " + "="*65)
 
-        candidates = self._rerank_with_llm(
-            lemma, candidates, tok_pos=tok['pos'],
-            modifier_lemmas=list(_modifier_lemmas) if _modifier_lemmas else None,
-        )
+        # Ne pas reranker si le candidat en tête a déjà été explicitement
+        # confirmé par la validation sémantique (question précise : "ce token
+        # correspond-il à cette glose ?"). Le reranking pose une question plus
+        # large ("quel est le meilleur synonyme dans ce pool ?") sur un pool
+        # qui inclut des candidats jamais validés — sans cette garde, une
+        # confirmation positive déjà obtenue peut être écrasée par un choix
+        # moins fiable (bug trouvé 2026-07-19 : 'nàfama' validé pour
+        # 'fructueux' puis remplacé par 'gèren' [vert, non-mûr] via rerank).
+        # Même garde que ci-dessus, cas symétrique : la validation sémantique
+        # vient de conclure explicitement qu'AUCUN candidat ne dénote le mot
+        # cherché (tous invalidés à 0 pts, aucun restauré par le fallback
+        # 50%) — un fait tout aussi décisif que la confirmation positive
+        # ci-dessus. Sans cette garde, rerank_with_llm repose la question
+        # ("quel est le plus proche synonyme ?") sur un pool déjà rejeté et
+        # FORCE un choix (plancher MIN_SCORE, ligne ~548 de cette même
+        # fonction) même quand rien ne correspond réellement — produisant
+        # une traduction fausse au lieu d'un placeholder honnête (bug trouvé
+        # 2026-07-20 : "situation" → 'lújura' [glosé "difficulté, situation
+        # pénible"] choisi de force parmi des gloses composées "situation de
+        # X" toutes invalidées, alors qu'aucune ne dénote "situation" seul).
+        # Depuis la décision 2026-07-20 sur le score (plus jamais mis à 0),
+        # les candidats invalidés sont directement retirés de la liste dans
+        # _validate_candidate_semantics plutôt que laissés à 0 pts — le "tous
+        # invalidés" se traduit donc maintenant par une liste VIDE, pas par
+        # des scores nuls à détecter ici.
+        if not (candidates and candidates[0].get('_llm_validated')) and candidates:
+            candidates = self._rerank_with_llm(
+                lemma, candidates, tok_pos=tok['pos'],
+                modifier_lemmas=list(_modifier_lemmas) if _modifier_lemmas else None,
+            )
 
         all_embed = bool(candidates) and all(
             c.get('match') == 'embed' for c in candidates)
@@ -1612,8 +2654,10 @@ class TranslationEngine:
                 # NOUN fallback disabled — interferes with correct adjective ranking
                 self._classify_adj_state(tok)
                 
-        # Détecter statif/participe AVANT le return
-        if tok['pos'] == 'ADJ':
+        # Détecter statif/participe AVANT le return (sauf si déjà classé
+        # en amont, ex: participe prédicatif normalisé avant la recherche KG)
+        if tok['pos'] == 'ADJ' and not (
+                tok.get('is_statif') or tok.get('is_participe_passe') or tok.get('is_valeur')):
             _clause_toks2 = getattr(self, '_current_clause_tokens', [])
             _passive_subj = any(t.get('dep') == 'nsubj:pass' for t in _clause_toks2)
             _has_obl_arg2 = (tok.get('dep') == 'ROOT' and any(
@@ -1645,11 +2689,93 @@ class TranslationEngine:
                 tok['lemma'].lower() in c.get('fr', '').lower()
                 for c in candidates[:5])
             if not gloss_match:
-                print(f"     📭 [{tok['lemma']}] — embeddings too distant")
+                print(f"      [{tok['lemma']}] — embeddings too distant")
+                _deverbal = self._try_deverbal_noun_fallback(tok['lemma']) if tok.get('pos') == 'VERB' else None
+                if _deverbal:
+                    tok['bm'] = _deverbal['bm']
+                    tok['action_noun'] = _deverbal['bm']
+                    tok['intransitive_type'] = 'support'
+                    tok['sens_fr'] = _deverbal.get('fr', '')
+                    print(f"      [DEVERBAL FALLBACK] '{tok['lemma']}' → nom d'action "
+                          f"'{_deverbal['bm']}' (\"{_deverbal.get('fr','')}\") + kɛ")
+                    return tok, [_deverbal]
                 tok['bm'] = f"[{tok['lemma']}]"
                 return tok, candidates
 
         if not candidates:
+            _deverbal = self._try_deverbal_noun_fallback(tok['lemma']) if tok.get('pos') == 'VERB' else None
+            if _deverbal:
+                tok['bm'] = _deverbal['bm']
+                tok['action_noun'] = _deverbal['bm']
+                tok['intransitive_type'] = 'support'
+                tok['sens_fr'] = _deverbal.get('fr', '')
+                print(f"      [DEVERBAL FALLBACK] '{tok['lemma']}' → nom d'action "
+                      f"'{_deverbal['bm']}' (\"{_deverbal.get('fr','')}\") + kɛ")
+                return tok, [_deverbal]
+            # DERNIER RECOURS : aucun candidat n'a passé la validation LLM
+            # (trou lexical réel, ex. "élite" — aucun mot bambara direct au
+            # KG), mais un placeholder [élite] est moins utile qu'un mot
+            # RÉEL, déjà attesté au KG, même imparfait. Choisi par
+            # similarité CamemBERT brute (pas d'invention LLM — décision
+            # 2026-07-21 : trop de risque d'hallucination sur une langue peu
+            # dotée). Marqué distinctement (_closest_word_fallback) pour
+            # rester visuellement différent d'un match validé.
+            #
+            # UNIQUEMENT match='embed' (similarité sémantique CamemBERT) —
+            # jamais un match='exact' textuel : un candidat exact a déjà été
+            # explicitement rejeté par la validation LLM ci-dessus (ex.
+            # "lâche" vs 'tɛ̀rɛku'="échappement lâche, échappement trop
+            # lâche." — 50 pts de score textuel car "lâche" apparaît comme
+            # mot isolé dans la glose, mais sémantiquement c'est un composé
+            # technique distinct, à raison invalidé). Reprendre ce même
+            # candidat ici via son score textuel brut annule silencieusement
+            # le jugement de la validation (bug trouvé 2026-07-21).
+            #
+            # GARDE LLM (bug trouvé 2026-07-21) : le score CamemBERT seul
+            # n'est pas fiable pour départager sur des mots rares — pour
+            # "pleutre" (lâche, couard), CamemBERT classe TOUS les mots de
+            # la pluie ("pluie", "détremper", "averse"...) à 0.70-0.76 de
+            # cosinus, largement AU-DESSUS des vrais synonymes ("lâche"
+            # 0.39, "couard" 0.34) — confusion probable avec la racine
+            # "pleu-" de "pleuvoir", pas juste du bruit. FastText et LaBSE
+            # testés en comparaison ne règlent pas non plus le problème de
+            # façon fiable (cf. session). On ajoute donc un garde LLM léger
+            # ("même concept général, au moins approximativement ?") sur
+            # les meilleurs candidats avant acceptation — pas une invention
+            # de mot (le candidat reste toujours un bm réel du KG), juste un
+            # jugement grossier, dans l'esprit du reste de la validation
+            # sémantique de cette fonction.
+            _embed_candidates = sorted(
+                (c for c in _pre_validation_candidates
+                 if c.get('bm') and c.get('match') == 'embed'
+                 and c.get('score', 0) >= 15),
+                key=lambda c: c.get('score', 0), reverse=True)[:5]
+            _closest = None
+            for _ec in _embed_candidates:
+                _sanity_prompt = (
+                    f'Glose bambara : "{_ec.get("fr", "")}".\n'
+                    f'Mot français cherché : "{lemma}".\n'
+                    f'Est-ce que cette glose pourrait représenter, même de '
+                    f'façon approximative ou par un sens voisin, le mot '
+                    f'"{lemma}" ? Réponds UNIQUEMENT par OUI ou NON.'
+                )
+                try:
+                    _sanity_resp = self._call_llm(_sanity_prompt, max_tokens=5).strip().upper()
+                except Exception:
+                    _sanity_resp = ''
+                if 'OUI' in _sanity_resp:
+                    _closest = _ec
+                    break
+                print(f"       [MOT LE PLUS PROCHE] rejeté par garde LLM : "
+                      f"'{_ec.get('fr','')}' ≠ '{lemma}'")
+            if _closest:
+                tok['bm'] = _closest['bm']
+                tok['sens_fr'] = _closest.get('fr', '')
+                tok['_closest_word_fallback'] = True
+                print(f"      [MOT LE PLUS PROCHE] '{tok['lemma']}' — aucun candidat "
+                      f"validé, repli sur '{_closest['bm']}' (\"{_closest.get('fr','')}\", "
+                      f"{_closest.get('score')} pts CamemBERT, confirmé par garde LLM)")
+                return tok, [_closest]
             tok['bm'] = f"[{tok['lemma']}]"
             return tok, []
 
@@ -1664,83 +2790,10 @@ class TranslationEngine:
             tok['sens_fr'] = best.get('fr', '')
 
         if tok['pos'] == 'VERB' and tok.get('bm'):
-            tok['semantic_class'] = self._detect_semantic_class(tok['lemma'])
-            # Validation linguistique : stative_cognitive exige un sujet Experiencer.
-            # Si context_type='agent' (le sujet fait l'action), c'est une contradiction
-            # → le verbe est une activité dynamique, pas un état cognitif statique.
-            if (tok['semantic_class'] == 'stative_cognitive'
-                    and tok.get('context_type') == 'agent'):
-                tok['semantic_class'] = 'action'
-                print(f"     🏷️  semantic_class('{tok['lemma']}') reclassifié "
-                      f"stative_cognitive→action [context_type=agent]")
-            _sc = tok.get('semantic_class', '')
-
-            _morph_str = str(tok.get('morph', ''))
-            _is_part_pass = ('VerbForm=Part' in _morph_str
-                             and 'Voice=Pass' in _morph_str)
-            if _is_part_pass:
-                if _sc in ('posture', 'biological', 'spontaneous', 'consumption'):
-                    _is_statif = True
-                else:
-                    # _detect_statif_adj renvoie une des 4 catégories
-                    # QUALITE/STATIF/VALEUR/PARTICIPE (jamais vide) : seule
-                    # 'STATIF' correspond à un participe-adjectif statif
-                    # (-len/-nen dòn). Un check de vérité générique sur la
-                    # chaîne était toujours vrai (VALEUR/QUALITE/PARTICIPE
-                    # sont aussi des chaînes non-vides) → tout participe
-                    # passif finissait classé statif (ex: 'faire' → VALEUR
-                    # → is_statif=True à tort).
-                    try:
-                        _is_statif = (self._detect_statif_adj(tok['lemma']) == 'STATIF')
-                    except Exception:
-                        _is_statif = False
-                if _is_statif:
-                    tok['is_statif'] = True
-                    tok['pos'] = 'ADJ'
-                    print(f"     🏷️  participe_statif('{tok['lemma']}') = True")
-
-            # Signal lexical KG : nom support dédié → action_noun + kɛ
-            try:
-                _res = self.db.query(
-                    "MATCH (s:Sense {bm: $bm}) "
-                    "RETURN s.action_noun AS an LIMIT 1",
-                    {'bm': tok['bm']})
-                _an = _res[0].get('an') if _res and _res[0] else None
-            except Exception:
-                _an = None
-            if _an:
-                tok['intransitive_type'] = 'support'
-                tok['action_noun'] = _an
-
-            # Catégorie B1 : intransitif absolu → verbe nu
-            # NB: 'perception' EXCLU — voir/entendre/sentir sont TRANSITIFS
-            #   (il l'a vu = a yé a yé ; il voit = a bɛ yéli kɛ). Sans objet
-            #   ils suivent le chemin ACTION (V+li kɛ), pas l'intransitif absolu.
-            elif _sc in ('motion', 'biological', 'posture', 'spontaneous',
-                       'meteorological'):
-                tok['intransitive_type'] = 'ABSOLU'
-
-            # Catégorie B2 : nom support dédié → action_noun + kɛ
-            elif _sc in ('consumption', 'preparation'):
-                tok['intransitive_type'] = 'support'
-                # Récupérer le nom d'action depuis le KG
-                try:
-                    _res = self.db.query(
-                        "MATCH (s:Sense {bm: $bm}) "
-                        "RETURN s.action_noun AS an LIMIT 1",
-                        {'bm': tok['bm']})
-                    _an = _res[0].get('an') if _res and _res[0] else None
-                except Exception:
-                    _an = None
-                if _an:
-                    tok['action_noun'] = _an
-
-            # Catégorie B3 : nominalisation -li/-ni → V+li + kɛ
-            elif _sc in ('action', 'technique', 'craft', 'communication'):
-                tok['intransitive_type'] = 'nominalized'
+            self._classify_verb_transitivity(tok)
 
         if tok['pos'] == 'NOUN' and tok.get('bm') and not tok['bm'].startswith('['):
-            tok['is_relational'] = self._detect_relational_noun(tok['lemma'], tok['bm'])
+            tok['is_relational'] = self._detect_relational_noun(tok, tok['bm'])
 
         # Détection du type réflexif quand le verbe a un pronom réflexif dans la clause
         if tok['pos'] == 'VERB' and tok.get('dep') == 'ROOT':
@@ -1820,7 +2873,8 @@ class TranslationEngine:
                         elif _rtype == 'SUBJECTIVE':
                             tok['is_refl_Subjective'] = True
 
-        if tok['pos'] == 'ADJ' and tok.get('bm'):
+        if (tok['pos'] == 'ADJ' and tok.get('bm')
+                and not (tok.get('is_statif') or tok.get('is_participe_passe') or tok.get('is_valeur'))):
             _clause_toks = getattr(self, '_current_clause_tokens', [])
             _passive_subj = any(t.get('dep') == 'nsubj:pass' for t in _clause_toks)
             _has_obl_arg  = (tok.get('dep') == 'ROOT' and any(
@@ -1851,195 +2905,47 @@ class TranslationEngine:
     # CLAUSE SPLITTING
     # ------------------------------------------------------------------
 
-    def _split_clauses(self, sentence: str, tokens: list = None) -> list:
+    def _split_clauses(self, sentence: str, tokens: list = None, _rel_flags: list = None) -> list:
         """
-        Phase 1 — split at major comma boundaries (anteposed appositive, introductory NP).
+        Phase 1 — split unconditionally at every comma (each comma-delimited
+        segment becomes its own translation unit).
         Phase 2 — within each comma segment, split at dep-based clause boundaries
                    (acl:relcl, advcl, ccomp, xcomp).
+
+        `_rel_flags`, si fourni, reçoit un booléen par segment retourné :
+        True si ce segment démarre sur un pronom relatif ('qui/que/dont')
+        ayant perdu son antécédent acl:relcl au moment du split (cf. translate()).
         """
         if not tokens:
             import re
             parts = re.split(r',|(?<=[a-zA-ZÀ-ÿ])\.(?=\s+[A-ZÀ-Ÿ]|\s*$)', sentence)
             parts = [p.strip().strip('.') for p in parts]
-            return [p for p in parts if p and len(p.split()) > 1]
+            parts = [p for p in parts if p and len(p.split()) > 1]
+            if _rel_flags is not None:
+                _rel_flags.extend([False] * len(parts))
+            return parts
 
         _sorted_toks = sorted(tokens, key=lambda x: x['orig_index'])
 
         # ── Phase 1 : comma split ────────────────────────────────────────────────
-        _split_start_tok = None
-
-        # a) Appositive anteposée : dep=appos vient avant son head
-        for tok in _sorted_toks:
-            if tok.get('dep') == 'appos':
-                _ai = tok.get('orig_index', -1)
-                _hi = tok.get('head_index', -1)
-                if _ai < _hi:
-                    _ht = next((t for t in tokens if t.get('orig_index') == _hi), None)
-                    if _ht:
-                        _pre = [t for t in tokens
-                                if t.get('head_index') == _hi
-                                and t.get('dep') in ('flat', 'flat:name', 'det')
-                                and t['orig_index'] < _hi]
-                        _split_start_tok = min([_ht] + _pre, key=lambda x: x['orig_index'])
-                        break
-
-        # b) Fallback : phrase nominale introductive avant virgule
-        #    premier token NOUN/PROPN + aucun verbe fléchi avant la virgule
-        #    ≠ "sans moi, tu…" (premier token ADP)
         # Note: le rôle du token virgule est 'content' (pas 'punct') — on filtre
         # sur pos='PUNCT' ou dep='punct' à la place.
-        if not _split_start_tok:
-            _comma_toks = [t for t in _sorted_toks
-                           if t.get('surface') == ','
-                           and (t.get('pos') == 'PUNCT' or t.get('dep') == 'punct')]
-            for _ct in _comma_toks:
-                _ci     = _ct['orig_index']
-                _before = [t for t in _sorted_toks if t['orig_index'] < _ci]
-                _after  = [t for t in _sorted_toks
-                           if t['orig_index'] > _ci
-                           and t.get('pos') != 'PUNCT'
-                           and t.get('dep') != 'punct'
-                           and t.get('surface') not in (',', '.')]
-                if not _before or not _after:
-                    continue
-                _verb_before = any(
-                    t.get('pos') == 'VERB'
-                    and t.get('dep') not in ('acl', 'acl:relcl', 'amod')
-                    for t in _before
-                )
-                if (not _verb_before
-                        and _before[0].get('pos') in ('NOUN', 'PROPN')
-                        and _after[0].get('pos') in ('NOUN', 'PROPN', 'PRON')
-                        and _after[0].get('dep') in ('nsubj', 'flat', 'flat:name',
-                                                      'ROOT', 'nsubj:pass')):
-                    _split_start_tok = _after[0]
-                    break
-
-        # c) Virgule avant une relative (qui/que/dont) après clause principale complète
-        #    "S V ..., qui/que/dont SUBORD" → split en deux unités de traduction
-        if not _split_start_tok:
-            for _ct in _comma_toks:
-                _ci    = _ct['orig_index']
-                _before = [t for t in _sorted_toks if t['orig_index'] < _ci]
-                _after  = [t for t in _sorted_toks
-                           if t['orig_index'] > _ci
-                           and t.get('pos') != 'PUNCT'
-                           and t.get('dep') != 'punct'
-                           and t.get('surface') not in (',', '.')]
-                if not _before or not _after:
-                    continue
-                _has_root_verb = any(
-                    t.get('pos') == 'VERB'
-                    and t.get('dep') not in ('acl', 'acl:relcl', 'amod')
-                    for t in _before
-                )
-                if _has_root_verb and _after[0].get('role') == 'relative':
-                    _split_start_tok = _after[0]
-                    break
-
-        # d) Clauses coordonnées : "S V1, je/tu/il V2, ..."
-        #    Virgule entre deux clauses indépendantes à sujet pronominal distinct.
-        #    y compris "S V1, peut-il V2 ?" (inversion interrogative)
-        if not _split_start_tok:
-            for _ct in _comma_toks:
-                _ci    = _ct['orig_index']
-                _before = [t for t in _sorted_toks if t['orig_index'] < _ci]
-                _after  = [t for t in _sorted_toks
-                           if t['orig_index'] > _ci
-                           and t.get('pos') != 'PUNCT'
-                           and t.get('dep') != 'punct'
-                           and t.get('surface') not in (',', '.')]
-                if not _before or not _after:
-                    continue
-                _has_root_verb = any(
-                    t.get('pos') == 'VERB'
-                    and t.get('dep') not in ('acl', 'acl:relcl', 'amod')
-                    for t in _before
-                )
-                # Match: pronoun subject (normal clause)
-                _is_pron_subj = (_after[0].get('pos') == 'PRON'
-                                 and _after[0].get('role') != 'relative'
-                                 and _after[0].get('dep') in ('nsubj', 'nsubj:pass'))
-                # Match: auxiliary/modal verb with inverted pronoun (interrogative)
-                # e.g., "peut-il manger"
-                _is_modal_inversion = (_after[0].get('pos') == 'VERB'
-                                      and _after[0].get('dep') in ('ROOT', 'aux')
-                                      and len(_after) > 1
-                                      and _after[1].get('pos') == 'PRON'
-                                      and _after[1].get('dep') in ('nsubj', 'nsubj:pass'))
-                if _has_root_verb and (_is_pron_subj or _is_modal_inversion):
-                    _split_start_tok = _after[0]
-                    break
-
-        # e) Conjonction de coordination après clause principale
-        #    "S V O1, ainsi que O2" / "S V1, et S V2"
-        if not _split_start_tok:
-            for _ct in _comma_toks:
-                _ci    = _ct['orig_index']
-                _before = [t for t in _sorted_toks if t['orig_index'] < _ci]
-                _after  = [t for t in _sorted_toks
-                           if t['orig_index'] > _ci
-                           and t.get('pos') != 'PUNCT'
-                           and t.get('dep') != 'punct'
-                           and t.get('surface') not in (',', '.')]
-                if not _before or not _after:
-                    continue
-                _has_root_verb = any(
-                    t.get('pos') == 'VERB'
-                    and t.get('dep') not in ('acl', 'acl:relcl', 'amod')
-                    for t in _before
-                )
-                if _has_root_verb and _after[0].get('dep') == 'cc':
-                    _split_start_tok = _after[0]
-                    break
-
-        # f) Clause adverbiale anteposée : "Si/Quand X, ROOT_clause"
-        #    advcl VERB avant la virgule, ROOT (ou premier token non-ponct) après
-        if not _split_start_tok:
-            for _ct in _comma_toks:
-                _ci    = _ct['orig_index']
-                _before = [t for t in _sorted_toks if t['orig_index'] < _ci]
-                _after  = [t for t in _sorted_toks
-                           if t['orig_index'] > _ci
-                           and t.get('pos') != 'PUNCT'
-                           and t.get('dep') != 'punct'
-                           and t.get('surface') not in (',', '.')]
-                if not _before or not _after:
-                    continue
-                _has_advcl_verb = any(
-                    t.get('dep') == 'advcl' and t.get('pos') in ('VERB', 'AUX')
-                    for t in _before)
-                _root_in_after = any(t.get('dep') == 'ROOT' for t in _after)
-                if _has_advcl_verb and _root_in_after:
-                    _split_start_tok = _after[0]
-                    break
-
-        # g) Fallback : clauses indépendantes séparées par virgule
-        #    "S V1, S V2, S V3, ..." (énumération de clauses)
-        if not _split_start_tok and _comma_toks:
-            for _ct in _comma_toks:
-                _ci    = _ct['orig_index']
-                _before = [t for t in _sorted_toks if t['orig_index'] < _ci
-                          and t.get('pos') != 'PUNCT' and t.get('dep') != 'punct']
-                _after  = [t for t in _sorted_toks
-                           if t['orig_index'] > _ci
-                           and t.get('pos') != 'PUNCT'
-                           and t.get('dep') != 'punct'
-                           and t.get('surface') not in (',', '.')]
-                if not _before or not _after:
-                    continue
-                # Vérifier que before ET after ont un VERB ROOT indépendant
-                _before_has_root = any(
-                    t.get('dep') == 'ROOT' and t.get('pos') in ('VERB', 'AUX')
-                    for t in _before)
-                _after_has_root = any(
-                    t.get('dep') == 'ROOT' and t.get('pos') in ('VERB', 'AUX')
-                    for t in _after)
-                if _before_has_root and _after_has_root:
-                    _split_start_tok = _after[0]
-                    break
-
-        # h) supprimé — le split se fait uniquement sur virgule.
+        _split_start_tok = None
+        _comma_toks = [t for t in _sorted_toks
+                       if t.get('surface') == ','
+                       and (t.get('pos') == 'PUNCT' or t.get('dep') == 'punct')]
+        for _ct in _comma_toks:
+            _ci     = _ct['orig_index']
+            _before = [t for t in _sorted_toks if t['orig_index'] < _ci]
+            _after  = [t for t in _sorted_toks
+                       if t['orig_index'] > _ci
+                       and t.get('pos') != 'PUNCT'
+                       and t.get('dep') != 'punct'
+                       and t.get('surface') not in (',', '.')]
+            if not _before or not _after:
+                continue
+            _split_start_tok = _after[0]
+            break
 
         # Si un split est trouvé : séparer texte + tokens, puis appliquer
         # le dep-split indépendamment dans chaque segment
@@ -2058,14 +2964,26 @@ class TranslationEngine:
             if _pos > 0 and seg1_toks and seg2_toks:
                 seg1_text = sentence[:_pos].strip().rstrip(',').strip()
                 seg2_text = sentence[_pos:].strip()
-                result = []
-                result.extend(self._split_clauses(seg1_text, seg1_toks))
-                result.extend(self._split_clauses(seg2_text, seg2_toks))
+                sub1 = self._split_clauses(seg1_text, seg1_toks, _rel_flags)
+                _seg2_start = len(_rel_flags) if _rel_flags is not None else -1
+                sub2 = self._split_clauses(seg2_text, seg2_toks, _rel_flags)
+                # Le segment qui commence pile sur le pronom relatif ("qui/que/
+                # dont" ayant perdu son antécédent acl:relcl au split) est
+                # marqué pour que _translate_clause l'empêche d'être reclassé
+                # en interrogatif (cf. _is_misparsed_relative_qui, rules/core.py).
+                if (_rel_flags is not None and sub2
+                        and _split_start_tok.get('role') == 'relative'
+                        and 0 <= _seg2_start < len(_rel_flags)):
+                    _rel_flags[_seg2_start] = True
+                result = sub1 + sub2
                 if result:
                     return result
 
         # Pas de comma split : dep-split direct
-        return self._split_at_deps(sentence, tokens)
+        _segs = self._split_at_deps(sentence, tokens)
+        if _rel_flags is not None:
+            _rel_flags.extend([False] * len(_segs))
+        return _segs
 
     def _split_at_deps(self, sentence: str, _tokens: list) -> list:
         """Le rule engine gère ccomp/advcl inline (step3 ccomp block, step5 advcl.py).
@@ -2075,11 +2993,34 @@ class TranslationEngine:
             return []
         return [sentence.strip()]
 
+    def _get_relative_marker_bm(self, surface: str, lang: str) -> str:
+        """FunctionWord{surface, role:'relative'}.bm (ex: 'qui'/fr → 'mìn') —
+        distinct du nœud Pronoun{surface:'qui'} dont le bm ('jɔn') sert
+        l'interrogatif "qui ?" (who)."""
+        cache = getattr(self, '_relative_marker_bm_cache', None)
+        if cache is None:
+            cache = {}
+            self._relative_marker_bm_cache = cache
+        key = (surface.lower(), lang)
+        if key not in cache:
+            # NB: le KG contient un doublon FunctionWord{surface:'qui',
+            # role:'relative'} avec deux bm différents ('mìn' correct,
+            # 'jɔn' erroné — dupliqué à tort du nœud Pronoun interrogatif).
+            # pos='PRON' ne distingue que le nœud correct ; le filtrer
+            # explicitement évite un pick non-déterministe entre les deux.
+            rows = self.db.query(
+                "MATCH (f:FunctionWord {role:'relative', pos:'PRON'}) "
+                "WHERE toLower(f.surface)=$s AND f.lang=$l RETURN f.bm AS bm LIMIT 1",
+                {'s': surface.lower(), 'l': lang})
+            cache[key] = rows[0]['bm'] if rows else ''
+        return cache[key]
+
     # ------------------------------------------------------------------
     # SINGLE CLAUSE TRANSLATION
     # ------------------------------------------------------------------
 
-    def _translate_clause(self, clause: str, frame: str, lang: str = 'fr') -> str:
+    def _translate_clause(self, clause: str, lang: str = 'fr',
+                          is_relative_continuation: bool = False) -> str:
         self._current_sentence = clause
 
         # ── FIXED PHRASES (Rule 5) ──────────────────────────────────────
@@ -2089,7 +3030,7 @@ class TranslationEngine:
         clause_normalized = clause.lower().strip().rstrip('?!.,')
         for fr_phrase, bm_phrase in _FIXED_PHRASES.items():
             if clause_normalized == fr_phrase:
-                print(f"\n     🎯 FIXED PHRASE MATCH: '{clause}' → '{bm_phrase}'")
+                print(f"\n      FIXED PHRASE MATCH: '{clause}' → '{bm_phrase}'")
                 return bm_phrase
 
         clause_vector = self.model.encode(clause)
@@ -2097,7 +3038,7 @@ class TranslationEngine:
         if hasattr(self.db, 'search_semantic_phrase'):
             global_match = self.db.search_semantic_phrase(clause_vector, threshold=0.85)
             if global_match:
-                print(f"\n     🚀 GLOBAL SEMANTIC MATCH FOUND (KG):")
+                print(f"\n      GLOBAL SEMANTIC MATCH FOUND (KG):")
                 print(f"     '{clause}'  ≈  '{global_match['fr']}'")
                 print(f"     → Result: '{global_match['bm']}'")
                 return global_match['bm']
@@ -2114,16 +3055,41 @@ class TranslationEngine:
         if not tokens:
             return ''
 
+        # Fragment issu du split d'une relative après virgule ("Mali, qui
+        # s'enfonce...") : la retokenisation isolée perd l'antécédent
+        # acl:relcl, donc 'qui' redevient nsubj du ROOT et serait mal
+        # reclassé en interrogatif (cf. _is_misparsed_relative_qui,
+        # rules/core.py). On marque le pronom explicitement et on force son
+        # bm au marqueur relatif KG (FunctionWord{surface:'qui', role:
+        # 'relative'}.bm = 'mìn') plutôt que le bm interrogatif 'jɔn' porté
+        # par le nœud Pronoun (utilisé pour "qui ?" = who).
+        if is_relative_continuation:
+            _rel_tok = next((t for t in tokens
+                             if t.get('pos') == 'PRON' and t.get('dep') == 'nsubj'
+                             and t.get('role') == 'relative'), None)
+            if _rel_tok:
+                _rel_tok['_relative_continuation'] = True
+                _rel_bm = self._get_relative_marker_bm(_rel_tok.get('surface', 'qui'), lang)
+                if _rel_bm:
+                    _rel_tok['bm'] = _rel_bm
+
+        # '"' sert à la fois d'ouverture ET de fermeture (contrairement à «/»).
+        # Sans le garde `just_opened`, le token OUVRANT se refermait sur
+        # lui-même immédiatement (même caractère testé aux deux lignes) →
+        # in_quotes retombait à False avant même d'atteindre le contenu cité,
+        # qui n'était donc jamais protégé (bug sur "bonjour" mais pas « bonjour »).
         in_quotes = False
         for tok in tokens:
             surface = tok.get('surface', '')
-            if '«' in surface or '"' in surface:
+            just_opened = False
+            if not in_quotes and ('«' in surface or '"' in surface):
                 in_quotes = True
+                just_opened = True
             if in_quotes:
                 tok['bm'] = surface
                 tok['pos'] = 'PROPN'
                 tok['is_protected'] = True
-            if '»' in surface or '"' in surface:
+            if in_quotes and not just_opened and ('»' in surface or '"' in surface):
                 in_quotes = False
 
         concepts = []
@@ -2133,7 +3099,6 @@ class TranslationEngine:
             surf = str(tok.get('surface', '')).strip().lower()
             pos = tok.get('pos', '')
 
-
             # 1. NETTOYAGE GÉNÉRIQUE DE PONCTUATION ET CARACTÈRES ORPHELINS (ZÉRO HARDCODE)
             # Si le jeton est classé en ponctuation, ou s'il s'agit d'un caractère isolé non-alphanumérique
             # (comme une apostrophe droite, courbe, un tiret), on le vide et on passe immédiatement au suivant.
@@ -2141,14 +3106,22 @@ class TranslationEngine:
                 tok['bm'] = ''
                 continue
 
+            # Déjà absorbé par un composé KG traité en amont (ex: 'venue'
+            # dans "raison de la venue" → jɔ̀kun) : ne pas retraduire seul.
+            if tok.get('_consumed_by_compound'):
+                tok['bm'] = ''
+                continue
+
             # 2. HARMONISATION GÉNÉRIQUE DES PRONOMS SUJETS SINGULIERS
             if pos == 'PRON' and surf == 'j':
-                tok['bm'] = 'n'
+                tok['bm'] = self.rule_engine.grammar.get('pron_1sg', '') or 'n'
                 tok['role'] = 'pronoun'
                 continue
 
-            if pos == 'PRON' and surf in ("c'", 'ce', 'cela', 'ça') and tok.get('role') in ('expletive', 'pronoun'):
-                tok['bm'] = 'o'
+            _expl_demo_surfaces = self.rule_engine.grammar.get('expletive_demonstrative_surfaces', {'ce', 'cela', 'ça'})
+            if (pos == 'PRON' and surf.rstrip("'").rstrip('’') in _expl_demo_surfaces
+                    and tok.get('role') in ('expletive', 'pronoun')):
+                tok['bm'] = self.rule_engine.grammar.get('expletive_demonstrative_pronoun', '') or 'o'
                 continue
 
 
@@ -2169,7 +3142,7 @@ class TranslationEngine:
             # Exécution de la traduction unifiée du jeton si valide
 
             # APRÈS — appelé APRÈS _translate_token (semantic_class rempli)
-            tok, candidates = self._translate_token(tok, frame, context_lemmas, tokens)
+            tok, candidates = self._translate_token(tok, context_lemmas, tokens)
 
             # Détection des dimensions sur TOUT verbe : transitivité, classe sém.,
             # consumption solid/liquid, volition, agentivité.
@@ -2188,8 +3161,7 @@ class TranslationEngine:
             
             # Dans la boucle for tok in tokens, après _translate_token :
             if (tok.get('dep') == 'obj'
-                    and any((t.get('lemma', '').lower() == 'avoir'
-                             or t.get('semantic_class') == 'having')
+                    and any(_is_avoir(t)
                             and (t.get('is_root') or t.get('dep') == 'ROOT')
                             for t in tokens)):
                 _ptype = self._detect_possession_type(
@@ -2212,10 +3184,11 @@ class TranslationEngine:
         )
 
         if _has_purposive_acl and _has_conjunction:
-            from pipeline.proposition_parser import translate_propositions
+            from pipeline.proposition_parser import translate_propositions, set_grammar
+            set_grammar(self.rule_engine.grammar)
             bambara = translate_propositions(tokens)
         else:
-            bambara = self.rule_engine.apply(tokens, frame)
+            bambara = self.rule_engine.apply(tokens)
 
         return bambara
 
@@ -2224,48 +3197,77 @@ class TranslationEngine:
     # MAIN TRANSLATE
     # ------------------------------------------------------------------
 
+    @staticmethod
+    def _normalize_straight_quotes(sentence: str) -> str:
+        """Remplace des paires de guillemets droits ("/") par « » (alternance
+        ouverture/fermeture). Ne touche pas aux apostrophes (' seul n'est
+        jamais transformé — seul le guillemet double ASCII l'est)."""
+        if '"' not in sentence and '“' not in sentence and '”' not in sentence:
+            return sentence
+        out = []
+        opening = True
+        for ch in sentence:
+            if ch in ('"', '“', '”'):
+                out.append('«' if opening else '»')
+                opening = not opening
+            else:
+                out.append(ch)
+        return ''.join(out)
+
     def translate(self, sentence: str) -> dict:
+        # Normaliser les guillemets droits (") en guillemets français (« »)
+        # AVANT le parsing : le modèle spaCy fr gère "..." et «...» de façon
+        # incohérente (ex: "bonjour" → dep=xcomp alors que « bonjour » →
+        # dep=obl:arg pour le même mot dans la même phrase), ce qui cassait
+        # silencieusement toute phrase citée avec des guillemets droits.
+        sentence = self._normalize_straight_quotes(sentence)
         self._current_sentence = sentence
 
         all_tokens = tokenize(sentence, db=self.db,
                               backend=LLM_BACKEND, model=LLM_MODEL)
         if not all_tokens:
-            return {'bambara': '', 'frame': 'GENERIC', 'concepts': []}
+            return {'bambara': '', 'concepts': []}
 
         lang_tag = all_tokens[0].get('lang', 'fr').upper()
-        lemmas   = [t['lemma'] for t in all_tokens if t['role'] == 'content']
-        frame    = self.frame_parser.detect_frame(lemmas)
 
-        print(f"\n🧠 INPUT : {sentence}  [{lang_tag}]")
-        print(f"🔤 TOKENS: "
+        print(f"\n INPUT : {sentence}  [{lang_tag}]")
+        print(f" TOKENS: "
               f"{[(t['orig_index'], t['lemma'], t['pos'], t['dep'], t['role'], t.get('head_index')) for t in all_tokens]}")
-        print(f"📊 FRAME : {frame}")
         print("=" * 75)
 
         # Use spaCy dependencies to auto-detect clause boundaries
-        clauses      = self._split_clauses(sentence, tokens=all_tokens)
+        _rel_flags   = []
+        clauses      = self._split_clauses(sentence, tokens=all_tokens, _rel_flags=_rel_flags)
         all_bambara  = []
         all_concepts = []
+        # `all_tokens` above is the pre-split sentence-level tokenize() call —
+        # it's NEVER mutated with bm/sens_fr (that happens on a separate
+        # re-tokenization of each clause substring inside _translate_clause).
+        # Collect the real, translated per-clause tokens here instead, so
+        # callers relying on result['tokens'] see actual bm/sens_fr values.
+        _translated_tokens = []
 
         for i, clause in enumerate(clauses):
             if len(clauses) > 1:
                 print(f"\n{'─'*40}")
-                print(f"📌 CLAUSE {i+1}/{len(clauses)}: {clause}")
+                print(f" CLAUSE {i+1}/{len(clauses)}: {clause}")
                 print(f"{'─'*40}")
 
             self._current_sentence = clause
-            # bm = self._translate_clause(clause, frame)
             _main_lang = all_tokens[0].get('lang', 'fr') if all_tokens else 'fr'
-            bm = self._translate_clause(clause, frame, lang=_main_lang)
+            _is_rel_cont = _rel_flags[i] if i < len(_rel_flags) else False
+            bm = self._translate_clause(clause, lang=_main_lang,
+                                        is_relative_continuation=_is_rel_cont)
+            _translated_tokens.extend(getattr(self, '_current_clause_tokens', []) or [])
 
-            print(f"  ✂️  Clause {i+1} -> '{bm}'")
+            print(f"    Clause {i+1} -> '{bm}'")
 
             if bm:
                 all_bambara.append(bm)
 
         bambara_output = ', '.join(b for b in all_bambara if b)
 
-        print(f"\n🇲🇱 BAMBARA : {bambara_output}")
+        print(f"\n BAMBARA : {bambara_output}")
         print("=" * 75)
 
         # Snapshot du dernier tree pour l'évaluation
@@ -2280,9 +3282,24 @@ class TranslationEngine:
             'V':           _main.get('V', ''),
             'O':           _main.get('O', ''),
             'n_obls':      len(_main.get('OBL_ALL', [])),
+            'obl_all':     [{'head': o.get('HEAD', ''), 'marker': o.get('MARKER', '')}
+                             for o in _main.get('OBL_ALL', [])],
+            'applied_template': _tree.get('_applied_template', ''),
         }
 
-        # Snapshot des tokens (tagging) pour l'évaluation du parsing
+        # Snapshot des tokens (tagging) pour l'évaluation du parsing.
+        # `all_tokens` porte le parse UD complet de la phrase (dep/head_index
+        # cohérents pour LAS/UAS — voir eval/parse_trans_corr.py) mais n'est
+        # JAMAIS mis à jour avec bm/sens_fr (ceux-ci sont posés sur une
+        # re-tokenisation séparée par clause, `_translated_tokens`). Fusionner
+        # bm/sens_fr par position quand les deux séquences ont la même
+        # longueur (cas standard : découpage en clauses = simple partition,
+        # même nombre de tokens) ; sinon laisser bm/sens_fr vides plutôt que
+        # de risquer un alignement faux sur une phrase multi-clauses.
+        _bm_by_pos = {}
+        if len(_translated_tokens) == len(all_tokens):
+            _bm_by_pos = {i: t for i, t in enumerate(_translated_tokens)}
+
         _tokens_meta = [
             {
                 'surface':    t.get('surface', ''),
@@ -2292,10 +3309,12 @@ class TranslationEngine:
                 'role':       t.get('role', ''),
                 'head_index': t.get('head_index', -1),
                 'orig_index': t.get('orig_index', -1),
-                'bm':         t.get('bm', ''),
-                'sens_fr':    t.get('sens_fr', ''),
+                'bm':         _bm_by_pos.get(i, {}).get('bm', '')
+                              or t.get('bm', ''),
+                'sens_fr':    _bm_by_pos.get(i, {}).get('sens_fr', '')
+                              or t.get('sens_fr', ''),
             }
-            for t in all_tokens
+            for i, t in enumerate(all_tokens)
         ]
 
         # Glose sémantique KG : premier sens FR de chaque token de contenu traduit.
@@ -2310,7 +3329,6 @@ class TranslationEngine:
 
         return {
             'bambara':       bambara_output,
-            'frame':         frame,
             'concepts':      all_concepts,
             'tree':          _tree_meta,
             'tokens':        _tokens_meta,

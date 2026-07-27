@@ -4,7 +4,7 @@ rules/steps/step0_init.py
 clause_type_init (simple/verb_serial/interrogative/content_question/identificatoire).
 """
 import networkx as nx
-from rules.core import _is_copula, _is_avoir
+from rules.core import _is_copula, _is_avoir, _is_misparsed_relative_qui
 
 
 def run(T, G_kg):
@@ -81,8 +81,9 @@ def run(T, G_kg):
     # Idiotisme français: "être + en train de + VERB"
     # spaCy tokenise: train=ROOT, manger=acl (enfant de train)
     # Détection syntaxique: NOUN(train) + ADP + VERB(acl) → VERB devient root
+    _prog_periphrasis_lemmas = G_kg.get('progressive_periphrasis_lemmas', {'train'})
     if (root_tok and root_tok.get('pos') == 'NOUN'
-            and root_tok.get('lemma') == 'train'):
+            and root_tok.get('lemma') in _prog_periphrasis_lemmas):
         # Chercher ADP enfants ('en', 'de', etc.)
         _has_en_train_pattern = any(
             x.get('pos') == 'ADP'
@@ -98,7 +99,7 @@ def run(T, G_kg):
                 # Reassigner le vrai verbe comme root_tok
                 root_tok = _prog_verb
                 # Marquer 'train' comme expletif
-                _expletive_train = next((x for x in T if x.get('lemma') == 'train'
+                _expletive_train = next((x for x in T if x.get('lemma') in _prog_periphrasis_lemmas
                                         and x.get('dep') == 'ROOT'), None)
                 if _expletive_train:
                     _expletive_train['role'] = 'expletive'
@@ -257,10 +258,12 @@ def run(T, G_kg):
     for x in T:
         _surf  = str(x.get('surface', '')).strip()
         _morph = str(x.get('morph', ''))
+        _misparsed_relative_qui = _is_misparsed_relative_qui(x, T)
         if ((x.get('role') == 'interrogative'
                 and x.get('dep') not in ('mark', 'obj'))  # exclure 'que' rel dep=obj
                 or 'Int' in _morph
                 or 'PronType=Int' in _morph
+                or _misparsed_relative_qui
                 or (x.get('pos') == 'PRON'   # seulement PRON pas ADJ (rapide ≠ interrogatif)
                     and x.get('dep') == 'ROOT'
                     and x.get('role') not in ('subject', 'demonstrative', 'possessive',

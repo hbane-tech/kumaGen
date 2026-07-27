@@ -7,7 +7,7 @@ Métriques calculées :
   - P@1   : Embedding Precision@1     (lemme ∈ sens_fr du top-1 candidat)
   - KGH   : KG Hit Rate               (% exact match vs embedding)
   - CTA   : Clause Type Accuracy      (inférée depuis la catégorie de test)
-  - τ     : Kendall's tau             (corrélation chrF ranking vs EXM ranking)
+  - τ     : Kendall's tau             (word-order reordering vs référence, par phrase)
 
 Usage :
   python evaluate.py                  # éval complète silencieuse
@@ -23,7 +23,67 @@ import datetime
 import argparse
 import os
 import re
+import traceback
+import unicodedata
 from collections import defaultdict
+
+from eval.bambara_ud_reference import build_reference_ud_tree
+
+
+def classify_error(e: Exception) -> tuple:
+    """Catégorise une exception de traduction pour le diagnostic (pas de
+    hiérarchie d'exceptions dédiée dans le pipeline — tout est 'Exception'
+    générique) : on retient le TYPE de l'exception + le frame le plus profond
+    de la traceback (fichier:ligne dans la fonction où elle a été levée),
+    plus fiable qu'un heuristique sur le texte du message. Retourne
+    (error_type, error_where)."""
+    error_type = type(e).__name__
+    tb = traceback.extract_tb(e.__traceback__)
+    if tb:
+        frame = tb[-1]
+        error_where = f"{os.path.basename(frame.filename)}:{frame.lineno} in {frame.name}"
+    else:
+        error_where = '?'
+    return error_type, error_where
+
+
+def strip_bambara_tones(s: str) -> str:
+    """Retire les marques tonales (accents combinants : grave/aigu sur les
+    voyelles) d'une chaîne bambara. Nécessaire pour comparer un marqueur TAM
+    indépendamment du marquage tonal : Google Translate et NLLB ne produisent
+    JAMAIS de tons (toujours 'ye', jamais 'yé'), contrairement à Kuma — une
+    comparaison exacte sur chaîne tonale ferait donc échouer à tort le TAM
+    de ces deux systèmes même quand ils ont choisi le bon marqueur."""
+    nfd = unicodedata.normalize('NFD', s)
+    return ''.join(c for c in nfd if not unicodedata.combining(c))
+
+
+# Variantes de forme (pas de ton, pas de synonyme lexical) du pronom 1sg
+# sujet bambara : 'n' (forme clitique, KG Pronoun.bm pour 'je'/'moi') vs
+# 'ne' (forme pleine, sans ton — 'né' devient déjà 'ne' après
+# strip_bambara_tones). Volontairement TRÈS restreint : uniquement des
+# variantes de FORME d'un même mot déjà attestées (cf. décision 2026-07-10 —
+# EXM ne doit PAS absorber des synonymes lexicaux différents comme
+# 'karamɔgɔ'/'karamɔgɔkɛ', c'est le rôle de chrF/chrF++/BERTScore).
+_PRONOUN_FORM_VARIANTS = {'ne': 'n'}
+
+
+def exm_normalize(s: str) -> str:
+    """Normalisation pour EXM tolérant : minuscule + sans tons + variantes
+    de forme pronominale connues (PAS de synonymes lexicaux)."""
+    s = strip_bambara_tones(s or '').lower().strip()
+    tokens = [_PRONOUN_FORM_VARIANTS.get(t, t) for t in s.split()]
+    return ' '.join(tokens)
+
+
+def exm_match_normalized(hyp: str, ref: str) -> bool:
+    """EXM tolérant au ton et aux variantes de forme pronominale — cf.
+    exm_normalize(). Complète (ne remplace pas) l'EXM strict : l'EXM strict
+    reste informatif (seul Kuma produit une orthographe tonale complète),
+    mais sous-estime fortement Google/NLLB qui ne marquent JAMAIS les tons
+    (vérifié sur le corpus complet : EXM strict Google 1.1% → 10.1%
+    normalisé, NLLB 0.3% → 6.8% normalisé — décision 2026-07-10)."""
+    return exm_normalize(hyp) == exm_normalize(ref)
 
 
 # ── Mapping catégorie → clause_type attendu ───────────────────────────────────
@@ -97,11 +157,21 @@ CATEGORY_TO_CLAUSE = {
 
 CONTENT_POS = {'NOUN', 'VERB', 'ADJ', 'ADV', 'PROPN'}
 
-# TAM markers connus — pour extraction depuis la référence Bambara
+# TAM markers connus — pour extraction depuis la référence Bambara.
+# Repris EXACTEMENT de la table (:TamConfig) du KG (rules/rule_engine.py,
+# requête "MATCH (t:TamConfig) RETURN t.tense, t.neg, t.bm") — ne pas
+# ajouter de marqueur ici sans l'y vérifier d'abord. 'dòn' (copule
+# identificatoire/présentative), 'ka' (obligation/optatif) et 'kàna'
+# (prohibitif) ne sont PAS des TAM : bug fixé 2026-07-08, ils faisaient
+# rater à tort la vérification d'ordre des mots (bambara_word_order_ok)
+# sur toute clause équative/existentielle/identificatoire/statif se
+# terminant légitimement par 'dòn' sans verbe après (ex: "n de dòn",
+# "búuru bɛ" [existentiel, bɛ = prédicat lui-même, pas un TAM ici — voir
+# note dans bambara_word_order_ok]).
 _TAM_MARKERS = [
     'tùn yé', 'tùn ma', 'tùn bɛ', 'tùn tɛ',
     'bɛ kà', 'tɛ kà', 'bɛ na', 'tɛ na',
-    'yé', 'ma', 'bɛ', 'tɛ', 'dòn', 'ka', 'kàna',
+    'yé', 'ma', 'bɛ', 'tɛ', 'mán',
 ]
 
 # ── UD Parse Health ───────────────────────────────────────────────────────────
@@ -145,24 +215,57 @@ def ud_health(sentence: str) -> dict:
     return {**checks, 'ud_score': score, 'ud_pct': round(score / 5 * 100, 1)}
 
 
-# ── Bambara word-order (S-TAM-V) ─────────────────────────────────────────────
+# ── Bambara word-order (contre le template KG du clause_type) ────────────────
+# Ancienne version : heuristique générique "TAM précédé d'un sujet ET suivi
+# d'un verbe" sur la chaîne finale — cassait sur existential_absolute
+# ('{O} bɛ yan', bɛ pas forcément suivi d'un verbe) et sur les TAM composés
+# ('tùn bɛ'). Remplacée par une comparaison directe à la règle KG du
+# clause_type (ClauseTemplate, via lookup_clause_template) : on relit l'ordre
+# des slots {S}/{TAM}/{O}/{V}/... prescrit par le template, et on vérifie que
+# les VALEURS RÉELLES de ces slots (déjà connues via tree_meta — S/TAM/O/V
+# tels que construits pendant la traduction, donc le TAM composé est déjà la
+# bonne chaîne complète) apparaissent dans le même ordre dans la sortie.
 
-_TAM_RE = re.compile(
-    r'\b(tùn yé|tùn ma|tùn bɛ|tùn tɛ|bɛ kà|tɛ kà|bɛ na|tɛ na'
-    r'|yé|ma|bɛ|tɛ|dòn|kàna)\b'
-)
+def bambara_word_order_ok(tree_meta: dict, output: str, G_kg: dict) -> bool:
+    """Vérifie que l'ordre des slots (S, TAM, O, V, ...) dans la sortie
+    respecte le ClauseTemplate KG du clause_type détecté.
+    Retourne None si aucun template KG n'existe pour ce clause_type
+    (non évaluable — exclu de la moyenne, même convention que p1/kgh)."""
+    from rules.kg_rule_engine import lookup_clause_template
 
-def bambara_word_order_ok(bambara: str) -> bool:
-    """Vérifie S-TAM-V : le TAM doit être précédé d'un sujet ET suivi d'un verbe."""
-    tokens = bambara.strip().split()
-    if not tokens:
-        return False
-    m = _TAM_RE.search(bambara)
-    if not m:
-        return True   # pas de TAM → phrase nominale, neutre
-    tam_pos   = len(bambara[:m.start()].split())   # position (0-based) du premier token du TAM
-    tam_width = len(m.group().split())
-    return tam_pos > 0 and (tam_pos + tam_width) < len(tokens)
+    clause_type = tree_meta.get('clause_type', '')
+    template = lookup_clause_template(clause_type, G_kg)
+    if not template:
+        return None
+
+    slot_order = re.findall(r'\{(\w+)\}', template)
+
+    last_pos = -1
+    for slot in slot_order:
+        value = (tree_meta.get(slot) or tree_meta.get(slot.upper())
+                  or tree_meta.get(slot.lower()) or '')
+        value = value.strip() if isinstance(value, str) else ''
+        if not value:
+            continue   # slot vide (ex: S='' en existential_absolute) → ignoré
+        pos = output.find(value, last_pos + 1)
+        if pos == -1 or pos <= last_pos:
+            return False
+        last_pos = pos
+    return True
+
+
+def ud_structure_ok(tree_meta: dict, output: str):
+    """Vérifie que la sortie contient les mots attendus (S/TAM/O/V/OBL...)
+    dans le bon ordre de surface ET avec les bons rôles UD (POS+deprel),
+    selon le schéma documenté par Aplonova & Tyers (build_reference_ud_tree).
+    Retourne None si le clause_type n'est pas couvert (non évaluable — même
+    convention que p1/kgh, exclu de la moyenne) ; sinon True/False selon que
+    la résolution a réussi (liste non vide) ou échoué (liste vide — échec
+    réel de structure, compte comme faux, n'est PAS exclu de la moyenne)."""
+    ref = build_reference_ud_tree(tree_meta, output)
+    if ref is None:
+        return None
+    return bool(ref)
 
 
 # ── Métriques corpus (chrF, chrF++, BLEU) ────────────────────────────────────
@@ -287,25 +390,135 @@ def chrf_score(hypothesis: str, reference: str) -> float:
         return 2 * p * rec / (p + rec + 1e-8) * 100
 
 
+def chrfpp_score(hypothesis: str, reference: str) -> float:
+    """chrF++ sentence-level score (chrF + sensibilité à l'ordre des mots,
+    word_order=2). Utilisé uniquement pour le Kendall's τ chrF↔chrF++
+    (cf. kendall_tau) — pas de fallback manuel, chrF++ nécessite sacrebleu."""
+    from sacrebleu.metrics import CHRF
+    return CHRF(word_order=2).sentence_score(hypothesis, [reference]).score
+
+
+def bleu_char_score(hypothesis: str, reference: str) -> float:
+    """BLEU (tokenize='char') sentence-level score, pour les scatters
+    phrase-par-phrase. effective_order=True : évite l'effondrement à 0 que
+    donnerait le BLEU standard dès qu'un seul ordre de n-gramme (souvent le
+    4-gramme) a une précision nulle sur une phrase courte — sacrebleu réduit
+    alors l'ordre effectivement utilisé au lieu de forcer un facteur nul dans
+    le produit géométrique. Vérifié : phrases courtes/non-liées donnent un
+    score proportionnel (>0), pas un 0 plat qui écraserait le scatter."""
+    from sacrebleu.metrics import BLEU
+    return BLEU(tokenize='char', effective_order=True).sentence_score(
+        hypothesis, [reference]).score
+
+
 # ── Kendall's tau ──────────────────────────────────────────────────────────────
 
 def kendall_tau(scores_a: list, scores_b: list) -> float:
     """
-    Kendall's τ entre deux listes de scores (même ordre de phrases).
+    Kendall's τ-b entre deux listes de scores (même ordre de phrases).
     Mesure la concordance de classement entre deux métriques.
+    Générique — utilisée hors contexte word-order (cf. kendall_tau_word_order
+    pour la métrique de reordering MT, seule utilisation actuelle dans le pipeline).
     """
-    n = len(scores_a)
-    concordant = discordant = 0
-    for i in range(n):
-        for j in range(i + 1, n):
-            da = scores_a[i] - scores_a[j]
-            db = scores_b[i] - scores_b[j]
-            if da * db > 0:
-                concordant += 1
-            elif da * db < 0:
-                discordant += 1
-    total = n * (n - 1) / 2
-    return (concordant - discordant) / total if total > 0 else 0.0
+    if len(scores_a) < 2:
+        return 0.0
+    from scipy.stats import kendalltau
+    tau, _ = kendalltau(scores_a, scores_b)
+    return 0.0 if tau != tau else float(tau)   # tau != tau ⇔ NaN (variance nulle)
+
+
+def kendall_tau_word_order(hyp: str, ref: str, p_penalty: float = 0.5):
+    """
+    Kendall's τ de réordonnancement, distance étendue façon Fagin/Kumar-
+    Vassilvitskii pour comparer deux "rankings" non identiques (ici : les
+    tokens de ref et hyp ne sont pas le même ensemble — mots manquants,
+    substitués). Décision 2026-07-11, remplace la version qui n'alignait que
+    les tokens communs et laissait tomber silencieusement les tokens de
+    référence absents de l'hypothèse (ex: 'Musa yé dònso yé' vs Google
+    'Musa ye kungotigi ye' → 'dònso' jamais comparé → τ=1.0 malgré un nom
+    traduit complètement différent, alors que TOUS les mots de la phrase
+    doivent compter dans l'évaluation).
+
+    Univers = tous les tokens (occurrences) de ref ∪ hyp, appariés par
+    identité de surface (sans tons) en glouton gauche→droite pour gérer les
+    répétitions (ex: les deux 'yé' d'une clause équative appariés dans
+    l'ordre où ils apparaissent). Pour CHAQUE paire de tokens distincts de
+    cet univers :
+      - les deux appariés (positions connues dans ref ET hyp) : distance 0
+        si leur ordre relatif concorde entre ref et hyp, 1 sinon ;
+      - un apparié + un non-apparié (présent dans un seul des deux textes) :
+        pénalité fixe p_penalty (0.5 par défaut — valeur "neutre", celle
+        attendue si on ne savait rien de l'ordre relatif) ;
+      - les deux non-appariés : pénalité fixe p_penalty également.
+
+    La distance totale est normalisée par le nombre de paires, puis
+    reconvertie sur l'échelle τ classique [-1, +1] via 1 − 2×distance
+    (distance=0 → τ=+1 ordre parfait ; distance=1 → τ=-1 ordre totalement
+    inversé/discordant ; p_penalty=0.5 → contribution nulle à τ, cohérent
+    avec son rôle de valeur neutre).
+
+    Retourne None si l'univers a moins de 2 tokens (rien à comparer).
+    """
+    # Même normalisation que exm_match_normalized (tons + variantes de forme
+    # pronominale, ex: 'ne'->'n') pour ne pas pénaliser Google/NLLB sur des
+    # différences de forme qui ne changent pas le mot (décision 2026-07-11).
+    def _toks(s):
+        s = strip_bambara_tones(s or '').lower()
+        return [_PRONOUN_FORM_VARIANTS.get(t, t) for t in s.split()]
+
+    ref_toks = _toks(ref)
+    hyp_toks = _toks(hyp)
+
+    from collections import defaultdict, deque
+    ref_occ = defaultdict(list)
+    for i, t in enumerate(ref_toks):
+        ref_occ[t].append(i)
+    hyp_occ = defaultdict(list)
+    for j, t in enumerate(hyp_toks):
+        hyp_occ[t].append(j)
+
+    matched, ref_missing, hyp_missing = [], [], []
+    for t in set(ref_occ) | set(hyp_occ):
+        r_pos = deque(ref_occ.get(t, []))
+        h_pos = deque(hyp_occ.get(t, []))
+        while r_pos and h_pos:
+            matched.append((r_pos.popleft(), h_pos.popleft()))
+        ref_missing.extend(r_pos)
+        hyp_missing.extend(h_pos)
+
+    n_m, n_rm, n_hm = len(matched), len(ref_missing), len(hyp_missing)
+    if n_m + n_rm + n_hm < 2:
+        return None
+
+    def _choose2(n):
+        return n * (n - 1) // 2
+
+    total_distance = 0.0
+    total_pairs = 0
+
+    # Paires appariées ↔ appariées : concordance réelle sur les positions.
+    for i in range(n_m):
+        r1, h1 = matched[i]
+        for j in range(i + 1, n_m):
+            r2, h2 = matched[j]
+            concordant = (r1 < r2) == (h1 < h2)
+            total_distance += 0.0 if concordant else 1.0
+    total_pairs += _choose2(n_m)
+
+    # Paires appariée ↔ non-appariée (un seul côté a une position) : pénalité fixe.
+    n_one_sided = n_rm + n_hm
+    total_distance += p_penalty * n_m * n_one_sided
+    total_pairs += n_m * n_one_sided
+
+    # Paires non-appariée ↔ non-appariée (aucun des deux comparable) : pénalité fixe.
+    n_both_missing_pairs = _choose2(n_rm) + _choose2(n_hm) + n_rm * n_hm
+    total_distance += p_penalty * n_both_missing_pairs
+    total_pairs += n_both_missing_pairs
+
+    if total_pairs == 0:
+        return None
+    normalized_distance = total_distance / total_pairs
+    return 1.0 - 2.0 * normalized_distance
 
 
 # ── Rapport ────────────────────────────────────────────────────────────────────
@@ -339,8 +552,11 @@ def print_report(results: list, verbose: bool = False):
     sfr_s_avg  = sum(sfr_s)   / len(sfr_s)   * 100   if sfr_s   else None
     sfr_v_avg  = sum(sfr_v)   / len(sfr_v)   * 100   if sfr_v   else None
 
-    # Kendall τ entre chrF et EXM rankings
-    tau_chrf_exm = kendall_tau(chrf_scores, [float(e) for e in exm_scores])
+    # Kendall τ de réordonnancement, par phrase : ordre des tokens communs
+    # (obtenu vs référence), moyenné sur le corpus (cf. décision 2026-07-11).
+    wo_tau_scores = [kendall_tau_word_order(r['output'], r['reference']) for r in results]
+    wo_tau_scores = [t for t in wo_tau_scores if t is not None]
+    tau_word_order = sum(wo_tau_scores) / len(wo_tau_scores) if wo_tau_scores else 0.0
 
     # Corpus-level chrF / chrF++ / BLEU
     hyps_all = [r['output']    for r in results]
@@ -362,6 +578,10 @@ def print_report(results: list, verbose: bool = False):
     wo_list = [r['word_order_ok'] for r in results if r.get('word_order_ok') is not None]
     wo_rate = sum(wo_list) / len(wo_list) * 100 if wo_list else None
 
+    # UD structure (Aplonova & Tyers scheme, cf. build_reference_ud_tree)
+    ud_struct_list = [r['ud_structure_ok'] for r in results if r.get('ud_structure_ok') is not None]
+    ud_struct_rate = sum(ud_struct_list) / len(ud_struct_list) * 100 if ud_struct_list else None
+
     print(f"\n{'═'*70}")
     print(f"  KUMA-MT — RAPPORT D'ÉVALUATION   ({total} phrases)")
     print(f"{'═'*70}")
@@ -372,7 +592,7 @@ def print_report(results: list, verbose: bool = False):
     if corp['chrf_corpus']   is not None: print(f"  chrF   Corpus              : {corp['chrf_corpus']:6.2f}")
     if corp['chrfpp_corpus'] is not None: print(f"  chrF++ Corpus (word-order) : {corp['chrfpp_corpus']:6.2f}")
     if corp['bleu_corpus']   is not None: print(f"  BLEU   Corpus (char)       : {corp['bleu_corpus']:6.2f}")
-    print(f"  τ      Kendall (chrF↔EXM) : {tau_chrf_exm:+.3f}")
+    print(f"  τ      Kendall (word order, vs ref) : {tau_word_order:+.3f}")
 
     print(f"\n  ── Sémantique ─────────────────────────────────────")
     if p1_avg  is not None: print(f"  P@1   Embedding Precision  : {p1_avg:6.1f}%")
@@ -385,6 +605,7 @@ def print_report(results: list, verbose: bool = False):
     if sfr_s_avg  is not None: print(f"  SFR-S Slot Sujet Fill Rate : {sfr_s_avg:6.1f}%")
     if sfr_v_avg  is not None: print(f"  SFR-V Slot Verbe Fill Rate : {sfr_v_avg:6.1f}%")
     if wo_rate    is not None: print(f"  WO    Word Order (S-TAM-V) : {wo_rate:6.1f}%")
+    if ud_struct_rate is not None: print(f"  UDS   UD Structure (Aplonova & Tyers) : {ud_struct_rate:6.1f}%")
 
     print(f"\n  ── UD Parse Health (FR parse) ─────────────────────")
     if ud_scores:
@@ -413,6 +634,16 @@ def print_report(results: list, verbose: bool = False):
         c = sum(v['chrf']) / len(v['chrf'])
         print(f"  {g:<22} {v['n']:>4} {e:>6.1f} {c:>6.1f}")
 
+    # Erreurs de traduction (exceptions), par type + lieu
+    error_rows = [r for r in results if r.get('error_type')]
+    if error_rows:
+        err_counts = defaultdict(int)
+        for r in error_rows:
+            err_counts[(r['error_type'], r['error_where'])] += 1
+        print(f"\n  ── ERREURS de traduction ({len(error_rows)}/{total}) ──")
+        for (etype, ewhere), n in sorted(err_counts.items(), key=lambda x: -x[1]):
+            print(f"  {n:>3}×  {etype:<20} @ {ewhere}")
+
     # Erreurs
     failures = [r for r in results if not r['exm']]
     if failures:
@@ -427,13 +658,22 @@ def print_report(results: list, verbose: bool = False):
 
 # ── Main ───────────────────────────────────────────────────────────────────────
 
+def load_cases_from_final_csv(path: str) -> list:
+    """Charge (phrase_fr, bambara_attendu, categorie) depuis FINAL Data.csv —
+    remplace test_phrases.TEST_CASES comme source de données/référence tout
+    en réutilisant l'intégralité des métriques de ce module."""
+    with open(path, encoding='utf-8') as f:
+        return [(row['phrase_fr'], row['bambara_attendu'], row['categorie'])
+                for row in csv.DictReader(f)]
+
+
 def run_evaluation(filter_cat: str = None, verbose: bool = False,
                    no_translate: bool = False, export_csv: bool = True,
-                   make_plots: bool = False):
+                   make_plots: bool = False, cases: list = None):
 
-    from test_phrases import TEST_CASES
-
-    cases = TEST_CASES
+    if cases is None:
+        from test_phrases import TEST_CASES
+        cases = TEST_CASES
     if filter_cat:
         cases = [(p, e, c) for p, e, c in cases if filter_cat in c]
         print(f"Filtre catégorie '{filter_cat}' : {len(cases)} phrases")
@@ -459,9 +699,12 @@ def run_evaluation(filter_cat: str = None, verbose: bool = False,
     import io, contextlib
 
     from pipeline.translation_engine import TranslationEngine
+    from pipeline.spacy_parser import SpacyParser
     from kg.neo4j_client import Neo4jClient
+    import test_phrases as tp
     db  = Neo4jClient()
     eng = TranslationEngine(db)
+    tagger = SpacyParser(db)
 
     total = len(cases)
     print(f"Évaluation sur {total} phrases…\n")
@@ -471,12 +714,15 @@ def run_evaluation(filter_cat: str = None, verbose: bool = False,
 
         # Traduction (silencieuse)
         buf = io.StringIO()
+        res = {}
+        error_type, error_where = '', ''
         try:
             with contextlib.redirect_stdout(buf):
                 res = eng.translate(phrase)
             output = res.get('bambara', '').strip()
         except Exception as e:
-            output = f'[ERR: {e}]'
+            error_type, error_where = classify_error(e)
+            output = f'[ERR:{error_type} @ {error_where}] {e}'
 
         # Tokens pour P@1 et KGH (dernier clause traduite)
         tokens = getattr(eng, '_current_clause_tokens', []) or []
@@ -484,8 +730,9 @@ def run_evaluation(filter_cat: str = None, verbose: bool = False,
         # EXM
         exm = (output == expected.strip())
 
-        # chrF
-        chrf = chrf_score(output, expected)
+        # chrF / chrF++ (sentence-level ; chrF++ seulement pour Kendall's τ)
+        chrf   = chrf_score(output, expected)
+        chrfpp = chrfpp_score(output, expected)
 
         # P@1
         p1 = embedding_p1(tokens, {})
@@ -493,12 +740,18 @@ def run_evaluation(filter_cat: str = None, verbose: bool = False,
         # KG Hit Rate
         kgh = kg_hit_rate(tokens)
 
+        # CamemBERT (mot-à-mot isolé) et BERTScore (contextuel, glouton) sont
+        # deux métriques distinctes par construction (cf. décision 2026-07-09).
+        with contextlib.redirect_stdout(io.StringIO()):
+            cam_kuma = tp.score_kuma_word_level(tokens)
+            p_bs, r_bs, f1_bs = tp.kuma_bertscore_prf(tokens, phrase, tagger)
+
         # Métriques tree
         tree_meta = res.get('tree', {})
         tm = tree_metrics(tree_meta, expected, category)
 
         if verbose:
-            status = '✅' if exm else f'❌ chrF={chrf:.0f}'
+            status = '' if exm else f' chrF={chrf:.0f}'
             print(f"\n  {status}  {phrase}")
             if not exm:
                 print(f"     ATT : {expected}")
@@ -510,18 +763,29 @@ def run_evaluation(filter_cat: str = None, verbose: bool = False,
         # UD parse health
         udh = ud_health(phrase)
 
-        # Bambara word order
-        wo_ok = bambara_word_order_ok(output)
+        # Bambara word order (contre le ClauseTemplate KG du clause_type)
+        wo_ok = bambara_word_order_ok(tree_meta, output, eng.rule_engine.grammar)
+
+        # UD structure (schéma Aplonova & Tyers, cf. build_reference_ud_tree)
+        uds_ok = ud_structure_ok(tree_meta, output)
 
         results.append({
             'source':          phrase,
             'reference':       expected,
             'output':          output,
             'category':        category,
+            'error_type':      error_type,
+            'error_where':     error_where,
             'exm':             exm,
             'chrf':            chrf,
+            'chrfpp':          chrfpp,
             'p1':              p1,
             'kgh':             kgh,
+            # CamemBERT / BERTScore
+            'cam':             cam_kuma,
+            'bs_p':            p_bs,
+            'bs_r':            r_bs,
+            'bs_f1':           f1_bs,
             # tree metrics
             'clause_type_ok':  tm['clause_type_ok'],
             'tam_ok':          tm['tam_ok'],
@@ -541,6 +805,7 @@ def run_evaluation(filter_cat: str = None, verbose: bool = False,
             'ud_no_dep_dep':     udh.get('no_dep_dep'),
             # word order
             'word_order_ok':   wo_ok,
+            'ud_structure_ok': uds_ok,
         })
 
     print()  # saut de ligne après le curseur
@@ -552,12 +817,13 @@ def run_evaluation(filter_cat: str = None, verbose: bool = False,
         path = f'eval_{ts}.csv'
         with open(path, 'w', newline='', encoding='utf-8') as f:
             writer = csv.DictWriter(f, fieldnames=[
-                'source','reference','output','category',
-                'exm','chrf','p1','kgh',
+                'source','reference','output','category','error_type','error_where',
+                'exm','chrf','chrfpp','p1','kgh',
+                'cam','bs_p','bs_r','bs_f1',
                 'clause_type_ok','tam_ok','neg_ok','slot_S','slot_V','slot_O',
                 'ref_tam','tree_tam','tree_clause',
                 'ud_score','ud_single_root','ud_root_pos_ok','ud_has_subject',
-                'ud_connected','ud_no_dep_dep','word_order_ok'])
+                'ud_connected','ud_no_dep_dep','word_order_ok','ud_structure_ok'])
             writer.writeheader()
             writer.writerows(results)
         print(f"  CSV exporté : {path}")
@@ -577,6 +843,7 @@ def run_evaluation(filter_cat: str = None, verbose: bool = False,
             [r['reference'] for r in results])
         _ud   = [r['ud_score'] for r in results if r.get('ud_score') is not None]
         _wo   = [r['word_order_ok'] for r in results if r.get('word_order_ok') is not None]
+        _uds  = [r['ud_structure_ok'] for r in results if r.get('ud_structure_ok') is not None]
         summary = {
             'timestamp':    ts,
             'n_phrases':    len(results),
@@ -587,9 +854,13 @@ def run_evaluation(filter_cat: str = None, verbose: bool = False,
             'BLEU_corpus':  _corp.get('bleu_corpus'),
             'P@1':          _avg([r['p1']  for r in results if r['p1']  is not None]),
             'KGH':          _avg([r['kgh'] for r in results if r['kgh'] is not None]),
-            'tau_chrF_EXM': round(kendall_tau(
-                                [r['chrf'] for r in results],
-                                [float(r['exm']) for r in results]), 3),
+            'CamemBERT':    _avg([r['cam']   for r in results if r['cam']   is not None]),
+            'BERTScore_P':  _avg([r['bs_p']  for r in results if r['bs_p']  is not None]),
+            'BERTScore_R':  _avg([r['bs_r']  for r in results if r['bs_r']  is not None]),
+            'BERTScore_F1': _avg([r['bs_f1'] for r in results if r['bs_f1'] is not None]),
+            'tau_word_order': (lambda v: round(sum(v) / len(v), 3) if v else 0.0)(
+                                [t for t in (kendall_tau_word_order(r['output'], r['reference'])
+                                             for r in results) if t is not None]),
             'CTA':   _avg(_cta),
             'TAM':   _avg(_tam),
             'NEG':   _avg(_neg),
@@ -597,6 +868,7 @@ def run_evaluation(filter_cat: str = None, verbose: bool = False,
             'SFR_V': _avg(_sfrV),
             'UD_score_avg': round(sum(_ud) / len(_ud) / 5 * 100, 2) if _ud else None,
             'WO_S_TAM_V':  round(sum(_wo) / len(_wo) * 100, 2) if _wo else None,
+            'UD_structure_Aplonova_Tyers': round(sum(_uds) / len(_uds) * 100, 2) if _uds else None,
         }
         json_path = f'eval_{ts}_summary.json'
         with open(json_path, 'w', encoding='utf-8') as f:
@@ -612,14 +884,16 @@ def run_evaluation(filter_cat: str = None, verbose: bool = False,
                 from evaluate import CATEGORY_TO_CLAUSE as _map
                 plot_rows = eval_plots.load_csv(path)
                 print(f"\n  Génération des figures dans {outdir}/ …")
-                eval_plots.fig_global_metrics(plot_rows, outdir)
+                eval_plots.fig1a_surface_metrics(plot_rows, outdir)
+                eval_plots.fig1b_semantic_metrics(plot_rows, outdir)
+                eval_plots.fig1c_structure_metrics(plot_rows, outdir)
                 eval_plots.fig_by_clause_type(plot_rows, outdir, _map)
                 eval_plots.fig_chrf_distribution(plot_rows, outdir)
                 eval_plots.fig_clause_confusion(plot_rows, outdir, _map)
                 eval_plots.fig_chrf_vs_p1(plot_rows, outdir)
                 eval_plots.fig_tam_matrix(plot_rows, outdir)
             except Exception as e:
-                print(f"  ⚠️  Graphiques non générés : {e}")
+                print(f"    Graphiques non générés : {e}")
 
     return results
 

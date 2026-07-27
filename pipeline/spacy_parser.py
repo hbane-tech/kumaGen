@@ -15,7 +15,6 @@ import re
 from typing import Optional
 from config.settings import OLLAMA_GENERATE_URL
 from utils.normalize import normalize_token
-from utils.language import detect_language
 from llm.morphological_parser import MorphologicalParser
 
 _nlp_cache = {}
@@ -131,11 +130,25 @@ def _lefff_tense(surface: str) -> Optional[str]:
     """Tranche le temps d'une forme verbale via le code morphologique LEFFF
     (I=imparfait, C=conditionnel, F=futur, J=passé simple). Retourne None si
     la forme est absente du lexique ou ne correspond à aucun de ces temps
-    (présent, impératif, participe... laissés au reste de _tense)."""
+    (présent, impératif, participe... laissés au reste de _tense).
+
+    Garde anti-collision (bug 2026-07-07) : contrairement à I/P (aucune
+    collision pour les formes -ais/-ait, cf. note plus haut), J (passé
+    simple) ET P (présent) coexistent réellement pour certains verbes
+    irréguliers — ex: "dit" (dire) a les codes {P3s, J3s, Kms} : présent
+    ("il dit bonjour") ET passé simple ("il dit alors...") partagent la
+    même forme de surface. Sans cette garde, "il dit" (présent, aucun
+    auxiliaire) était systématiquement tranché 'past', écrasant le
+    Tense=Pres pourtant correctement déterminé par spaCy depuis le contexte
+    (repli ligne ~261). Si 'P' est aussi un code valide, l'ambiguïté est
+    réelle → laisser le repli contextuel trancher plutôt que ce lexique
+    hors-contexte."""
     codes = _lefff_verb_codes().get(surface.lower())
     if not codes:
         return None
     leadings = {c[0] for c in codes if c}  # Skip empty strings
+    if 'P' in leadings:
+        return None
     for prefix, tense in (('I', 'hab'), ('C', 'fut'), ('F', 'fut'), ('J', 'past')):
         if prefix in leadings:
             return tense
@@ -179,42 +192,24 @@ def _lefff_lemma(surface: str) -> Optional[str]:
     return None
 
 
-# def _get_nlp(lang):
-#     """Load and cache spaCy model for lang."""
-#     if lang not in _nlp_cache:
-#         import spacy
-#         for m in (['fr_dep_news_trf','fr_core_news_lg','fr_core_news_md','fr_core_news_sm'] if lang=='fr'
-#                   else ['en_core_web_trf','en_core_web_lg','en_core_web_md','en_core_web_sm']):
-#             try: _nlp_cache[lang] = spacy.load(m); break
-#             except: continue
-#         else: _nlp_cache[lang] = None
-#     return _nlp_cache[lang]
 import spacy
 
 _nlp_cache = {}
 
-def _get_nlp(lang):
-    if lang not in _nlp_cache:
-        # Listes triées de la précision maximale vers la vitesse maximale
-        models_pool = {
-            "fr": ["fr_dep_news_trf", "fr_core_news_lg", "fr_core_news_md", "fr_core_news_sm"],
-            "en": ["en_core_web_trf", "en_core_web_lg", "en_core_web_md", "en_core_web_sm"]
-        }
-        
-        # Récupère la liste correspondante ou une liste vide si la langue n'est pas supportée
-        candidates = models_pool.get(lang, [])
-        
-        for model_name in candidates:
+def _get_nlp():
+    """Charge et met en cache le parseur spaCy français — seule langue
+    supportée par le pipeline (grammaire des règles + lexique KG français)."""
+    if 'fr' not in _nlp_cache:
+        # Liste triée de la précision maximale vers la vitesse maximale
+        for model_name in ("fr_dep_news_trf", "fr_core_news_lg", "fr_core_news_md", "fr_core_news_sm"):
             try:
-                _nlp_cache[lang] = spacy.load(model_name)
-                break  # Succès ! On sort de la boucle immédiatement
+                _nlp_cache['fr'] = spacy.load(model_name)
+                break
             except Exception:
-                continue  # Échec, on tente le modèle inférieur
+                continue
         else:
-            # S'exécute uniquement si aucun modèle de la liste n'a pu être chargé
-            _nlp_cache[lang] = None
-            
-    return _nlp_cache[lang]
+            _nlp_cache['fr'] = None
+    return _nlp_cache['fr']
 
 
 # def _tense(tok):
@@ -269,10 +264,132 @@ def _tense(tok):
     return 'pres'
 
 
+def _merge_causative_faire(tokens, db):
+    """
+    Fusionne 'faire' + infinitif adjacent en un seul token quand le KG a une
+    entrée composée dédiée (ex: 'faire grossir.' → 'lábònya', un verbe
+    causatif préfixé lá-, distinct de 'grossir' seul → 'bònya').
+
+    Le causatif français "faire + Vinf" produit régulièrement un arbre de
+    dépendances incohérent chez spaCy (l'infinitif se retrouve attaché comme
+    'conj' de la racine de la phrase plutôt que comme complément de 'faire',
+    et 'faire' lui-même reçoit un dep vague comme 'dep' plutôt qu'une
+    relation causative reconnue) — bug trouvé 2026-07-19 sur "ceci m'a fait
+    grossir". Plutôt que de réparer l'arbre de dépendances brisé, on détecte
+    la paire par adjacence linéaire (lemme='faire' suivi immédiatement d'un
+    VERB à l'infinitif) et on interroge le KG pour un sens composé dédié
+    AVANT que la construction de clause ne s'appuie sur les rattachements
+    erronés du parseur.
+    """
+    _causative_rows = db.query(
+        "MATCH (fw:FunctionWord {lang:'fr', role:'causative_aux'}) "
+        "RETURN DISTINCT fw.surface AS s")
+    _CAUSATIVE_LEMMAS = {r['s'].lower() for r in _causative_rows if r.get('s')}
+    if not _CAUSATIVE_LEMMAS:
+        return tokens
+    if not any(t.get('lemma', '').lower() in _CAUSATIVE_LEMMAS
+               and t.get('pos') in ('VERB', 'AUX') for t in tokens):
+        return tokens
+
+    survivors = []
+    old_to_survivor_old = {}
+    i = 0
+    while i < len(tokens):
+        t = tokens[i]
+        _next = tokens[i + 1] if i + 1 < len(tokens) else None
+        if (t.get('lemma', '').lower() in _CAUSATIVE_LEMMAS
+                and t.get('pos') in ('VERB', 'AUX')
+                and _next is not None
+                and _next.get('pos') == 'VERB'
+                and 'VerbForm=Inf' in str(_next.get('morph', ''))):
+            _inf_lemma = _next.get('lemma', '')
+            _causative_lemma = t.get('lemma', '').lower()
+            _res = db.query(
+                "MATCH (s:Sense) WHERE toLower(s.fr) STARTS WITH toLower($prefix) "
+                "RETURN s.bm AS bm, s.fr AS fr LIMIT 1",
+                {'prefix': f"{_causative_lemma} {_inf_lemma}"})
+            if _res and _res[0].get('bm'):
+                t['bm'] = _res[0]['bm']
+                t['sens_fr'] = _res[0].get('fr', '')
+                t['pos'] = 'VERB'
+                t['semantic_class'] = None  # laisser la classification normale se faire sur ce nouveau bm
+                # Le causatif "faire + Vinf" laisse souvent le parseur avec un
+                # arbre incohérent : l'infinitif (maintenant absorbé) portait
+                # parfois le seul dep clair, tandis que 'faire' hérite d'un
+                # dep vague ('dep') et qu'un autre token (souvent le sujet
+                # démonstratif/pronominal, ex: "ceci") reste seul avec
+                # dep='ROOT'. On ne réutilise le dep de l'infinitif absorbé
+                # que s'il est structurellement exploitable (pas 'conj', pas
+                # 'ROOT' lui-même tant qu'on n'a pas vérifié le vrai sujet) ;
+                # sinon on re-racine explicitement le token fusionné.
+                _next_dep = _next.get('dep')
+                if _next_dep not in ('conj', 'ROOT', None):
+                    t['dep'] = _next_dep
+                else:
+                    _root_tok = next((x for x in tokens
+                                      if x.get('dep') == 'ROOT'
+                                      and x is not t and x is not _next), None)
+                    if (_root_tok is not None
+                            and _root_tok.get('pos') in ('PRON', 'NOUN', 'PROPN')):
+                        _root_tok['dep'] = 'nsubj'
+                        _root_tok['head_index'] = t['orig_index']
+                        _root_tok['is_root'] = False
+                        t['dep'] = 'ROOT'
+                        t['is_root'] = True
+                    elif t.get('dep') in ('dep', 'conj', None):
+                        t['dep'] = 'ROOT'
+                        t['is_root'] = True
+                old_to_survivor_old[_next['orig_index']] = t['orig_index']
+                survivors.append(t)
+                i += 2
+                continue
+        survivors.append(t)
+        i += 1
+
+    if not old_to_survivor_old:
+        return tokens
+
+    full_old_map = {t['orig_index']: t['orig_index'] for t in survivors}
+    full_old_map.update(old_to_survivor_old)
+    old_to_new = {t['orig_index']: idx for idx, t in enumerate(survivors)}
+
+    for t in survivors:
+        _mapped_head = full_old_map.get(t['head_index'], t['head_index'])
+        t['head_index'] = old_to_new.get(_mapped_head, t['head_index'])
+        t['orig_index'] = old_to_new[t['orig_index']]
+    return survivors
+
+
 def resolve_auxiliary_lemmas(tokens, db):
     """
     Validation universelle et redressement des lemmes d'auxiliaires.
     """
+    # Surfaces de clitiques objet FR (me/te/le/la/les/lui/leur/nous/vous +
+    # formes élidées/toniques) — dérivées du KG Pronoun{role IN object*},
+    # pas d'une liste Python séparée (décision 2026-07-13, audit hardcode-KG).
+    _clitic_rows = db.query(
+        "MATCH (n:Pronoun {lang:'fr'}) WHERE n.role IN ['object_pronoun', 'object'] "
+        "RETURN DISTINCT n.surface AS s")
+    _CLITIC_SURFS = {r['s'].lower() for r in _clitic_rows if r.get('s')}
+
+    # Homographe 'suis' (être 1sg vs suivre) : surface KG-sourcée, pas un
+    # littéral Python (décision 2026-07-13, audit hardcode-KG).
+    _etre_suivre_rows = db.query(
+        "MATCH (fw:FunctionWord {lang:'fr'}) WHERE fw.role = 'etre_suivre_homograph_surface' "
+        "RETURN fw.bm AS b")
+    _ETRE_SUIVRE_SURFS = {r['b'].lower() for r in _etre_suivre_rows if r.get('b')} or {'suis'}
+
+    # Ancres de négation véritables ('ne'/"n'"/'pas'/'jamais'...) — servent à
+    # valider les mots discontinus (KG FunctionWord.requires_partner, ex:
+    # 'plus' pour 'ne...plus') plus bas : sans ancre co-occurrente, ces mots
+    # gardent leur sens normal (ex: 'plus' comparatif/intensifieur dans
+    # "toujours plus") au lieu d'être figés sur leur bm négatif.
+    _neg_anchor_rows = db.query(
+        "MATCH (fw:FunctionWord {role:'negation'}) "
+        "WHERE fw.requires_partner IS NULL OR fw.requires_partner = false "
+        "RETURN DISTINCT fw.surface AS s")
+    _NEG_ANCHOR_SURFS = {r['s'].lower() for r in _neg_anchor_rows if r.get('s')}
+
     for t in tokens:
         # Ne pas normaliser les pronoms inversés pluriels
         if str(t.get('surface', '')).startswith('-') and t.get('is_plural'):
@@ -311,7 +428,7 @@ def resolve_auxiliary_lemmas(tokens, db):
 
         # Correction spaCy : 'suis' est parfois lemmatisé 'suivre' au lieu de 'être'
         # Règle : si ROOT ou cop sans obj direct → c'est 'être'
-        if (surf_lower == 'suis'
+        if (surf_lower in _ETRE_SUIVRE_SURFS
                 and t.get('pos') == 'VERB'
                 and t.get('dep') in ('ROOT', 'cop')):
             _has_obj = any(
@@ -342,10 +459,6 @@ def resolve_auxiliary_lemmas(tokens, db):
         # the clitic as dep+ADV (lui) or dep+PUNCT (le) in short imperatives.
         # spaCy mislabels postverbal clitics without a hyphen (e.g. "parle lui")
         # as ADV+advmod instead of PRON+dep; extend the guard to catch that case.
-        _CLITIC_SURFS = {
-            'me', "m'", 'm', 'moi', 'te', "t'", 'toi', 'le', 'la', "l'",
-            'lui', 'leur', 'les', 'eux', 'elles', 'nous', 'vous',
-        }
         _dep_is_likely_dative = (
             t.get('pos') in ('PRON', 'ADV', 'PUNCT')
             and any(x.get('dep') == 'ROOT' and x.get('pos') in ('VERB', 'AUX')
@@ -377,32 +490,13 @@ def resolve_auxiliary_lemmas(tokens, db):
                 if t.get('dep') == 'advmod':
                     t['dep'] = 'dep'
                 continue
-            # Fallback surface → Bambara pour pronoms objet clitics FR
-            # KG roles: le/la/les='object_pronoun', lui/leur/me/te='object'
-            _OBJ_SURF_MAP = {
-                'me': ('n', 'object'), "m'": ('n', 'object'), 'm': ('n', 'object'), 'moi': ('n', 'object'),
-                'te': ('i', 'object'), "t'": ('i', 'object'), 'toi': ('i', 'object'),
-                'le': ('a', 'object_pronoun'), 'la': ('a', 'object_pronoun'),
-                "l'": ('a', 'object_pronoun'),
-                'lui': ('a', 'object'), 'leur': ('u', 'object'),
-                'les': ('u', 'object_pronoun'),
-                'eux': ('u', 'object_pronoun'), 'elles': ('u', 'object_pronoun'),
-                'nous': ('anw', 'object'), 'vous': ('aw', 'object'),
-            }
-            _fb = _OBJ_SURF_MAP.get(_surf_lookup)
-            if _fb:
-                t['bm']   = _fb[0]
-                t['role'] = _fb[1]
-                t['pos']  = 'PRON'
-                if t.get('dep') == 'advmod':
-                    t['dep'] = 'dep'
-                continue
 
         res = db.query(
             "MATCH (n) WHERE n.lang = $lang "
             "AND (n.surface = $surface OR n.lemma = $lemma) "
             "RETURN n.lemma AS lemma, n.bm AS bm, n.role AS role, "
-            "n.semantic_class AS sc, n.bm_suffix AS bm_suffix, labels(n) AS labels "
+            "n.semantic_class AS sc, n.bm_suffix AS bm_suffix, labels(n) AS labels, "
+            "n.requires_partner AS requires_partner "
             "ORDER BY CASE WHEN n.role = 'demonstrative' AND $is_det THEN 0 ELSE 1 END "
             "LIMIT 1",
             {'lang': lang_curr, 'surface': surf_lower,
@@ -413,6 +507,16 @@ def resolve_auxiliary_lemmas(tokens, db):
 
         if res and isinstance(res, list) and len(res) > 0:
             node_data = res[0]
+            # Mot discontinu (ex: 'plus' pour 'ne...plus') sans ancre de
+            # négation co-occurrente dans la phrase → ce n'est pas ce sens-là ;
+            # ignorer entièrement ce nœud pour laisser le mot suivre son
+            # traitement normal (comparatif/intensifieur, retrieval KG normal).
+            if node_data.get('requires_partner'):
+                _has_anchor = any(
+                    str(ot.get('surface', '')).lower().rstrip("'").rstrip('’') in _NEG_ANCHOR_SURFS
+                    for ot in tokens if ot is not t)
+                if not _has_anchor:
+                    continue
             # 'le/la/les' sont ambigus : article (dep=det) OU pronom clitique (dep=obj).
             # La requête générique retourne souvent le nœud Pronoun en premier (LIMIT 1
             # sans ORDER BY). Si le token est un article (dep='det'), rejeter le rôle
@@ -450,23 +554,21 @@ def _split_contractions(text: str) -> str:
 
 _APOS_CHARS = {"'", "’", "ʼ"}
 
-_ELISION_EXPAND = {
-    "j'": 'je', "n'": 'ne', "qu'": 'que', "l'": 'le',
-    "d'": 'de', "s'": 'se', "m'": 'me', "t'": 'te', "c'": 'ce',
-}
-
-def _expand_elision(surf_lower: str) -> str:
+def _expand_elision(surf_lower: str, elision_map: dict) -> str:
     """
     je/ne/que/le/de/se/me/te/ce élidés (j'/n'/qu'/...) devant voyelle.
 
     Règle orthographique fermée du français (8 clitiques + ce) — pas un
-    choix sémantique, donc pas besoin de LLM. Sans cette expansion, "j'ai"
-    a pour surface "j'" qui ne matche pas l'entrée KG Pronoun "je" (bm='n'),
-    et retombe sur le fallback "[lemma]" (ex: "[j]") au lieu de "n".
+    choix sémantique, donc pas besoin de LLM, mais KG-sourced (FunctionWord
+    role='elision_expansion') plutôt qu'une table Python séparée (décision
+    2026-07-13, audit hardcode-KG — consolidée avec la copie dupliquée dans
+    _detect_progressive). Sans cette expansion, "j'ai" a pour surface "j'"
+    qui ne matche pas l'entrée KG Pronoun "je" (bm='n'), et retombe sur le
+    fallback "[lemma]" (ex: "[j]") au lieu de "n".
     """
     for _a in _APOS_CHARS:
         if surf_lower.endswith(_a):
-            return _ELISION_EXPAND.get(surf_lower[:-1] + "'", surf_lower)
+            return elision_map.get(surf_lower, surf_lower)
     return surf_lower
 
 
@@ -513,6 +615,25 @@ def _fix_pos_errors(tokens, grammar):
     cconj     = grammar.get('cconj_surfaces', set())
     clitic    = grammar.get('clitic_surfaces', set())
     expletives = grammar.get('expletive_surfaces', set())
+    pronoun_person = grammar.get('pronoun_person', {})
+
+    # ── Personne grammaticale des pronoms : correction Person= dans morph ──
+    # spaCy mistague parfois le Person d'un clitique/pronom dans une inversion
+    # interrogative avec trait d'union (ex: "t'appelles-tu ?" → 'tu' lui-même
+    # tagué Person=3). Fait grammatical fermé (je=1, tu=2…) lu depuis le KG,
+    # pas une décision lexicale — on corrige avant toute autre passe.
+    if pronoun_person:
+        for t in tokens:
+            if t.get('pos') != 'PRON':
+                continue
+            _key = str(t.get('surface', '')).lower().strip("'’")
+            _person = pronoun_person.get(_key)
+            if not _person:
+                continue
+            _morph = str(t.get('morph', '') or '')
+            _parts = [p for p in _morph.split('|') if p and not p.startswith('Person=')]
+            _parts.append(f'Person={_person}')
+            t['morph'] = '|'.join(_parts)
 
     # ── PASSE 1 : corrections POS ─────────────────────────────────
     for t in tokens:
@@ -570,6 +691,20 @@ def _fix_pos_errors(tokens, grammar):
                             and _d.get('head_index') == _adj_head['orig_index']
                             and _d['orig_index'] < t['orig_index']):
                         _d['head_index'] = t['orig_index']
+
+        # Adjectif substantivé COMPLÉMENT : "avec le vieux" — spaCy tague
+        # 'vieux' PRON (pas ADJ) en obl:arg au lieu de NOM. Sans retaguer,
+        # ce token reste sans bm et le filtre PRON+no-bm+obl:arg de
+        # step5_obliques (comitatif, locatif...) l'exclut silencieusement,
+        # perdant tout le complément (bug trouvé 2026-07-25 : "il va causer
+        # avec le vieux tout le temps" → "avec le vieux" disparaissait
+        # entièrement). Garde étroite : seul un PRON avec SON PROPRE
+        # déterminant est retagué — un vrai pronom (lui/elle) n'en prend
+        # jamais.
+        if (t.get('pos') == 'PRON' and t.get('dep') == 'obl:arg'
+                and any(d.get('dep') == 'det' and d.get('head_index') == t['orig_index']
+                        for d in tokens)):
+            t['pos'] = 'NOUN'
 
         # PUNCT ROOT/xcomp content → verbe infinitif mal étiqueté par spaCy
         if (t.get('pos') == 'PUNCT'
@@ -748,6 +883,7 @@ def _detect_progressive(tokens, grammar=None):
     Each pattern is a list of surfaces stored as space-separated string in f.surface.
     """
     patterns = (grammar or {}).get('progressive_markers', [])
+    _elision_map = (grammar or {}).get('elision_map', {})
     result = []
     i = 0
     while i < len(tokens):
@@ -755,10 +891,8 @@ def _detect_progressive(tokens, grammar=None):
         for pattern in patterns:
             n = len(pattern)
             if i + n <= len(tokens):
-                # Normaliser les formes élidées : d'→de, l'→le, j'→je, s'→se, m'→me
-                _elision_map = {"d'": "de", "d’": "de", "l'": "le", "l’": "le",
-                                "j'": "je", "j’": "je", "s'": "se", "s’": "se",
-                                "m'": "me", "m’": "me", "n'": "ne", "n’": "ne"}
+                # Normaliser les formes élidées : d'→de, l'→le, j'→je, s'→se, m'→me, n'→ne
+                # (KG-sourced, même source que _expand_elision — décision 2026-07-13)
                 def _norm_surf(s):
                     sl = s.lower()
                     return _elision_map.get(sl, sl)
@@ -838,7 +972,7 @@ def _merge_multiword(tokens, funcs, lang):
             _first_elided = str(tokens[i]['surface']).rstrip().endswith(("'", '\u2019'))
             _keys = [
                 _raw_pair,
-                _raw_pair.replace("qu'", "que").replace("qu'", "que"),
+                _raw_pair.replace("qu'", "que").replace("qu’", "que"),
                 re.sub(r'que\s+', "qu'", _raw_pair),   # jusque au → jusqu'au
             ]
             if _first_elided:
@@ -901,8 +1035,10 @@ class SpacyParser:
                            'clitic_surfaces':set(),'quantifiers':{},
                            'distributive_each':{},'distributive_one':{},
                            'progressive_markers':[],'participial_markers':set(),
-                           'expletive_surfaces':set(),
+                           'expletive_surfaces':set(),'pronoun_person':{},
                            'locative_markers':set(),'temporal_markers':set(),
+                           'elision_map':{},'loc_dat_ambiguous_surfaces':set(),
+                           'expl_demo_surfaces':set(),'when_homograph_lemmas':set(),
                        }.items()}
             return self._g
 
@@ -918,11 +1054,11 @@ class SpacyParser:
         rel_pron = ss("MATCH (n:Pronoun {role:'relative'}) RETURN n.surface AS s")
 
         # ── FunctionWord : chargement complet ────────────────────────────────
-        fw = q("MATCH (f:FunctionWord) RETURN f.surface AS s, f.lang AS l, f.bm AS b, f.role AS r, f.bm_suffix AS suf")
+        fw = q("MATCH (f:FunctionWord) RETURN f.surface AS s, f.lang AS l, f.bm AS b, f.role AS r, f.bm_suffix AS suf, f.elided_form AS ef, f.requires_partner AS req")
 
         demo  = {r['s'].lower() for r in fw if r.get('r') == 'demonstrative'}
         refl  = {r['s'].lower() for r in fw if r.get('r') == 'reflexive'}
-        
+
         # On embarque le bm et le bm_suffix dans le dictionnaire de cache funcs
         funcs = {}
         for r in fw:
@@ -930,7 +1066,10 @@ class SpacyParser:
                 funcs[(r['s'].lower(), r.get('l','fr'))] = {
                     'bm': r.get('b', ''),
                     'role': r.get('r', 'content'),
-                    'bm_suffix': r.get('suf', '') # Transmis de force au parseur !
+                    'bm_suffix': r.get('suf', ''), # Transmis de force au parseur !
+                    # 'plus' etc. : mot discontinu (ne...plus) — n'est une
+                    # négation que si un autre token role='negation' co-occurre.
+                    'requires_partner': bool(r.get('req')),
                 }
 
 
@@ -944,6 +1083,27 @@ class SpacyParser:
                                             'concessive', 'purpose')}
 
         clitic_surfaces = {r['s'].lower() for r in fw if r.get('r') == 'clitic'}
+        _loc_dat_ambiguous_surfaces = {r['b'].lower() for r in fw
+                                       if r.get('r') == 'locative_dative_ambiguous_surface' and r.get('b')}
+        _when_homograph_lemmas = {r['b'].lower() for r in fw
+                                  if r.get('r') == 'when_homograph_lemma' and r.get('b')}
+        _expl_demo_surfaces = {r['b'].lower() for r in fw
+                               if r.get('r') == 'expletive_demonstrative_surface' and r.get('b')}
+
+        # Élision FR (j'/n'/qu'/l'/d'/s'/m'/t'/c' → je/ne/que/le/de/se/me/te/ce) :
+        # règle orthographique fermée, KG-sourced (FunctionWord role='elision_expansion').
+        # Stockée sur f.elided_form (PAS f.surface) : un vrai f.surface="j'" est
+        # repris par les requêtes génériques "MATCH (n) WHERE n.surface=$x" (sans
+        # filtre de rôle) utilisées ailleurs dans le pipeline, qui posaient alors
+        # bm="je" littéralement sur le token FR au lieu de la vraie traduction bm="n"
+        # (régression découverte 2026-07-13, corrigée en isolant le champ).
+        # Toutes les variantes d'apostrophe (', ’, ʼ) mappées vers la même expansion.
+        elision_map = {}
+        for r in fw:
+            if r.get('r') == 'elision_expansion' and r.get('ef') and r.get('b'):
+                _base = r['ef'].lower().rstrip("'’ʼ")
+                for _a in ("'", "’", "ʼ"):
+                    elision_map[_base + _a] = r['b'].lower()
 
         quantifiers = {r['s'].lower(): r.get('b', '') for r in fw
                        if r.get('r') == 'quantifier'}
@@ -962,22 +1122,31 @@ class SpacyParser:
         expletive_surfaces = {r['s'].lower().rstrip("'").rstrip('\u2019')
                               for r in fw if r.get('r') == 'expletive'}
 
+        # \u2500\u2500 Personne grammaticale des pronoms (fait fixe, pas une traduction) \u2500\u2500
+        # spaCy mistague parfois Person= sur les clitiques dans les inversions
+        # interrogatives avec trait d'union ("t'appelles-tu ?") \u2014 jusqu'\u00e0 taguer
+        # 'tu' lui-m\u00eame en Person=3. Ces valeurs sont un fait grammatical ferm\u00e9
+        # (je=1, tu=2, il=3\u2026), pas un choix lexical : on les corrige depuis le KG.
+        pronoun_person = {r['s'].lower(): str(r['p']) for r in q(
+            "MATCH (n:Pronoun) WHERE n.lang='fr' AND n.person IS NOT NULL "
+            "RETURN n.surface AS s, n.person AS p")}
+
         # ── Prepositions ─────────────────────────────────────────────────────
-        pr = q("MATCH (p:Preposition) RETURN p.surface AS s, p.role AS r, p.bm_marker AS m")
+        pr = q("MATCH (p:Preposition) RETURN p.surface AS s, p.role AS r, p.bm_marker AS m, p.is_prefix AS pfx")
         preps = {}
+        preps_by_role = {}   # (surface, lang, role) -> entry — certaines prépositions
+                              # (ex: 'à' = locatif OU datif) ont plusieurs rôles KG ;
+                              # `preps` ne garde que le dernier lu, `preps_by_role`
+                              # permet de retrouver une variante précise au besoin.
         for r in pr:
             if not r.get('s'):
                 continue
-            e = {'role': r.get('r'), 'bm_marker': r.get('m')}
+            e = {'role': r.get('r'), 'bm_marker': r.get('m'), 'is_prefix': bool(r.get('pfx'))}
             preps[(r['s'].lower(), 'fr')] = e
             preps[(r['s'].lower(), 'en')] = e
-
-        # Override : 'au'/'à' locatif → marqueur 'la' (pas 'kɔnɔ' qui signifie 'dans')
-        for _au_surf in ('au', 'à', 'a'):
-            for _l in ('fr', 'en'):
-                _entry = preps.get((_au_surf, _l))
-                if _entry and _entry.get('role') == 'locative':
-                    _entry['bm_marker'] = 'la'
+            if r.get('r'):
+                preps_by_role[(r['s'].lower(), 'fr', r['r'])] = e
+                preps_by_role[(r['s'].lower(), 'en', r['r'])] = e
 
         adp_surfaces = {r['s'].lower() for r in fw
                         if r.get('s')
@@ -988,17 +1157,22 @@ class SpacyParser:
         self._g = {
             'pron': pron, 'sing': sing, 'rel_pron': rel_pron,
             'demo': demo, 'refl': refl,
-            'funcs': funcs, 'preps': preps,
+            'funcs': funcs, 'preps': preps, 'preps_by_role': preps_by_role,
             # ── correction POS data-driven ──
             'adp_surfaces':      adp_surfaces,
             'cconj_surfaces':    cconj_surfaces,
             'clitic_surfaces':   clitic_surfaces,
+            'elision_map':       elision_map,
+            'loc_dat_ambiguous_surfaces': _loc_dat_ambiguous_surfaces,
+            'when_homograph_lemmas':      _when_homograph_lemmas,
+            'expl_demo_surfaces':         _expl_demo_surfaces,
             'quantifiers':       quantifiers,
             'distributive_each': distributive_each,
             'distributive_one':  distributive_one,
             'progressive_markers':  progressive_markers,
             'participial_markers':  participial_markers,
             'expletive_surfaces':   expletive_surfaces,
+            'pronoun_person':       pronoun_person,
             # ── markers ──
             'locative_markers':  {r['m'].lower() for r in pr
                                   if r.get('r') == 'locative' and r.get('m')},
@@ -1012,8 +1186,8 @@ class SpacyParser:
         Parses text into structured token dicts.
         """
         tokens = []
-        lang = detect_language(sentence)
-        nlp  = _get_nlp(lang)
+        lang = 'fr'
+        nlp  = _get_nlp()
 
         if not nlp:
             return tokens
@@ -1057,6 +1231,7 @@ class SpacyParser:
             tokens.append(t_dict)
 
         tokens = _merge_orphan_apostrophe(tokens)
+        tokens = _merge_causative_faire(tokens, self.db)
 
         # ── 2. Corrections et détections structurelles ────────────────────────
         tokens = resolve_auxiliary_lemmas(tokens, self.db)
@@ -1086,7 +1261,7 @@ class SpacyParser:
                            for k, v in llm_lemmas.items() if v}
 
         except Exception as e:
-            print(f"⚠️  LLM parse failed: {e}")
+            print(f"  LLM parse failed: {e}")
             llm_lem = {}
 
         for t in tokens:
@@ -1098,7 +1273,7 @@ class SpacyParser:
             surf_lower  = t.get('surface', '').lower()
             if not surf_lower or surf_lower == 'none':
                 continue
-            surf_lower = _expand_elision(surf_lower)
+            surf_lower = _expand_elision(surf_lower, G.get('elision_map', {}))
 
             lemma_raw   = t.get('lemma')
             lemma_lower = lemma_raw.lower() if lemma_raw else surf_lower
@@ -1147,10 +1322,38 @@ class SpacyParser:
             elif (surf_lower, lang) in G.get('preps', {}):
                 prep_config  = G['preps'][(surf_lower, lang)]
                 _prep_role = prep_config.get('role')
+                # 'à' est structurellement ambigu (locatif "à Paris" vs datif
+                # "donne le livre à l'enfant") — le KG a les deux entrées mais
+                # une seule est retenue par surface. Signal structurel : si le
+                # verbe régissant a DÉJÀ un objet direct (dep=obj) distinct de
+                # ce syntagme, "à + NOM" ne peut pas être un second complément
+                # de lieu du même verbe — c'est le destinataire (datif).
+                if _prep_role == 'locative' and surf_lower in G.get('loc_dat_ambiguous_surfaces', {'à', 'au', 'a'}):
+                    _noun_idx = t.get('head_index')
+                    _noun_tok = next((x for x in tokens if x.get('orig_index') == _noun_idx), None)
+                    _verb_idx = _noun_tok.get('head_index') if _noun_tok else None
+                    _has_direct_obj = _verb_idx is not None and any(
+                        x.get('dep') == 'obj' and x.get('head_index') == _verb_idx
+                        and x.get('orig_index') != _noun_idx
+                        for x in tokens)
+                    if _has_direct_obj:
+                        _dat_entry = G.get('preps_by_role', {}).get((surf_lower, lang, 'dative'))
+                        if _dat_entry:
+                            _prep_role  = 'dative'
+                            prep_config = _dat_entry
                 if _prep_role:
                     t['role'] = _prep_role
                 t['bm_marker'] = prep_config.get('bm_marker', '')
-                if _prep_role == 'locative':
+                t['is_prefix_marker'] = bool(prep_config.get('is_prefix'))
+                # 'is_loc' doit couvrir toute la famille des cas spatiaux
+                # (dans→inside, sur→surface, sous→under, chez→associative),
+                # pas seulement le rôle littéral 'locative' : sinon "dans"
+                # (dont le KG retient le sous-rôle 'inside' pour choisir le
+                # postposition 'kɔnɔ' plutôt que 'la'/'kan') ne déclenche
+                # jamais la détection de clause locative en aval (kg_gateway
+                # has_loc_case/has_loc_obl), et "X est dans Y" retombe à tort
+                # sur une construction équative ("X yé yé Y").
+                if _prep_role in ('locative', 'inside', 'surface', 'under', 'associative'):
                     t['is_loc'] = True
                 # Si preps n'a pas de role, chercher dans funcs
                 if not _prep_role and (surf_lower, lang) in G.get('funcs', {}):
@@ -1162,6 +1365,20 @@ class SpacyParser:
 
             elif (surf_lower, lang) in G.get('funcs', {}):
                 func_config = G['funcs'][(surf_lower, lang)]
+                # Mots discontinus (KG FunctionWord.requires_partner, ex: 'plus'
+                # pour 'ne...plus') : n'appliquer ce sens QUE si un autre token
+                # négation-ancre ('ne'/'n\''/'pas'...) co-occurre dans la phrase.
+                # Sinon "plus" reste un mot normal (comparatif/intensifieur :
+                # "V toujours plus") au lieu d'être figé sur son bm négatif.
+                if func_config.get('requires_partner'):
+                    _neg_anchor_surfaces = {
+                        s for (s, l), v in G.get('funcs', {}).items()
+                        if l == lang and v.get('role') == 'negation' and not v.get('requires_partner')}
+                    _has_neg_partner = any(
+                        _expand_elision(str(ot.get('surface', '')).lower(), G.get('elision_map', {})) in _neg_anchor_surfaces
+                        for ot in tokens if ot is not t)
+                    if not _has_neg_partner:
+                        continue
                 # Toujours appliquer le role depuis funcs (pas seulement si 'content')
                 if func_config.get('role'):
                     t['role'] = func_config['role']
@@ -1190,7 +1407,7 @@ class SpacyParser:
         # LLM : TEMPORAL → subordonnant temporel ; COMPLETEUR → complémenteur de verbe
         # Fallback : tête VERB + dep ≠ ccomp/xcomp/acl → temporel ; sinon complémenteur
         _ccomp_deps = ('ccomp', 'xcomp', 'acl', 'acl:relcl')
-        _when_homographs = {'quand', 'lorsque'}
+        _when_homographs = G.get('when_homograph_lemmas', {'quand', 'lorsque'})
         for t in tokens:
             # Restreint à l'homographe 'quand'/'lorsque' que cette désambiguïsation
             # cible explicitement (cf commentaire ci-dessus) : sans ce filtre de
@@ -1288,7 +1505,7 @@ class SpacyParser:
         # EXCLUSION : "Est-ce que" → interrogatif polaire (Yala …  wà ?), pas optatif.
         # Signal : '-ce' dep='nsubj' présent.
         _has_estce_que = any(
-            str(_t.get('surface', '')).lower().strip('-') == 'ce'
+            str(_t.get('surface', '')).lower().strip('-') in G.get('expl_demo_surfaces', {'ce'})
             and _t.get('dep') in ('nsubj', 'expl:subj')
             for _t in tokens)
         for t in tokens:

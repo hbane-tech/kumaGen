@@ -39,52 +39,70 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Optional
 
+from rules.core import _resolve_tam
+
+
+# ══════════════════════════════════════════════════════════════════
+# GRAMMAIRE KG — cache module-level, même schéma que _CONNECTOR_BM
+# ci-dessous : chargé une fois via set_grammar(G_kg), jamais de valeur
+# bambara/française en dur dans les helpers ci-après (décision 2026-07-12,
+# audit hardcode-KG). Fallback = dict vide -> chaque .get(..., défaut)
+# retombe sur le défaut documenté, jamais un défaut caché ailleurs.
+# ══════════════════════════════════════════════════════════════════
+
+_GRAMMAR: dict = {}
+
+
+def set_grammar(G_kg: dict) -> None:
+    """Reçoit la grammaire déjà chargée par RuleEngine (même objet que
+    rules/ utilise) — pas de second chemin de chargement KG à maintenir."""
+    global _GRAMMAR
+    if G_kg:
+        _GRAMMAR = G_kg
+
 
 # ══════════════════════════════════════════════════════════════════
 # TAM + MORPHOLOGY HELPERS
 # ══════════════════════════════════════════════════════════════════
 
-_TAM = {
-    ('pres', False): 'bɛ',
-    ('pres', True):  'tɛ',
-    ('fut',  False): 'bɛ na',
-    ('fut',  True):  'tɛ na',
-    ('past', False): 'yé',
-    ('past', True):  'ma',
-    ('cond', False): 'bɛ na',
-    ('cond', True):  'tɛ na',
-    ('imp',  False): '',
-    ('imp',  True):  '',
-}
-
 def get_tam(tense: str, is_neg: bool) -> str:
-    return _TAM.get((tense, is_neg), 'bɛ')
+    """TamConfig KG (même source que rules/core._resolve_tam) — plus de
+    table Python dupliquée."""
+    return _resolve_tam(tense, is_neg, _GRAMMAR) or _GRAMMAR.get('tam_default', 'bɛ') or 'bɛ'
 
 def perfect_past(bm: str) -> str:
     """
-    Bambara perfect past suffix.
-    ends in 'n' -> +na  (kalan -> kalanna)
-    other       -> +ra  (jɛ -> jɛra, kɛ -> kɛra)
+    Suffixe résultatif bambara (MorphoRule KG 'resultative') :
+    se termine par le trigger_n (ex: 'n') -> +suffix_after_n (ex: 'na')
+    sinon -> +suffix_default (ex: 'ra')
     """
     if not bm:
         return bm
-    return (bm + 'na') if bm.endswith('n') else (bm + 'ra')
+    trigger_n = _GRAMMAR.get('resultative_trigger_n', '') or 'n'
+    suffix_n  = _GRAMMAR.get('resultative_suffix_n', '') or 'na'
+    suffix_default = _GRAMMAR.get('resultative_suffix', '') or 'ra'
+    return (bm + suffix_n) if bm.endswith(trigger_n) else (bm + suffix_default)
 
 def min_form(is_plural: bool) -> str:
-    """min (singular) / minniw (plural)"""
-    return 'minniw' if is_plural else 'min'
+    """min (singulier) / minniw (pluriel) — FunctionWord KG relative_marker[_plural]."""
+    if is_plural:
+        return _GRAMMAR.get('relative_marker_plural', '') or 'minniw'
+    return _GRAMMAR.get('relative_marker', '') or 'min'
 
 def plural_bm(bm: str, tok: dict) -> str:
     # Never pluralize pronouns — they have fixed forms
-    if tok and tok.get('is_plural')        and tok.get('pos') not in ('PRON','DET')        and tok.get('role') not in ('pronoun','possessive','demonstrative')        and bm and not bm.endswith('w'):
-        return bm + 'w'
+    _plur = _GRAMMAR.get('plural_noun_suffix', '') or 'w'
+    if tok and tok.get('is_plural')        and tok.get('pos') not in ('PRON','DET')        and tok.get('role') not in ('pronoun','possessive','demonstrative')        and bm and not bm.endswith(_plur):
+        return bm + _plur
     return bm
 
 def poss_np(poss_bm: str, noun_bm: str) -> str:
-    """n NOUN (1st person) / PRON ka NOUN (others)"""
-    if poss_bm in {'n'}:
+    """PRON1SG NOUN (1re pers.) / PRON ka NOUN (autres) — pron_1sg/genitive_marker KG."""
+    _p1sg = _GRAMMAR.get('pron_1sg', '') or 'n'
+    _gen  = _GRAMMAR.get('genitive_marker', '') or 'ka'
+    if poss_bm == _p1sg:
         return f"{poss_bm} {noun_bm}"
-    return f"{poss_bm} ka {noun_bm}"
+    return f"{poss_bm} {_gen} {noun_bm}"
 
 
 # ══════════════════════════════════════════════════════════════════
@@ -168,7 +186,8 @@ def build_np(head_tok: dict, all_tokens: list,
     noun_bm = plural_bm(_bm(head_tok), head_tok)
 
     if poss and nmod:
-        base = f"{_bm(poss)} {_bm(nmod)} ka {noun_bm}"
+        _gen = _GRAMMAR.get('genitive_marker', '') or 'ka'
+        base = f"{_bm(poss)} {_bm(nmod)} {_gen} {noun_bm}"
     elif poss:
         base = poss_np(_bm(poss), noun_bm)
     elif nmod:
@@ -412,18 +431,19 @@ class Proposition:
 
     @property
     def intens(self) -> Optional[dict]:
+        _bm_markers = _GRAMMAR.get('intensifier_bm_markers', set())
+        _trigger_lemmas = _GRAMMAR.get('intensifier_trigger_lemmas', {})
         return next((t for t in self._deps
                      if _pos(t) == 'ADV' and _is_content(t)
-                     and (t.get('bm') in ('kojugu','dɔ́rɔn','blen')
-                          or t.get('lemma') in ('très','trop','très',
-                                                 'very','too'))), None)
+                     and (t.get('bm') in _bm_markers
+                          or str(t.get('lemma', '')).lower() in _trigger_lemmas)), None)
 
     @property
     def root_adj(self) -> Optional[dict]:
         """For qualitative: être + ADJ -> ADJ"""
         if _pos(self.verb) == 'ADJ':
             return self.verb
-        if self.verb.get('lemma') in ('être','be','faire','avoir'):
+        if self.verb.get('lemma') in _GRAMMAR.get('support_verb_adj_lemmas', set()):
             return self._find(dep=['attr','xcomp','acomp'],
                               pos='ADJ') or \
                    self._find(pos='ADJ')
@@ -488,7 +508,7 @@ class Proposition:
             for t in self.all_tokens:
                 if t.get('head_index', -1) == s_orig:
                     self._used.add(id(t))
-            return 'o in'
+            return _GRAMMAR.get('demonstrative_subject_np_marker', '') or 'o in'
         np_str = self._np(s)
         # Appliquer conn_suffix si présent (ka fara NP kan)
         if self.conn_suffix and np_str:
@@ -557,17 +577,20 @@ class Proposition:
         if xc: self._used.add(id(xc))
 
         # Indirect object + ye
+        _equative = _GRAMMAR.get('equative_marker', '') or 'ye'
         io = self.iobj
-        IOBJ = _j(_bm(io), 'ye') if io else ''
+        IOBJ = _j(_bm(io), _equative) if io else ''
         if io: self._used.add(id(io))
 
         # Dative + ma (institutional beneficiary)
+        _dative = _GRAMMAR.get('dative_marker', '') or 'ma'
         dat = self.dative
-        DAT = _j(self._np(dat), 'ma') if dat else ''
+        DAT = _j(self._np(dat), _dative) if dat else ''
         if dat: self._used.add(id(dat))
 
         # Locative + na
-        LOC = _j(self._loc_str(), 'na') if self.loc else ''
+        _loc_marker = _GRAMMAR.get('locative_suffix', '') or 'na'
+        LOC = _j(self._loc_str(), _loc_marker) if self.loc else ''
         
         # Marqueur de but (pour + infinitif)
         _purposive = next((t for t in self._deps
@@ -587,7 +610,7 @@ class Proposition:
                            None)
             ctam = get_tam(ccomp_v.get('tense','pres'),
                            ccomp_v.get('is_neg', False))
-            cparts = ['ko']
+            cparts = [_GRAMMAR.get('reported_intro', '') or 'ko']
             if cc_subj:
                 self._used.add(id(cc_subj))
                 cparts.append(_bm(cc_subj))
@@ -617,12 +640,15 @@ class Proposition:
         V     = _bm(self.verb)
         self._used.add(id(self.verb))
         ag    = self.agent
-        AGENT = _j(self._np(ag), 'fɛ') if ag else ''
+        _agent_pp = _GRAMMAR.get('agent_postposition', '') or 'fɛ'
+        AGENT = _j(self._np(ag), _agent_pp) if ag else ''
         if ag: self._used.add(id(ag))
-        LOC   = _j(self._loc_str(), 'la') if self.loc else ''
+        _loc_default = _GRAMMAR.get('locative_default_marker', '') or 'la'
+        LOC   = _j(self._loc_str(), _loc_default) if self.loc else ''
         ADV   = self._adv_str()
         UNUSED = self._unused_str()
-        return _j(S, 'bɛ ka', V, ADV, AGENT, LOC, UNUSED)
+        _passive_tam = _GRAMMAR.get('passive_tam_marker', '') or 'bɛ ka'
+        return _j(S, _passive_tam, V, ADV, AGENT, LOC, UNUSED)
 
     def _render_refl_past(self) -> str:
         """
@@ -664,14 +690,18 @@ class Proposition:
             xc_tam   = get_tam(xc_tense, xc_neg)
             # Subject repeat (same as main subject)
             xc_s     = _bm(self.subject) if self.subject else ''
-            dat_str  = _j(xc_dat_bm, 'ma') if xc_dat_bm else ''
-            KO_CLAUSE = _j('ko', xc_s, xc_tam, xc_obj_bm, _bm(xc), dat_str)
+            _dative  = _GRAMMAR.get('dative_marker', '') or 'ma'
+            dat_str  = _j(xc_dat_bm, _dative) if xc_dat_bm else ''
+            _reported = _GRAMMAR.get('reported_intro', '') or 'ko'
+            KO_CLAUSE = _j(_reported, xc_s, xc_tam, xc_obj_bm, _bm(xc), dat_str)
 
         O      = self._obj_str() if not KO_CLAUSE else ''
-        LOC    = _j(self._loc_str(), 'na') if self.loc else ''
+        _loc_suffix = _GRAMMAR.get('locative_suffix', '') or 'na'
+        LOC    = _j(self._loc_str(), _loc_suffix) if self.loc else ''
         ADV    = self._adv_str()
         UNUSED = self._unused_str()
-        return _j(S, 'tun ye', V, KO_CLAUSE or O, LOC, ADV, UNUSED)
+        _refl_past_tam = _GRAMMAR.get('refl_past_tam_marker', '') or 'tun ye'
+        return _j(S, _refl_past_tam, V, KO_CLAUSE or O, LOC, ADV, UNUSED)
 
     def _render_qualitative(self) -> str:
         """S ka ADJ [INTENS]"""
@@ -681,7 +711,8 @@ class Proposition:
         self._used.add(id(self.verb))
         INTENS = self._intens_str()
         UNUSED = self._unused_str()
-        return _j(S, 'ka', ADJ, INTENS, UNUSED)
+        _gen = _GRAMMAR.get('genitive_marker', '') or 'ka'
+        return _j(S, _gen, ADJ, INTENS, UNUSED)
 
     def _render_equative(self) -> str:
         """S ye ATTR ye"""
@@ -690,18 +721,21 @@ class Proposition:
         self._used.add(id(self.attr))
         self._used.add(id(self.verb))
         UNUSED = self._unused_str()
-        return _j(S, 'ye', ATTR, 'ye', UNUSED)
+        _equative = _GRAMMAR.get('equative_marker', '') or 'ye'
+        return _j(S, _equative, ATTR, _equative, UNUSED)
 
     def _render_imperative(self) -> str:
         V = _bm(self.verb)
         self._used.add(id(self.verb))
         O = self._obj_str()
         io = self.iobj
-        IOBJ = _j(_bm(io), 'ye') if io else ''
+        _equative = _GRAMMAR.get('equative_marker', '') or 'ye'
+        IOBJ = _j(_bm(io), _equative) if io else ''
         if io: self._used.add(id(io))
         UNUSED = self._unused_str()
         if self.is_neg:
-            return _j('kana', self._subj_str(), O, V, UNUSED)
+            _imp_neg = _GRAMMAR.get('imperative_neg_marker', '') or 'kana'
+            return _j(_imp_neg, self._subj_str(), O, V, UNUSED)
         return _j(V, IOBJ, O, UNUSED)
 
     def _render_mana(self) -> str:
@@ -710,12 +744,13 @@ class Proposition:
         O = self._obj_str()
         V = _bm(self.verb)
         self._used.add(id(self.verb))
-        return _j(S, 'mána', O, V)
+        _eventuality = _GRAMMAR.get('eventuality_marker', '') or 'mána'
+        return _j(S, _eventuality, O, V)
 
     # ── Pattern selector ──────────────────────────────────────────
 
     def to_bambara(self) -> str:
-        if self.connector == 'mána':
+        if self.connector == (_GRAMMAR.get('eventuality_marker', '') or 'mána'):
             return self._render_mana()
         if self.is_imperative:
             result = self._render_imperative()
@@ -803,9 +838,9 @@ def load_connector_bm(db) -> dict:
             if role not in mapping:
                 mapping[role] = {'bm': bm, 'bm_suffix': ''}
         _CONNECTOR_BM = mapping
-        print(f"     📖 Loaded {len(_CONNECTOR_BM)} connector mappings with suffixes from KG")
+        print(f"      Loaded {len(_CONNECTOR_BM)} connector mappings with suffixes from KG")
     except Exception as e:
-        print(f"     ⚠️  Could not load connectors from KG: {e}, using fallback")
+        print(f"       Could not load connectors from KG: {e}, using fallback")
         _CONNECTOR_BM = {role: {'bm': bm, 'bm_suffix': ''} for role, bm in _CONNECTOR_BM_FALLBACK.items()}
 
     return _CONNECTOR_BM

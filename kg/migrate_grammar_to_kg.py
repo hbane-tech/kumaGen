@@ -28,16 +28,16 @@ def migrate_tam(db, lang='bm'):
         ('pres',  True,  'tɛ',     'présent négatif'),
         ('past',  False, 'yé',     'passé simple positif'),
         ('past',  True,  'ma',     'passé simple négatif'),
-        ('fut',   False, 'bɛ na',  'futur positif'),
-        ('fut',   True,  'tɛ na',  'futur négatif'),
-        ('cond',  False, 'bɛ na',  'conditionnel positif'),
-        ('cond',  True,  'tɛ na',  'conditionnel négatif'),
+        ('fut',   False, 'bɛ́nà',  'futur positif'),
+        ('fut',   True,  'tɛ́nà',  'futur négatif'),
+        ('cond',  False, 'mána',  'conditionnel positif'),
+        ('cond',  True,  'tɛ́na',  'conditionnel négatif'),
         ('hab',   False, 'tùn bɛ', 'imparfait/habituel positif'),
         ('hab',   True,  'tùn tɛ', 'imparfait/habituel négatif'),
         ('plup',  False, 'tùn yé', 'plus-que-parfait positif'),
         ('plup',  True,  'tùn ma', 'plus-que-parfait négatif'),
-        ('prog',  False, 'bɛ kà',  'progressif positif'),
-        ('prog',  True,  'tɛ kà',  'progressif négatif'),
+        ('prog',  False, 'bɛ́kà',  'progressif positif'),
+        ('prog',  True,  'tɛ́kà',  'progressif négatif'),
         ('imp',   False, '',        'impératif (pas de TAM)'),
         ('sub',   False, '',        'subjonctif (pas de TAM séparé)'),
         ('qualitative_pres', True, 'mán', 'qualitatif présent négatif'),
@@ -51,7 +51,7 @@ def migrate_tam(db, lang='bm'):
         """, {'tense': tense, 'neg': neg, 'bm': bm, 'desc': desc, 'lang': lang})
         count += 1
 
-    print(f"  ✅ {count} règles TAM créées dans le KG")
+    print(f"   {count} règles TAM créées dans le KG")
     print(f"     Le fallback _TAM_HARDCODED reste actif si KG vide.")
 
 
@@ -96,7 +96,7 @@ def migrate_morpho_rules(db, lang='bm'):
         m.description = 'Pluriel nominal : N+w'
     """, {'lang': lang})
 
-    print(f"  ✅ Règles morphologiques créées dans le KG")
+    print(f"   Règles morphologiques créées dans le KG")
 
 
 def migrate_clause_templates(db, lang='bm'):
@@ -126,7 +126,7 @@ def migrate_clause_templates(db, lang='bm'):
         """, {'lang': lang, 'ct': ct, 'template': template, 'desc': desc})
         count += 1
 
-    print(f"  ✅ {count} templates de clause créés dans le KG")
+    print(f"   {count} templates de clause créés dans le KG")
 
 
 def migrate_semantic_behaviors(db, lang='bm'):
@@ -163,7 +163,7 @@ def migrate_semantic_behaviors(db, lang='bm'):
               'bv': behavior_value, 'extra': extra, 'desc': desc})
         count += 1
 
-    print(f"  ✅ {count} comportements sémantiques créés dans le KG")
+    print(f"   {count} comportements sémantiques créés dans le KG")
 
 
 def migrate_grammar_markers(db, lang='bm'):
@@ -197,7 +197,7 @@ def migrate_grammar_markers(db, lang='bm'):
             """, {'role': role, 'lang': lang, 'bm': bm, 'desc': desc})
             count += 1
 
-    print(f"  ✅ {count} marqueurs nouveaux créés (existants préservés)")
+    print(f"   {count} marqueurs nouveaux créés (existants préservés)")
 
 
 def verify_migration(db, lang='bm'):
@@ -212,7 +212,7 @@ def verify_migration(db, lang='bm'):
     for label, q in checks:
         res = db.query(q)
         count = res[0]['c'] if res else 0
-        status = '✅' if count > 0 else '❌'
+        status = '' if count > 0 else ''
         print(f"  {status} {label}: {count} nœuds")
 
 
@@ -239,7 +239,7 @@ def main():
         migrate_grammar_markers(db, args.lang)
 
     verify_migration(db, args.lang)
-    print("\n✅ Migration terminée.")
+    print("\n Migration terminée.")
 
 
 if __name__ == '__main__':

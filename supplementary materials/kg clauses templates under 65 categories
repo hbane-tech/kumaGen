@@ -1,0 +1,79 @@
+{
+  "Question/Command": {
+    "content_question": [
+      "content_question",
+      "content_question_adv",
+      "content_question_default",
+      "content_question_det_obj",
+      "content_question_det_subj",
+      "content_question_equative",
+      "content_question_modal",
+      "content_question_nominal",
+      "content_question_past_intrans",
+      "content_question_past_trans",
+      "content_question_past_transitive",
+      "content_question_subj_interrog",
+      "content_question_venir_de",
+      "motion_content_question",
+      "motion_content_question_past_pos",
+      "motion_interrog"
+    ],
+    "interrogative": [
+      "interrogative",
+      "interrogative_action",
+      "interrogative_alt",
+      "interrogative_default",
+      "interrogative_estceque",
+      "interrogative_estceque_loc",
+      "interrogative_modal",
+      "interrogative_motion",
+      "interrogative_past_action_pos",
+      "interrogative_past_neg",
+      "interrogative_past_pos",
+      "polar_question"
+    ],
+    "imperative": [
+      "imperative",
+      "imperative_1pl",
+      "imperative_2pl",
+      "imperative_2sg",
+      "imperative_motion_1pl",
+      "imperative_motion_2pl",
+      "imperative_motion_2sg"
+    ],
+    "imperative_adv": [],
+    "prohibitive": [
+      "prohibitive",
+      "prohibitive_motion",
+      "prohibitive_vact"
+    ],
+    "quest_ce_que": [
+      "quest_ce_que_modal"
+    ],
+    "quest_ce_que_real": []
+  },
+
+  "Location/Existence": {
+    "locative": [
+      "locative",
+      "locative_interrog"
+    ],
+    "existential_absolute": [
+      "existential",
+      "existential_absolute"
+    ],
+    "existential_localized": [
+      "existential_localized"
+    ],
+    "existential_nominal": [
+      "existential_nominal"
+    ],
+    "presentative": [
+      "override_presentative_conj",
+      "presentative",
+      "presentative_comitative",
+      "presentative_deictique",
+      "presentative_neg"
+    ]
+  }
+}

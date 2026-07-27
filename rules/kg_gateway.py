@@ -18,13 +18,41 @@ Flux :
         → renderer (fill_template)
 """
 
-from rules.core import j, _resolve_tam
+from rules.core import j, _resolve_tam, _is_misparsed_relative_qui
 from rules.kg_rule_engine import apply_morpho_suffix, apply_statif_morpho
 
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Extraction de features (pure — aucune décision linguistique)
 # ──────────────────────────────────────────────────────────────────────────────
+
+def _attaches_through_subject(tok: dict, T: list, root_tok: dict) -> bool:
+    """Vrai si la chaîne de têtes (head_index) de tok remonte au sujet
+    (nsubj/nsubj:pass) AVANT d'atteindre le ROOT — càd que tok est niché
+    dans le syntagme du sujet (ex: 'en' dans 'le travail EN COMMUN est
+    meilleur', où 'en' est case de 'commun', nmod de 'travail'=sujet), pas
+    un complément du ROOT/de la copule lui-même. Utilisé pour ne pas
+    déclencher à tort un PatternRule 'locative' sur un rôle='locative' qui
+    n'appartient qu'au sujet (décision 2026-07-13)."""
+    if not root_tok:
+        return False
+    _by_idx = {t.get('orig_index'): t for t in T}
+    _root_idx = root_tok.get('orig_index')
+    _cur = tok
+    for _ in range(len(T) + 1):  # garde-fou anti-boucle
+        _h_idx = _cur.get('head_index')
+        if _h_idx is None or _h_idx == _cur.get('orig_index'):
+            return False
+        if _h_idx == _root_idx:
+            return False
+        _head = _by_idx.get(_h_idx)
+        if _head is None:
+            return False
+        if _head.get('dep') in ('nsubj', 'nsubj:pass'):
+            return True
+        _cur = _head
+    return False
+
 
 def _build_features(tree: dict, T: list, G_kg: dict = None) -> dict:
     """Extrait les features de la phrase pour les PatternRule KG."""
@@ -42,6 +70,7 @@ def _build_features(tree: dict, T: list, G_kg: dict = None) -> dict:
     m = tree.get('main', {})
     return {
         'root_pos':              root_tok.get('pos', '')                if root_tok else '',
+        'root_is_adj':           'true' if (root_tok and root_tok.get('pos') == 'ADJ') else 'false',
         'root_lemma':            (root_tok.get('lemma') or '').lower()  if root_tok else '',
         'root_tense':            tree.get('tense', 'pres'),
         'tense':                 tree.get('tense', 'pres'),   # alias pour cond_tense dans les PatternRules
@@ -50,6 +79,7 @@ def _build_features(tree: dict, T: list, G_kg: dict = None) -> dict:
         'root_is_statif':        'true' if (root_tok and root_tok.get('is_statif'))           else 'false',
         'root_is_participe_passe':'true' if (root_tok and root_tok.get('is_participe_passe')) else 'false',
         'root_is_nominal_adj':   'true' if (root_tok and root_tok.get('is_nominal_adj'))      else 'false',
+        'root_is_valeur':        'true' if (root_tok and root_tok.get('is_valeur'))           else 'false',
         'is_passive':            'true' if tree.get('_is_passive')      else 'false',
         'has_cop':               'true' if (tree.get('_has_cop')
                                  or any(t.get('dep') in ('cop', 'aux:pass')
@@ -68,17 +98,42 @@ def _build_features(tree: dict, T: list, G_kg: dict = None) -> dict:
                                                 for t in T)))
                                  else 'false',
         'has_obj':               'true' if any(t.get('dep') == 'obj' for t in T)             else 'false',
+        # expl:subj est ambigu chez spaCy : porté à la fois par un vrai
+        # sujet pronominal mal-étiqueté ("il est beau", role='subject') ET
+        # par un authentique sujet vide ("c'est beau", "y'a..."). Exclure
+        # role='subject' ici — sinon un "il"/"elle" réel déclenche à tort
+        # has_expletive, bloquant les PatternRule qualitatives qui exigent
+        # cond_has_expletive='false' (bug trouvé 2026-07-17 : "il est beau"
+        # tombait en équatif/présentatif au lieu de qualitatif).
+        # role='subject' du KG (FunctionWord générique pour 'il') n'annule
+        # l'expletif que dans un contexte copule/aux:pass — le même contexte
+        # où spaCy mal-étiquette un vrai sujet en expl:subj ("il est beau",
+        # "il est tombé", cf. has_nsubj ci-dessus). Sans ce garde-fou, TOUT
+        # expl:subj (y compris "il" d'un impersonnel authentique comme "il
+        # existe X") était exclu de l'expletif, bloquant les PatternRule
+        # existentielles pour tout verbe autre que 'avoir'/'y a' (bug trouvé
+        # 2026-07-19 : "il existe un frein..." rendait "a bɛ frein..." au
+        # lieu de l'existentiel "frein... bɛ").
         'has_expletive':         'true' if any(
                                     t.get('role') == 'expletive'
-                                    or t.get('dep') in ('expl:subj', 'expl:comp', 'expl', 'expletive')
+                                    or (t.get('dep') in ('expl:subj', 'expl:comp', 'expl', 'expletive')
+                                        and not (t.get('role') == 'subject' and any(
+                                            y.get('dep') in ('cop', 'aux:pass')
+                                            or (y.get('role') == 'copula' and y.get('is_root'))
+                                            for y in T)))
                                     or str(t.get('surface', '')).lower().rstrip("'") == 'y'
                                     for t in T)                                               else 'false',
         'has_question':          'true' if tree.get('_has_question_mark') else 'false',
         'has_adv_interrogative': 'true' if any(t.get('role') == 'interrogative'
                                  and t.get('dep') in ('advmod', 'dep') for t in T)           else 'false',
-        'has_interrogative_word':'true' if any(t.get('role') == 'interrogative' for t in T)  else 'false',
+        'has_interrogative_word':'true' if any(
+                                    t.get('role') == 'interrogative'
+                                    or _is_misparsed_relative_qui(t, T)
+                                    for t in T)                                              else 'false',
         'has_loc_case':          'true' if (tree.get('_has_cop') and any(
-                                    t.get('role') == 'locative' or t.get('is_loc') for t in T)) else 'false',
+                                    (t.get('role') == 'locative' or t.get('is_loc'))
+                                    and not _attaches_through_subject(t, T, root_tok)
+                                    for t in T)) else 'false',
         'has_loc_obl':           'true' if any(
                                     (t.get('role') == 'locative' or t.get('is_loc'))
                                     and t.get('dep') in ('advmod', 'obl', 'obl:mod', 'obl:arg', 'case')
@@ -112,11 +167,40 @@ def _build_features(tree: dict, T: list, G_kg: dict = None) -> dict:
                                     t.get('dep') == 'dep' and t.get('pos') == 'VERB'
                                     and t.get('semantic_class') == 'modal'
                                     for t in T) else 'false',
-        # Verbe dep='dep' de classe saying (ex: "disons" dans cleft-naming)
+        # Verbe dep='dep' (ou acl:relcl — spaCy analyse souvent "que" comme
+        # relativiseur du ROOT dans "C'est X que nous disons Y", rattachant le
+        # verbe 'saying' en acl:relcl plutôt qu'en dep nu) de classe saying
+        # (ex: "disons" dans cleft-naming). Les conditions cond_has_cop +
+        # cond_has_expletive + cond_root_pos=PROPN du PatternRule cleft-naming
+        # excluent déjà les vraies relatives ("l'homme qui dit bonjour" n'a
+        # ni cop ni expletif ni ROOT=PROPN), donc élargir à acl:relcl ici ne
+        # capture pas de faux positifs.
+        # 'saying' n'existe plus dans le vocabulaire produit par
+        # _detect_semantic_class (_VALID_SC ne l'a jamais eu) — "dire" y est
+        # classé 'communication'/'communication_transitive'. Élargi pour
+        # matcher la classification réelle plutôt qu'une catégorie orpheline
+        # jamais produite (bug trouvé 2026-07-19).
         'has_dep_saying_verb':   'true' if any(
-                                    t.get('dep') == 'dep' and t.get('pos') == 'VERB'
-                                    and t.get('semantic_class') == 'saying'
+                                    t.get('dep') in ('dep', 'acl:relcl') and t.get('pos') == 'VERB'
+                                    and t.get('semantic_class') in ('saying', 'communication', 'communication_transitive')
                                     for t in T) else 'false',
+        # Cleft à sujet relatif ("C'est lui QUI le transmet à la foule") :
+        # verbe dep='dep'/'acl:relcl' rattaché DIRECTEMENT au ROOT (pas à un
+        # autre nom), dont le sujet est le pronom relatif 'qui' — le référent
+        # cleftée (le ROOT) EST le sujet du verbe enchâssé, contrairement à
+        # focus_cleft_naming où le sujet du verbe enchâssé est une tierce
+        # personne distincte ("nous" disons X). spaCy n'assigne pas
+        # acl:relcl ici car le ROOT est un PRON, pas un NOUN — d'où dep='dep'
+        # nu (bug trouvé 2026-07-26 : le verbe enchâssé et son objet étaient
+        # silencieusement perdus, faute de toute PatternRule pour cette forme).
+        'has_dep_relative_subject_verb': 'true' if (
+                                    root_tok and any(
+                                        t.get('dep') in ('dep', 'acl:relcl') and t.get('pos') == 'VERB'
+                                        and t.get('head_index') == root_tok.get('orig_index')
+                                        and any(x.get('dep') == 'nsubj' and x.get('role') == 'relative'
+                                                and x.get('head_index') == t.get('orig_index')
+                                                for x in T)
+                                        for t in T)) else 'false',
         # Expletif démonstratif (c'/ça, pas il/elle) → distingue "c'est X" de "il n'est pas X"
         'has_demonstrative_expletive': 'true' if any(
                                     t.get('dep') in ('expl:subj', 'expl:comp', 'expl', 'expletive')
@@ -140,27 +224,30 @@ def _build_features(tree: dict, T: list, G_kg: dict = None) -> dict:
         # Est-ce que : token 'ce' dep='dep' + token 'que'/'qu'' dep='mark'
         # (détecté AVANT apply_kg_patterns_early, avant step3)
         'has_est_ce_que_struct': 'true' if (
-                                    any(str(t.get('surface', '')).lower().strip('-') == 'ce'
+                                    any(str(t.get('surface', '')).lower().strip('-')
+                                        in G_kg.get('expletive_demonstrative_surfaces', {'ce'})
                                         and t.get('dep') in ('dep', 'nsubj', 'expl:subj') for t in T)
-                                    and any(str(t.get('surface', '')).lower().rstrip("'") in ('que', 'qu')
+                                    and any(str(t.get('surface', '')).lower().rstrip("'")
+                                            in G_kg.get('complementizer_que_surfaces', {'que', 'qu'})
                                             and t.get('dep') == 'mark' for t in T))  else 'false',
         # Interrogatif âge : DET interrogatif + nom bm='saan' (an/âge/année)
         'has_age_interrog':      'true' if (
                                     any(t.get('role') == 'interrogative'
                                         and t.get('dep') == 'det' for t in T)
                                     and any(t.get('bm') == 'saan'
-                                            or (t.get('lemma') or '').lower() in ('an', 'âge', 'année')
+                                            or (t.get('lemma') or '').lower() in G_kg.get('age_noun_lemmas', {'an', 'âge', 'année'})
                                             for t in T))              else 'false',
         # Conditional
         'conditional_marker_mana': 'true' if tree.get('conditional_marker') == 'mána' else 'false',
         # Verb serial sub-cases (read V_ACTION from m = tree['main'])
         'has_venir_de_verb':     'true' if (
-                                    root_tok and (root_tok.get('lemma') or '').lower() == 'venir'
+                                    root_tok and (root_tok.get('lemma') or '').lower() in G_kg.get('venir_lemmas', {'venir'})
                                     and any(t.get('dep') == 'mark'
-                                            and str(t.get('surface', '')).lower() == 'de' for t in T)
+                                            and str(t.get('surface', '')).lower() in G_kg.get('source_de_surfaces', {'de'})
+                                            for t in T)
                                     and tree.get('main', {}).get('V_ACTION'))           else 'false',
         'has_aller_pres':        'true' if (
-                                    root_tok and (root_tok.get('lemma') or '').lower() == 'aller'
+                                    root_tok and (root_tok.get('lemma') or '').lower() in G_kg.get('aller_lemmas', {'aller'})
                                     and tree.get('tense', 'pres') != 'past'
                                     and tree.get('main', {}).get('V_ACTION'))           else 'false',
         # Simple sub-cases
@@ -169,15 +256,16 @@ def _build_features(tree: dict, T: list, G_kg: dict = None) -> dict:
                                     and root_tok.get('semantic_class') in ('having', 'technique')
                                     and not any(t.get('dep') == 'obj' for t in T))     else 'false',
         'has_venir_de_source':   'true' if (
-                                    root_tok and (root_tok.get('lemma') or '').lower() == 'venir'
+                                    root_tok and (root_tok.get('lemma') or '').lower() in G_kg.get('venir_lemmas', {'venir'})
                                     and any(t.get('dep') == 'case'
-                                            and (str(t.get('surface', '')).lower() in ('de', 'du', 'des')
-                                                 or str(t.get('surface', '')).lower().rstrip("''") in ('d', 'de'))
+                                            and str(t.get('surface', '')).lower().rstrip("'") in G_kg.get('source_de_surfaces', {'de', 'du', 'des', 'd'})
                                             and t.get('role') in ('gerund', 'genitive') for t in T)
                                     and not tree.get('main', {}).get('V_ACTION'))       else 'false',
         # Imperative person (surface de la racine verbale)
-        'imperative_person':     ('1pl' if root_tok and str(root_tok.get('surface', '')).lower().endswith('ons')
-                                  else '2pl' if root_tok and str(root_tok.get('surface', '')).lower().endswith('ez')
+        'imperative_person':     ('1pl' if root_tok and str(root_tok.get('surface', '')).lower().endswith(
+                                        G_kg.get('imperative_1pl_fr_suffix', '') or 'ons')
+                                  else '2pl' if root_tok and str(root_tok.get('surface', '')).lower().endswith(
+                                        G_kg.get('imperative_2pl_fr_suffix', '') or 'ez')
                                   else '2sg'),
         # Relative topic / comitative
         'has_verb':              'true' if (tree.get('main', {}).get('V') or
@@ -254,7 +342,7 @@ def _match_pattern_rules(rules: list, features: dict, current_ct: str) -> dict:
         'locative', 'qualitative', 'equative', 'identificatory', 'presentative',
         'locative_interrog', 'qualitative_interrog', 'equative_interrog',
         'possession_abstract_pres_interrog', 'possession_material_pres_interrog',
-        'focus_cleft_naming', 'venir_de_verb', 'copula_comitative', 'interrogative_action',
+        'focus_cleft_naming', 'focus_cleft_relative', 'venir_de_verb', 'copula_comitative', 'interrogative_action',
         'quest_ce_que_modal', 'quest_ce_que', 'modal_interrog_cod', 'motion_content_question',
         'motion_interrog',
     }
@@ -323,6 +411,22 @@ def _apply_transform_rules(tree: dict, m: dict, G_kg: dict) -> None:
         # Obligation (devoir/falloir) : TAM déjà posé par step3_verbe (S ka kan / S man kan) —
         # aucune TransformRule générique ne doit l'écraser avec le TAM par défaut.
         if tree.get('_obligation') and target == 'TAM':
+            applied_targets.add(target)
+            continue
+
+        # Participe passé résultatif (step6, semantic_class preparation/technique) :
+        # TAM='' posé volontairement — le suffixe -ra/-la/-na du verbe porte déjà
+        # l'aspect accompli (ex: "a mɔ̀ra"), pas besoin du marqueur présent 'bɛ'.
+        if tree.get('_is_resultative_participle') and target == 'TAM':
+            applied_targets.add(target)
+            continue
+
+        # existential_* avec complément/relative replié dans O (step4_objet/
+        # noun_phrase.py) : le TAM a déjà été inséré au bon endroit, juste
+        # après le noyau nominal, DANS O — une TransformRule générique
+        # écraserait ça avec un second TAM en toute fin de phrase (bug trouvé
+        # 2026-07-19 : "...à l'écart de la gouvernance bɛ", 'bɛ' orphelin).
+        if tree.get('_tam_embedded_in_o') and target == 'TAM':
             applied_targets.add(target)
             continue
 
@@ -466,6 +570,25 @@ def _apply_transform_rules(tree: dict, m: dict, G_kg: dict) -> None:
             # Qualitative : si QUAL vide, déplace O → QUAL
             if not m.get('QUAL') and m.get('O'):
                 m['QUAL'] = m.pop('O')
+                m['O'] = ''
+            # Futur qualitatif ("il sera grand" → a bɛ na bònya) : l'adjectif
+            # prend le suffixe d'abstraction ('ya'), contrairement au présent/
+            # passé ("a ka bòn") qui restent nus — "bɛ na X" attend la forme
+            # nominale abstraite de la qualité, pas l'adjectif brut (bug
+            # trouvé 2026-07-19 : "il sera grand" → "a bɛ na bòn" au lieu de
+            # "a bɛ na bònya").
+            if tree.get('tense') == 'fut' and m.get('QUAL'):
+                _abstr_sfx = G_kg.get('morpho_rules', {}).get('abstraction', {}).get('suffix', '')
+                if _abstr_sfx and not m['QUAL'].endswith(_abstr_sfx):
+                    m['QUAL'] = m['QUAL'] + _abstr_sfx
+            applied_targets.add(target)
+
+        elif transform == 'move_o_to_propn':
+            # Identificatoire PROPN ("c'est Moussa") : step4_objet remplit O
+            # génériquement pour tout PROPN en position objet, mais le template
+            # '{PROPN} de {TAM}' attend PROPN — sinon le nom disparaît du rendu.
+            if not m.get('PROPN') and m.get('O'):
+                m['PROPN'] = m.pop('O')
                 m['O'] = ''
             applied_targets.add(target)
 
@@ -704,7 +827,7 @@ def apply_kg_rules(tree: dict, T: list, G_kg: dict) -> dict:
             and any(t.get('dep') == 'expl:comp'    # réflexif vrai seulement (pas iobj d'une autre personne)
                     and t.get('pos') == 'PRON'
                     and str(t.get('surface', '')).lower().lstrip('-') in
-                        ('me', "m'", 'm', 'te', "t'", 't', 'se', "s'", 's')
+                        G_kg.get('reflexive_clitic_surfaces', {'me', "m'", 'm', 'te', "t'", 't', 'se', "s'", 's'})
                     for t in T)):
         _refl_self = G_kg.get('reflexive_self_marker', '')
         _impersonal = G_kg.get('impersonal_subj', 'a') or 'a'
@@ -718,22 +841,28 @@ def apply_kg_rules(tree: dict, T: list, G_kg: dict) -> dict:
             m['V'] = j(_root_bm_2a, _has_propn.get('bm', ''))  # kánbìla Hawa
             tree['clause_type'] = 'simple'
         elif _refl_self:
-            # Sujet pluriel ("ils s'appellent") : transitif + pluriel = réciproque
-            # (ils se nomment l'un l'autre), pas réflexif singulier → ɲɔgɔn au
-            # lieu de yɛrɛ. Le sujet impersonnel 'a' reste (construction figée
-            # de dénomination, indépendante de la personne/nombre du français),
-            # seul le marqueur O change.
+            # Sujet pluriel ("ils s'appellent", "on s'appelle" = "on" traité
+            # comme pluriel sémantique par step3_verbe) : transitif + pluriel
+            # = RÉCIPROQUE réel (ils/on se nomment l'un l'autre), pas un
+            # réflexif-naming impersonnel → sujet réel conservé + template
+            # dédié {S} {TAM} ɲɔgɔn {V}, pas le sujet figé 'a' du singulier.
             _subj_2a = next((t for t in T if t.get('dep') in ('nsubj', 'nsubj:pass')), None)
             _subj_is_plural_2a = bool(
-                _subj_2a and (_subj_2a.get('is_plural')
-                              or 'Number=Plur' in str(_subj_2a.get('morph', ''))))
-            _recip_marker = G_kg.get('reciprocal_marker', '') if _subj_is_plural_2a else ''
-            # "Je m'appelle" → a bɛ yɛrɛ kánbìla (réflexif-naming, sujet impersonnel)
-            m['S'] = _impersonal
-            m['O'] = _recip_marker or _refl_self   # ɲɔgɔn (pluriel) / yɛrɛ (singulier)
-            if _root_bm_2a:
-                m['V'] = _root_bm_2a  # kánbìla (écrase la nominalization)
-            tree['clause_type'] = 'simple'
+                (_root_tok_kg and _root_tok_kg.get('is_plural'))
+                or (_subj_2a and (_subj_2a.get('is_plural')
+                                  or 'Number=Plur' in str(_subj_2a.get('morph', '')))))
+            if _subj_is_plural_2a:
+                m['O'] = ''
+                if _root_bm_2a:
+                    m['V'] = _root_bm_2a  # kánbìla (écrase la nominalization)
+                tree['clause_type'] = 'reciprocal'
+            else:
+                # "Je m'appelle" → a bɛ yɛrɛ kánbìla (réflexif-naming, sujet impersonnel)
+                m['S'] = _impersonal
+                m['O'] = _refl_self   # yɛrɛ
+                if _root_bm_2a:
+                    m['V'] = _root_bm_2a  # kánbìla (écrase la nominalization)
+                tree['clause_type'] = 'simple'
 
     # ── 2b. "Dire" présent + ccomp → clause_type='saying_present' (template={S})
     # APRÈS les TransformRules pour avoir V et tam corrects pour détection
@@ -785,7 +914,7 @@ def apply_kg_rules(tree: dict, T: list, G_kg: dict) -> dict:
                         if t.get('dep') in ('mark', 'advmod')
                         and str(t.get('surface', '')).lower()
                               .replace('\u2018', "'").replace('\u2019', "'")
-                              .rstrip("'") in ('que', 'qu')), None)
+                              .rstrip("'") in G_kg.get('complementizer_que_surfaces', {'que', 'qu'})), None)
         if _neg_t and _que_r:
             # Gardes contre les faux positifs :
             # 1. ccomp présent ("disent que") → le 'que' est complémenteur, pas restrictif
@@ -793,7 +922,7 @@ def apply_kg_rules(tree: dict, T: list, G_kg: dict) -> dict:
             _has_ccomp_t = any(t.get('dep') == 'ccomp' for t in T)
             _only_plus_neg = (any(str(t.get('surface', '')).lower() == 'plus'
                                   and t.get('role') == 'negation' for t in T)
-                              and not any(str(t.get('surface', '')).lower().rstrip("'") in ('ne', 'pas', 'plus' )
+                              and not any(str(t.get('surface', '')).lower().rstrip("'") in G_kg.get('neg_surfaces', {'ne', 'pas', 'plus'})
                                           and t.get('role') == 'negation'
                                           and str(t.get('surface', '')).lower() != 'plus'
                                           for t in T))
@@ -829,16 +958,22 @@ def apply_kg_rules(tree: dict, T: list, G_kg: dict) -> dict:
         # Ex: "tu ne serais qu'un pleutre" → i tɛ na [être] dɔwɛrɛ yé ni sègɛ tɛ
         if _restr_tense not in ('pres', 'hab') and _cop_tense_tok:
             _cop_bm = (_cop_tense_tok.get('bm')
-                       or f"[{_cop_tense_tok.get('lemma', 'être')}]")
+                       or f"[{_cop_tense_tok.get('lemma') or G_kg.get('copula_default_lemma', '') or 'être'}]")
             m['RESTRICT_MK'] = j(_cop_bm, _rk)
         else:
             m['RESTRICT_MK'] = _rk
 
     # ── météo impersonnel : il fait chaud/froid → [phénomène] bɛ ────────────────
     if _ct == 'meteorological_impersonal' and not tree.get('meteo_bm'):
+        # dep='conj' observé pour "il fait froid/chaud" : sans déterminant,
+        # spaCy rattache parfois l'ADJ post-verbal comme conjoint de 'faire'
+        # plutôt que comme attribut/xcomp — même construction météo, à traiter
+        # identiquement (le phénomène reste le seul contenu sémantique réel).
+        # pos='NOUN' inclus : le token est parfois reclassé NOUN en aval
+        # (ex: 'froid' → bm 'nɛ́nɛ', un nom en bambara) avant d'atteindre ce point.
         _adj_tok = next((t for t in T
-                         if t.get('pos') == 'ADJ'
-                         and t.get('dep') in ('advmod', 'xcomp', 'amod', 'attr')), None)
+                         if t.get('pos') in ('ADJ', 'NOUN')
+                         and t.get('dep') in ('advmod', 'xcomp', 'amod', 'attr', 'conj')), None)
         if _adj_tok:
             _phenom_bm = _adj_tok.get('bm') or f"[{_adj_tok.get('lemma', '?')}]"
             tree['meteo_bm'] = _phenom_bm
@@ -901,8 +1036,9 @@ def apply_kg_rules(tree: dict, T: list, G_kg: dict) -> dict:
                         or f"[{_interrog_noun_tok.get('lemma', '')}]")
             if (_interrog_noun_tok.get('is_plural')
                     or str(_interrog_noun_tok.get('surface', '')).endswith('s')):
-                if not _noun_bm.endswith('w'):
-                    _noun_bm += 'w'
+                _plur_iq = G_kg.get('plural_noun_suffix', '') or 'w'
+                if not _noun_bm.endswith(_plur_iq):
+                    _noun_bm += _plur_iq
             m['O'] = j(_noun_bm, _interrog_qty.get('bm', ''))
             # COMPANION = marqueur de possession abstraite (fɛ) — le FunctionWord KG
             # l'applique pour possession_abstract_pres mais pas pour la variante _interrog.
@@ -926,8 +1062,8 @@ def apply_kg_rules(tree: dict, T: list, G_kg: dict) -> dict:
     # Slots : S=nsubj du dep, V=dep verb bm, PROPN=ROOT PROPN+flat, O=obj du dep
     if _ct == 'focus_cleft_naming':
         _dep_saying = next((t for t in T
-                            if t.get('dep') == 'dep' and t.get('pos') == 'VERB'
-                            and t.get('semantic_class') == 'saying'), None)
+                            if t.get('dep') in ('dep', 'acl:relcl') and t.get('pos') == 'VERB'
+                            and t.get('semantic_class') in ('saying', 'communication', 'communication_transitive')), None)
         if _dep_saying:
             _dep_nsubj = next((t for t in T if t.get('dep') == 'nsubj' and t.get('bm')), None)
             _dep_obj   = next((t for t in T if t.get('dep') == 'obj' and t.get('bm')), None)
@@ -942,7 +1078,7 @@ def apply_kg_rules(tree: dict, T: list, G_kg: dict) -> dict:
                                and t.get('bm')), None)
             if _dep_nsubj:
                 m['S'] = _dep_nsubj.get('bm', '')
-            _v_bm = _dep_saying.get('bm') or f"[{_dep_saying.get('lemma','dire')}]"
+            _v_bm = _dep_saying.get('bm') or f"[{_dep_saying.get('lemma') or G_kg.get('saying_default_lemma', '') or 'dire'}]"
             m['V'] = _v_bm
             _propn_bm = (_root_tok_kg.get('bm') or
                          _root_tok_kg.get('surface', '')) if _root_tok_kg else ''
@@ -955,6 +1091,30 @@ def apply_kg_rules(tree: dict, T: list, G_kg: dict) -> dict:
                     _obj_bm += ' ' + (_dep_obj_flat.get('bm') or _dep_obj_flat.get('surface', ''))
                 m['O'] = _obj_bm.strip()
             m['OBL_ALL'] = []  # consommé
+
+    # ── focus_cleft_relative : C'est lui qui le transmet à la foule ─────────────
+    # Cleft à sujet relatif : le référent cleftée (ROOT) EST le sujet du verbe
+    # enchâssé (via 'qui', coréférent) — S=ROOT pron, V=verbe enchâssé,
+    # O=objet direct du verbe enchâssé (déjà résolu par step4_objet, réutilisé
+    # tel quel s'il existe ; sinon calculé directement ici en repli). Les
+    # obliques du verbe enchâssé ("à la foule") sont déjà dans OBL_ALL via
+    # step5_obliques (indépendant du verbe régissant) — laissés intacts,
+    # auto-ajoutés par le renderer générique.
+    if _ct == 'focus_cleft_relative':
+        _dep_rel_v = next((t for t in T
+                           if t.get('dep') in ('dep', 'acl:relcl') and t.get('pos') == 'VERB'
+                           and _root_tok_kg and t.get('head_index') == _root_tok_kg.get('orig_index')
+                           and any(x.get('dep') == 'nsubj' and x.get('role') == 'relative'
+                                   and x.get('head_index') == t.get('orig_index') for x in T)), None)
+        if _dep_rel_v:
+            m['V'] = _dep_rel_v.get('bm') or f"[{_dep_rel_v.get('lemma')}]"
+            _root_bm = (_root_tok_kg.get('bm') or _root_tok_kg.get('surface', '')) if _root_tok_kg else ''
+            m['S'] = _root_bm
+            if not m.get('O'):
+                _dep_rel_obj = next((t for t in T if t.get('dep') == 'obj'
+                                     and t.get('head_index') == _dep_rel_v['orig_index']), None)
+                if _dep_rel_obj:
+                    m['O'] = _dep_rel_obj.get('bm') or _dep_rel_obj.get('surface', '')
 
     # ── psych_emotion + xcomp → transitif (J'aime manger → n bɛ dúnli kànu) ──────
     # Contrairement aux modaux (vouloir → verb_serial), les verbes psych_emotion
@@ -1015,7 +1175,18 @@ def apply_kg_rules(tree: dict, T: list, G_kg: dict) -> dict:
                                and (t.get('is_root') or t.get('dep') == 'obj'
                                     or (t.get('dep') in ('nsubj', 'nsubj:pass') and _other_real_subj))), None)
         if _interrog_pron:
-            m['O'] = _interrog_pron.get('bm', '')
+            # KG n'a qu'un seul sens Pronoun{surface:'qui'} (role='relative'),
+            # dont le bm est le marqueur relatif générique (G_kg['relative_marker'],
+            # 'mìn'). Ce nœud ambigu atterrit ici uniquement en content_question
+            # (donc 'qui' est forcément l'interrogatif, jamais un vrai relatif) :
+            # si son bm est ce marqueur relatif générique, préférer le marqueur
+            # interrogatif KG ('jɔn') à sa place (bug trouvé 2026-07-20 : "qui
+            # aimez-vous ?" → "aw bɛ mìn kɛ ?" au lieu de "aw bɛ jɔn kɛ ?").
+            _pron_bm = _interrog_pron.get('bm', '')
+            if _interrog_pron.get('role') == 'relative' and _pron_bm == G_kg.get('relative_marker', ''):
+                m['O'] = G_kg.get('interrogative_who', '') or _pron_bm
+            else:
+                m['O'] = _pron_bm
             # Si V a été nominalisé (kànuli kɛ) à cause d'O vide → restaurer bm de base
             if _root_tok_kg and m.get('V'):
                 _base_bm = _root_tok_kg.get('bm', '')
@@ -1030,12 +1201,16 @@ def apply_kg_rules(tree: dict, T: list, G_kg: dict) -> dict:
     # ── content_question + O déjà posé + interrogatif ROOT → equative_interrog ──
     # "Qui est-il?" : step2 a posé m['O']='jɔn' (qui=ROOT), la ligne 955 saute
     # (not m.get('O') = False). Détecter ici que le ROOT est l'interrogatif en O.
+    # NB: ne PAS comparer t.get('bm') à m['O'] par égalité stricte — step2 peut
+    # avoir substitué le bm ambigu du nœud KG relatif ('mìn') par le marqueur
+    # interrogatif KG ('jɔn') quand ce ROOT est structurellement l'interrogatif
+    # (cf. step2_sujet.py, correction 2026-07-20) ; is_root+role suffisent à
+    # identifier ce même token sans dépendre de son bm d'origine.
     if (_ct == 'content_question' and m.get('O') and not m.get('V')):
         _interrog_root_eq = next((t for t in T
                                   if t.get('pos') == 'PRON'
                                   and t.get('role') in ('relative', 'interrogative')
-                                  and t.get('is_root')
-                                  and t.get('bm') == m.get('O')), None)
+                                  and t.get('is_root')), None)
         if _interrog_root_eq:
             tree['clause_type'] = 'equative_interrog'
             _ct = 'equative_interrog'
@@ -1058,7 +1233,14 @@ def apply_kg_rules(tree: dict, T: list, G_kg: dict) -> dict:
     # voir plus haut) n'a pas déjà posé un COMPANION valide depuis m['O'].
     if (_ct == 'copula_comitative'
             and not (m.get('COMPANION') and m['COMPANION'] != G_kg.get('comitative_marker', 'ni'))):
-        # OBL_ALL[0].HEAD = '{companion} yé' — on veut juste le nom sans le marqueur final
+        # OBL_ALL[0].HEAD = 'ni {companion} yé' — on veut juste le nom, sans
+        # marqueur de début NI de fin : le ClauseTemplate 'copula_comitative'
+        # ("{S} {TAM} ni {COMPANION} yé") fournit déjà les deux marqueurs.
+        # Sans le retrait du marqueur de tête, un COMPANION construit via
+        # cette voie oblique (obl:arg, ex: "il est avec Marie") gardait son
+        # propre 'ni' initial, dupliqué avec celui du template (bug trouvé
+        # 2026-07-20 : "il est avec Marie" → "a bɛ ni ni Marie yé").
+        _comit_start = G_kg.get('comitative_marker', 'ni') or 'ni'
         _comit_end = G_kg.get('comitative_end_marker', 'yé') or 'yé'
         _obl_heads = [o.get('HEAD', '') for o in m.get('OBL_ALL', []) if o.get('HEAD')]
         if _obl_heads:
@@ -1066,6 +1248,9 @@ def apply_kg_rules(tree: dict, T: list, G_kg: dict) -> dict:
             # Retirer le marqueur de fin si présent (n fúrucɛ yé → n fúrucɛ)
             if _companion_raw.endswith(' ' + _comit_end):
                 _companion_raw = _companion_raw[: -(len(_comit_end) + 1)]
+            # Retirer le marqueur de tête si présent (ni Marie → Marie)
+            if _companion_raw.startswith(_comit_start + ' '):
+                _companion_raw = _companion_raw[len(_comit_start) + 1:]
             m['COMPANION'] = _companion_raw
             m['OBL_ALL'] = []  # consommé par le template
 
@@ -1076,7 +1261,17 @@ def apply_kg_rules(tree: dict, T: list, G_kg: dict) -> dict:
                          and t.get('bm')
                          and t.get('role') not in ('interrogative',)), None)
         if _src_tok:
-            m['SRC'] = _src_tok.get('bm', '')
+            _src_bm = _src_tok.get('bm', '')
+            # 'la' (marqueur locatif par défaut) qualifie un LIEU COMMUN
+            # (école, marché, village, ville...), jamais un nom propre de
+            # lieu ('bɔ' régit directement le nom propre : "bɔ Bamako", pas
+            # "bɔ Bamako la") — décision utilisateur 2026-07-20. PROPN =
+            # signal structurel fiable (spaCy), pas de liste de noms de
+            # villes à maintenir.
+            if _src_tok.get('pos') != 'PROPN':
+                _loc_mk = G_kg.get('locative_default_marker', '') or 'la'
+                _src_bm = j(_src_bm, _loc_mk)
+            m['SRC'] = _src_bm
             # Vider OBL_ALL pour éviter le doublon
             m['OBL_ALL'] = [x for x in m.get('OBL_ALL', [])
                             if x.get('HEAD') != _src_tok.get('bm', '')]
@@ -1127,7 +1322,10 @@ def apply_kg_rules(tree: dict, T: list, G_kg: dict) -> dict:
                 m['S'] = _expl_subj.get('bm', '')      # il   → a   = S
 
     # Pour identificatory : S ← ROOT PRON / PROPN / NOUN (c'est moi, c'est Musa, c'est le médecin)
-    if _ct == 'identificatory':
+    # identificatory_pron_propn / identificatory_focus partagent le même besoin
+    # (PatternRule KG priorité 96/? les distingue de 'identificatory' générique
+    # mais leur template '{S} de yé {PROPN} yé' a le même slot PROPN à remplir).
+    if _ct in ('identificatory', 'identificatory_pron_propn', 'identificatory_focus'):
         # Appartenance pronominale "c'est pour toi" → {O} dòn  (ex: "i ta dòn")
         # m['O'] = 'i ta' déjà posé par ownership.py ; m['V'] = copule dòn.
         # Ne pas écraser m['S'] depuis root_pron sinon le PRON sert de sujet et non de bénéficiaire.
@@ -1146,9 +1344,16 @@ def apply_kg_rules(tree: dict, T: list, G_kg: dict) -> dict:
                                 if t.get('is_root') and t.get('pos') == 'PROPN' and t.get('bm')), None)
             if _root_propn:
                 if m.get('S'):
-                    # "C'est moi Hawa" : PRON(moi→n) + PROPN(Hawa) tous deux ROOT
-                    # → n dòn Hawa (PROPN après le copule via ADV)
-                    m['ADV'] = _root_propn.get('bm', '')
+                    # "C'est moi Hawa" : PRON(moi→n) + PROPN(Hawa) tous deux ROOT.
+                    # identificatory_pron_propn/_focus ont un slot {PROPN} dédié
+                    # dans leur template ('{S} de yé {PROPN} yé') → le remplir
+                    # directement. Le clause_type 'identificatory' générique
+                    # ('{S} de {TAM}') n'a pas ce slot → garder l'ancien
+                    # comportement (ADV ajouté en fin de rendu par le renderer).
+                    if _ct in ('identificatory_pron_propn', 'identificatory_focus'):
+                        m['PROPN'] = _root_propn.get('bm', '')
+                    else:
+                        m['ADV'] = _root_propn.get('bm', '')
                 else:
                     m['PROPN'] = _root_propn.get('bm', '')
                     m['O'] = ''  # Effacer m['O'] posé par step6
@@ -1157,7 +1362,13 @@ def apply_kg_rules(tree: dict, T: list, G_kg: dict) -> dict:
                 _root_noun = next((t for t in T
                                    if t.get('is_root') and t.get('pos') == 'NOUN' and t.get('bm')), None)
                 if _root_noun:
-                    m['S'] = _root_noun.get('bm', '')
+                    # m['O'] peut déjà porter le nom enrichi d'un possessif
+                    # ("n mùso" pour "c'est ma femme", posé par
+                    # step4_objet/ownership.py) — le préférer au bm nu du
+                    # token, qui perdrait ce complément (bug trouvé
+                    # 2026-07-19 : "c'est ma femme" → "mùso de dòn" au lieu
+                    # de "n mùso de dòn").
+                    m['S'] = m.get('O') or _root_noun.get('bm', '')
                     m['O'] = ''
 
     # Pour possession_age_interrog : INTERROG ← DET interrogatif
@@ -1193,7 +1404,10 @@ def apply_kg_rules(tree: dict, T: list, G_kg: dict) -> dict:
             _aux_pass_past = any(t.get('dep') == 'aux:pass'
                                  and t.get('tense') in ('past', 'plup')
                                  for t in T)
-            if not _aux_pass_past:
+            # Guard : participe passé déjà résolu en résultatif V+ra/la/na par
+            # step6 (semantic_class preparation/technique, ex. 'cuire' → 'mɔ̀ra')
+            # → ne pas réécraser avec le statif générique V+len dòn.
+            if not _aux_pass_past and not tree.get('_is_resultative_participle'):
                 tree['_passive_statif'] = True
         if 'refl_' in rule_name and best_prio >= 65:
             rt = best_rule.get('refl_treatment', '')

@@ -34,14 +34,14 @@ def ingest_rules(db, lang='bm'):
         ('pres', True,  'tɛ'),
         ('past', False, 'yé'),
         ('past', True,  'ma'),
-        ('fut',  False, 'bɛ na'),
-        ('fut',  True,  'tɛ na'),
+        ('fut',  False, 'bɛ́nà'),
+        ('fut',  True,  'tɛ́nà'),
         ('hab',  False, 'tùn bɛ'),
         ('hab',  True,  'tùn tɛ'),
         ('plup', False, 'tùn yé'),
         ('plup', True,  'tùn ma'),
-        ('prog', False, 'bɛ kà'),
-        ('prog', True,  'tɛ kà'),
+        ('prog', False, 'bɛ́kà'),
+        ('prog', True,  'tɛ́kà'),
     ]
     for tense, neg, bm in tam_rules:
         db.query("""
@@ -51,7 +51,7 @@ def ingest_rules(db, lang='bm'):
         MERGE (fp)-[:TRIGGERS]->(cr)
         """, {'tense': tense, 'neg': neg, 'bm': bm, 'lang': lang})
 
-    print(f"  ✅ TAM: {len(tam_rules)} règles")
+    print(f"   TAM: {len(tam_rules)} règles")
 
     # ── 2. CONSTRUCTION PASSIVE → STATIF ─────────────────────────────────────
     # is_passive=True → V+len dòn (pas V+ra comme le résultatif ordinaire)
@@ -68,7 +68,7 @@ def ingest_rules(db, lang='bm'):
     MERGE (cr)-[:APPLIES_MORPHO]->(mr)
     MERGE (cr)-[:USES_TEMPLATE]->(ct)
     """, {'lang': lang})
-    print(f"  ✅ Passive → statif")
+    print(f"   Passive → statif")
 
     # ── 3. RÉFLEXIFS PAR CLASSE SÉMANTIQUE ──────────────────────────────────
     refl_rules = [
@@ -92,7 +92,7 @@ def ingest_rules(db, lang='bm'):
               cr.priority = 70
         MERGE (fp)-[:TRIGGERS]->(cr)
         """, {'sc': sc, 'treatment': treatment, 'desc': desc, 'lang': lang})
-    print(f"  ✅ Réflexifs: {len(refl_rules)} règles")
+    print(f"   Réflexifs: {len(refl_rules)} règles")
 
     # ── 4. CONSTRUCTION MÉTÉOROLOGIQUE ────────────────────────────────────────
     db.query("""
@@ -107,7 +107,7 @@ def ingest_rules(db, lang='bm'):
     MERGE (fp)-[:TRIGGERS]->(cr)
     MERGE (cr)-[:USES_TEMPLATE]->(ct)
     """, {'lang': lang})
-    print(f"  ✅ Météorologique")
+    print(f"   Météorologique")
 
     # ── 5. MORPHOLOGIE RÉSULTATIVE ────────────────────────────────────────────
     # past + intransitive → V+ra (pas de TAM)
@@ -126,7 +126,7 @@ def ingest_rules(db, lang='bm'):
     MERGE (cr)-[:APPLIES_MORPHO]->(mr)
     MERGE (cr)-[:USES_TEMPLATE]->(ct)
     """, {'lang': lang})
-    print(f"  ✅ Résultatif passé intransitif")
+    print(f"   Résultatif passé intransitif")
 
     # ── 6. ÉTAT EMOTIONNEL (avoir peur) ──────────────────────────────────────
     db.query("""
@@ -145,7 +145,7 @@ def ingest_rules(db, lang='bm'):
     MERGE (cr)-[:APPLIES_MORPHO]->(mr)
     MERGE (cr)-[:USES_TEMPLATE]->(ct)
     """, {'lang': lang})
-    print(f"  ✅ État émotionnel (STATIF)")
+    print(f"   État émotionnel (STATIF)")
 
     # ── 7. SÉRIELLE MOUVEMENT+BUT ────────────────────────────────────────────
     db.query("""
@@ -162,7 +162,7 @@ def ingest_rules(db, lang='bm'):
     MERGE (fp2)-[:REQUIRED_BY]->(cr)
     MERGE (cr)-[:USES_TEMPLATE]->(ct)
     """, {'lang': lang})
-    print(f"  ✅ Sérielle mouvement+but")
+    print(f"   Sérielle mouvement+but")
 
     # ── 8. IMPÉRATIF PAR PERSONNE ────────────────────────────────────────────
     imperative_rules = [
@@ -183,7 +183,7 @@ def ingest_rules(db, lang='bm'):
         MERGE (cr)-[:USES_TEMPLATE]->(ct)
         """, {'person': person, 'marker': marker, 'template': template,
                'desc': desc, 'lang': lang})
-    print(f"  ✅ Impératif: {len(imperative_rules)} règles personne")
+    print(f"   Impératif: {len(imperative_rules)} règles personne")
 
     # ── 9. RELATIVE CLAUSE → RÉSULTATIF ─────────────────────────────────────
     db.query("""
@@ -202,7 +202,7 @@ def ingest_rules(db, lang='bm'):
     MERGE (cr)-[:APPLIES_MORPHO]->(mr)
     MERGE (cr)-[:USES_TEMPLATE]->(ct)
     """, {'lang': lang})
-    print(f"  ✅ Relative motion résultatif")
+    print(f"   Relative motion résultatif")
 
     # ── 10. QUESTION POURQUOI + PASSIF ───────────────────────────────────────
     db.query("""
@@ -219,7 +219,7 @@ def ingest_rules(db, lang='bm'):
     MERGE (cr)-[:OVERRIDES]->(:ConstructionRule {name:'passive_statif', lang:$lang})
     MERGE (cr)-[:USES_TEMPLATE]->(ct)
     """, {'lang': lang})
-    print(f"  ✅ Passif + question")
+    print(f"   Passif + question")
 
     # ── 11. TOUTES LES CONSTRUCTIONS PAR CLAUSE_TYPE ─────────────────────────
     clause_constructions = [
@@ -286,7 +286,7 @@ def ingest_rules(db, lang='bm'):
         """, {'ct': ct, 'template': template, 'word_order': word_order,
                'desc': desc, 'lang': lang})
 
-    print(f"  ✅ {len(clause_constructions)} constructions clause_type")
+    print(f"   {len(clause_constructions)} constructions clause_type")
 
     # Vérification finale
     counts = {}
@@ -336,6 +336,6 @@ if __name__ == '__main__':
     db = Neo4jClient()
     create_indexes(db)
     ingest_rules(db)
-    print(f"\n✅ Règles de traduction ingérées dans le KG.")
+    print(f"\n Règles de traduction ingérées dans le KG.")
     print(f"\nExemple de requête de traversée :")
     print(create_traversal_query())

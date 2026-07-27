@@ -10,13 +10,13 @@ Steps:
     python main.py               (re-ingests KG with new embeddings)
 """
 
-from embeddings.word2vec_encoder import _get_model
+from embeddings.labse_encoder import _get_model
 import numpy as np
 
 model = _get_model()
 
 # Quick sanity check
-from embeddings.word2vec_encoder import encode
+from embeddings.labse_encoder import encode
 from kg.retriever import cosine
 
 pairs = [
@@ -27,15 +27,15 @@ pairs = [
     ("femme",   "uranium",  "should be VERY LOW"),
 ]
 
-print("\n🧪 Semantic similarity sanity check\n")
+print("\n Semantic similarity sanity check\n")
 for a, b, note in pairs:
     va, vb = encode(a), encode(b)
     c = cosine(va, vb)
-    flag = "✅" if (
+    flag = "" if (
         ("HIGH" in note and c > 0.5) or
         ("LOW"  in note and c < 0.4) or
         ("VERY LOW" in note and c < 0.2)
-    ) else "❌"
+    ) else ""
     print(f"  {flag} {a:12s} ~ {b:12s}: {c:.3f}  ({note})")
 
-print("\n✅ Model ready. Now run: python main.py\n")
+print("\n Model ready. Now run: python main.py\n")

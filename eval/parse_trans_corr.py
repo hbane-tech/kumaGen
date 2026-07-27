@@ -13,7 +13,7 @@ Sur les phrases UD French GSD, on croise pour chaque phrase :
 Si la corrélation X↔Y est faible, le parsing n'est pas le goulot : la couche
 règles+LLM absorbe les erreurs de dépendance. Métriques : Pearson, Spearman, τ.
 
-⚠️ coverage/tree_ok sont des PROXIES (complétude/structure), pas la correction
+ coverage/tree_ok sont des PROXIES (complétude/structure), pas la correction
 sémantique — déclaré explicitement. Borne supérieure de propagation d'erreur.
 
 Usage :
@@ -159,7 +159,7 @@ def run(limit=100, export=True):
     verdict = ('FAIBLE — parsing peu prédictif de la sortie (robustesse)'
                if abs(r) < 0.3 else
                'MODÉRÉE' if abs(r) < 0.6 else 'FORTE — parsing prédit la sortie')
-    print(f"\n  ➜ Corrélation LAS↔coverage : {verdict}")
+    print(f"\n   Corrélation LAS↔coverage : {verdict}")
     print(f"{'═'*60}\n")
 
     if export:

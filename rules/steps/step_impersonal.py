@@ -7,7 +7,7 @@ Extraction pure : lit ImpersonalRule KG pour le template,
 extrait les slots depuis les tokens, remplit le template.
 Aucun bambara hardcodé.
 """
-from rules.core import j, _resolve_tam
+from rules.core import j, _resolve_tam, nominalize_verb, INTRANS_SC
 from rules.kg_rule_engine import fill_template
 
 
@@ -30,21 +30,32 @@ def _has_negation(T, G_kg):
 
 
 def _is_triggered(T, root_tok, G_kg):
+    """Le dispatch se fait sur mark_pattern (propriété KG ImpersonalRule),
+    pas sur le lemme littéral — un même mark_pattern encode la même
+    exigence structurelle quel que soit le lemme qui le porte (décision
+    2026-07-12, audit hardcode-KG)."""
     lemma = _lemma(root_tok)
     _imp_lemmas = G_kg.get('impersonal_trigger_lemmas', set())
     if not _imp_lemmas or lemma not in _imp_lemmas:
         return False
-    if lemma == 'falloir':
-        return True
-    if lemma == 'devoir':
-        return _find_il(T) is not None
-    if lemma == 'agir':
+    _by_pattern = G_kg.get('impersonal_lemmas_by_pattern', {})
+    _ccomp_lemmas = _by_pattern.get('ccomp', set())
+    # mark_pattern='' recouvre deux sous-groupes distincts : falloir/devoir
+    # (aussi présents dans le groupe 'ccomp' via leur variante imp_falloir_que
+    # — le choix inf/que se fait au rendu du template, pas ici : déclenchent
+    # sans condition) vs manquer/rester (jamais dans le groupe ccomp,
+    # nécessitent 'il').
+    if lemma in _by_pattern.get('', set()):
+        if lemma in _ccomp_lemmas:
+            return True  # falloir/devoir
+        return _find_il(T) is not None  # manquer/rester
+    if lemma in _by_pattern.get('expl:comp_se', set()):
         if not _find_il(T):
             return False
         return any(x.get('dep') == 'expl:comp'
                    and str(x.get('surface', '')).lower().rstrip("'").rstrip('’') in ('se', 's')
                    for x in T)
-    if lemma in ('arriver', 'sembler'):
+    if lemma in _by_pattern.get('ccomp', set()):
         if not _find_il(T):
             return False
         return (any(x.get('dep') in ('ccomp', 'advcl') and x.get('pos') == 'VERB' for x in T)
@@ -52,13 +63,6 @@ def _is_triggered(T, root_tok, G_kg):
                        and x.get('pos') in ('NOUN', 'PROPN')
                        and str(x.get('surface', '')).lower() not in ('il', 'elle', 'on', 'lui')
                        for x in T))
-    if lemma in ('manquer', 'rester'):
-        if not _find_il(T):
-            return False
-        return any(x.get('dep') in ('nsubj', 'nsubj:pass', 'obj')
-                   and x.get('pos') in ('NOUN', 'PROPN')
-                   and str(x.get('surface', '')).lower() not in ('il', 'elle', 'on', 'lui')
-                   for x in T)
     return False
 
 
@@ -99,10 +103,58 @@ def _extract_slots(T, rule, G_kg, _tam, _neg):
                        if x.get('dep') == 'ROOT' and x.get('pos') == 'VERB'
                        and x.get('bm')), None)
     if _xcomp:
-        slots['V2'] = _xcomp.get('bm', '')
+        # Verbe transitif/support sans COD propre (ex: "il ne faut pas manger")
+        # → même nominalisation que partout ailleurs dans le pipeline (O=nom
+        # d'action, V2=marqueur support 'kɛ'), pas le bm nu. 'O' n'est posé ici
+        # que si le xcomp a son propre objet (dep='obj' rattaché à lui) — sinon
+        # le _obj générique ci-dessus a pu capturer un objet d'un AUTRE verbe
+        # (ex: 'falloir' n'a pas d'objet propre) et ne doit pas bloquer la
+        # nominalisation.
+        _xcomp_has_own_obj = any(
+            x.get('dep') == 'obj' and x.get('head_index') == _xcomp.get('orig_index')
+            for x in T)
+        _it = _xcomp.get('intransitive_type', '')
+        _sc = _xcomp.get('semantic_class', '')
+        _needs_nom = (
+            _it in ('nominalized', 'ACTION', 'support')
+            and _sc not in INTRANS_SC
+            and _sc not in ('having', 'technique', 'consumption_liquid')
+            and not _xcomp_has_own_obj
+            # Ne pas écraser un slot['O'] déjà posé par le vrai complément
+            # (ex: "il s'agit de toi" → 'toi' dep='obl:arg', pas 'obj', donc
+            # _xcomp_has_own_obj=False à tort — mais l'objet réel a déjà été
+            # trouvé par la recherche _obj ci-dessus et ne doit pas être
+            # remplacé par la nominalisation du verbe lui-même. Décision
+            # 2026-07-15, bug : "il s'agit de toi/d'argent" perdait le
+            # complément réel au profit du mauvais candidat lexical de 'agir'.
+            and 'O' not in slots)
+        if _needs_nom:
+            slots['O']  = nominalize_verb(_xcomp.get('bm', ''), _xcomp.get('action_noun', ''), G_kg)
+            slots['V2'] = G_kg.get('coord_action_suffix', '')
+        else:
+            slots['V2'] = _xcomp.get('bm', '')
+
+        # Adverbe modifiant l'infinitif xcomp (ex: "il faut parler CLAIREMENT")
+        # — la branche _ccomp plus bas a la même extraction (_adv2), mais elle
+        # est explicitement désactivée quand _ccomp et _xcomp sont le MÊME
+        # token (cas normal pour "falloir"+xcomp), donc son ADV n'était jamais
+        # posé. Bug trouvé 2026-07-19 : "il faut parler clairement" perdait
+        # l'adverbe silencieusement.
+        _adv_xcomp = next((x for x in T if x.get('dep') == 'advmod'
+                           and x.get('head_index') == _xcomp.get('orig_index')
+                           and x.get('bm')
+                           and x.get('role') not in ('negation', 'temporal')), None)
+        if _adv_xcomp:
+            slots['ADV'] = _adv_xcomp.get('bm', '')
 
     # Clause ccomp slots (S2, TAM2, O2, V2, ADV)
+    # Garde : si _ccomp est le MÊME token que _xcomp (ex: 'manger' avec dep=xcomp
+    # sous 'falloir'), le bloc xcomp ci-dessus l'a déjà traité (nominalisation
+    # incluse) — le retraiter ici écraserait slots['V2'] avec le bm nu, perdant
+    # la nominalisation ("dumuni kɛ" → "dumuni dún").
     _ccomp = _find_ccomp(T)
+    if _ccomp and _xcomp and _ccomp.get('orig_index') == _xcomp.get('orig_index'):
+        _ccomp = None
     if _ccomp:
         _s2 = next((x for x in T if x.get('dep') in ('nsubj', 'nsubj:pass')
                     and x.get('head_index') == _ccomp['orig_index'] and x.get('bm')), None)

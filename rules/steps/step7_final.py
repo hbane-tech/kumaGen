@@ -3,7 +3,7 @@ rules/steps/step7_final.py
 Étape 7 : harmonisation nominale, ccomp (complétive), intransitif kɛ,
 déduplication wagons, slots finaux.
 """
-from rules.core import j, get_bounded_chunk_tokens, INTRANS_SC, _resolve_tam, _is_copula
+from rules.core import j, get_bounded_chunk_tokens, INTRANS_SC, _resolve_tam, _is_copula, nominalize_verb, render_obl_entry
 from rules.steps.step2_sujet import _build_subj_chain
 from rules.steps.step4_objet.objet_standard import _build_genitive_chain
 
@@ -11,6 +11,34 @@ from rules.steps.step4_objet.objet_standard import _build_genitive_chain
 def run(T, tree, m, processed_indices, G_kg, NX_G, root_tok,
         get_bounded_chunk_tokens_fn=None):
     """Finalise tree/m. Retourne tree."""
+
+    # Relative libre ("tout ce que S V...", cf. step4_objet/free_relative.py) :
+    # préfixe (antécédent+sujet+TAM+V) déjà construit en step4 ; les obliques
+    # propres à la relative (ex: "en fait d'incantations") ne sont connues
+    # qu'après step5_obliques — les rattacher ici, une fois disponibles.
+    if tree.get('_is_free_relative'):
+        _obl_all_frl = sorted(m.get('OBL_ALL') or [],
+                              key=lambda c: c.get('_HEAD_IDX') if c.get('_HEAD_IDX') is not None else -1)
+        _obl_strs_frl = [render_obl_entry(c, G_kg) for c in _obl_all_frl]
+        tree['final_string'] = j(tree.get('_free_rel_prefix', ''), *_obl_strs_frl)
+        tree['local_clause_type'] = tree.get('clause_type', 'simple')
+        tree['_tokens'] = T
+        return tree
+
+    # Relative coordonnée réduite sur un amod ("maison charmante ET QUI ÉTAIT
+    # digne d'elle", cf. step4_objet/coord_relative_on_amod.py) : préfixe
+    # (antécédent+amod) et suffixe (relative "mín TAM ADJ complément") déjà
+    # construits en step4 ; les obliques indépendantes restées non-consommées
+    # (ex: "entre toutes") ne sont connues qu'après step5_obliques.
+    if tree.get('_is_coord_relative_on_amod'):
+        _obl_all_cra = sorted(m.get('OBL_ALL') or [],
+                              key=lambda c: c.get('_HEAD_IDX') if c.get('_HEAD_IDX') is not None else -1)
+        _obl_strs_cra = [render_obl_entry(c, G_kg) for c in _obl_all_cra]
+        tree['final_string'] = j(tree.get('_coord_rel_prefix', ''), *_obl_strs_cra,
+                                 tree.get('_coord_rel_suffix', ''))
+        tree['local_clause_type'] = tree.get('clause_type', 'simple')
+        tree['_tokens'] = T
+        return tree
 
     # Privative ROOT : construire final_string et retourner (skip tous autres traitements)
     if tree.get('_is_privative'):
@@ -412,6 +440,16 @@ def run(T, tree, m, processed_indices, G_kg, NX_G, root_tok,
         # Règle purement temporelle (la polarité est portée par le TAM).
         # (≠ manger=consumption → li kɛ ; ≠ dormir/parler ∈ INTRANS_SC → V nu)
         _has_refl_pass = any(t.get('dep') == 'expl:pass' for t in T)
+        # Réflexif pronominal réel (dep='expl:comp' + role='reflexive', ex: "se
+        # faire" = arriver/se produire) : même famille que _has_refl_pass, mais
+        # role='reflexive' distingue le vrai clitique réflexif de l'expletif 'y'
+        # (dep='expl:comp' aussi, mais role='expletive'/'locative') qui ne doit
+        # PAS bloquer la nominalization. Un verbe pronominal sans COD ("cela SE
+        # fait") n'est pas une action transitive nue attendant sa nominalization
+        # (V+li kɛ) : c'est déjà une construction intransitive/impersonnelle
+        # complète (bug trouvé 2026-07-20 : "comment cela se fait-il ?" →
+        # "a bɛ kɛ́li kɛ cógo dì ?" au lieu de "a bɛ kɛ́ cógo dì ?").
+        _has_refl_comp = any(t.get('dep') == 'expl:comp' and t.get('role') == 'reflexive' for t in T)
         # Passif grammatical (être + participe passé) : "cela fut fait", "le riz a été mangé"
         # → résultatif V+ra (is_transitive=False via step6, géré par F6), PAS nominalization.
         _has_aux_pass_gramm = any(t.get('dep') == 'aux:pass' for t in T)
@@ -426,6 +464,7 @@ def run(T, tree, m, processed_indices, G_kg, NX_G, root_tok,
         if (_sc == 'action'
                 and _v_root and not root_tok.get('is_statif')
                 and not _has_refl_pass
+                and not _has_refl_comp
                 and not _has_aux_pass_gramm
                 and not _has_interrog_obj):
             # Distributif présent (chaque semaine, tous les jours) → kɛ, pas la
@@ -462,18 +501,14 @@ def run(T, tree, m, processed_indices, G_kg, NX_G, root_tok,
                 and _sc not in INTRANS_SC and _sc not in ('having', 'technique')
                 and not _is_liquid
                 and not _has_refl_pass
+                and not _has_refl_comp
                 and not _has_aux_pass_gramm
                 and not _has_interrog_obj
                 and _v_root
                 # psych_emotion en prohibitif/impératif reste verbe nu (kàna sò, kàna kàsi)
                 and not (tree.get('clause_type') in ('prohibitive', 'imperative')
                          and _sc == 'psych_emotion')):
-            _nom_sfx  = G_kg.get('nominalization_verb_suffix', '')
-            _nom_sfx2 = G_kg.get('nominalization_verb_suffix_alt', '')
-            if _nom_sfx and not (_v_root.endswith(_nom_sfx) or (_nom_sfx2 and _v_root.endswith(_nom_sfx2))):
-                _nominalized = _v_root + _nom_sfx
-            else:
-                _nominalized = _v_root
+            _nominalized = nominalize_verb(_v_root, root_tok.get('action_noun', ''), G_kg)
 
             # Transitif sans COD → TOUJOURS S TAM V+li kɛ (présent, passé, négatif).
             # Le résultatif V+ra/na est réservé au PASSIF (le riz a été mangé →
@@ -491,11 +526,16 @@ def run(T, tree, m, processed_indices, G_kg, NX_G, root_tok,
               and _sc not in ('having', 'technique')
               and (_intrans_type == 'ABSOLU'
                    or _sc in INTRANS_SC)
-              and not tree.get('neg', False)):
+              and not tree.get('neg', False)
+              and not tree.get('_has_quoted_speech')):
             # Passé positif ABSOLU ou INTRANS_SC (partir, dormir…) → résultatif
             # V+na/-ra, pas de yé. INTRANS_SC = signal KG fiable — on ignore le
             # it='ACTION' du LLM pour ces classes (toujours intransitives).
             # 'having'/'technique' exclus (báara/travailler) : garde TAM + kɛ.
+            # _has_quoted_speech exclu : 'saying' est dans INTRANS_SC pour les
+            # emplois vraiment sans complément ("il a parlé"), mais "il a dit
+            # « bonjour »" a un complément (la citation, déplacée vers OBL_ALL
+            # par rules/steps/quoted_speech.py) → reste transitif (S yé V).
             tree['is_transitive'] = False
         # Est-ce que + faire : step3 a mis V='' (copule être), le elif ci-dessus
         # était la seule source de V='kɛ'. Avec _has_interrog_obj, on le saute,
@@ -504,13 +544,24 @@ def run(T, tree, m, processed_indices, G_kg, NX_G, root_tok,
             m['V'] = _v_root
     # content_question/motion_content_question/verb_serial + INTRANS_SC + passé : F6 doit s'appliquer
     # Ex: "Quand est-il parti?" → a fáɲira, "elle alla trouver" → a táara ɲɛ́sɔ̀rɔ
+    # NB: m['O'] peut être rempli par l'objet d'un xcomp imbriqué ("venir ME
+    # trouver" → O='n' vient de 'trouver', pas de 'venir'). Dans ce cas, la
+    # racine reste intransitive : on vérifie que l'objet appartient VRAIMENT
+    # au verbe racine (dep='obj' avec head_index=root_tok) avant de bloquer
+    # le résultatif, plutôt que de se fier à m.get('O') seul (bug: "il est
+    # venu me trouver" restait au TAM nu 'a ye nà ka...' au lieu du
+    # résultatif 'a nàna ka n trouver...').
+    _root_has_own_obj = root_tok and any(
+        x.get('dep') == 'obj' and x.get('head_index') == root_tok['orig_index']
+        for x in T
+    )
     if (tree.get('clause_type') in ('content_question', 'motion_content_question',
                                     'verb_serial', 'serial_motion_pres')
             and not (tree.get('tense', 'pres') in ('pres', 'hab'))
             and not tree.get('neg', False)
             and root_tok and root_tok.get('pos') == 'VERB'
             and root_tok.get('semantic_class', '') in INTRANS_SC
-            and not m.get('O')
+            and not _root_has_own_obj
             and m.get('V')):
         tree['is_transitive'] = False
         # NB: le suffixage du verbe ordinaire sans objet (V la / V kɛ) est
@@ -540,12 +591,7 @@ def run(T, tree, m, processed_indices, G_kg, NX_G, root_tok,
                 and _sc not in INTRANS_SC and _sc not in ('having', 'technique')
                 and not _is_liquid
                 and _v_root):
-            _nom_sfx  = G_kg.get('nominalization_verb_suffix', '')
-            _nom_sfx2 = G_kg.get('nominalization_verb_suffix_alt', '')
-            if _nom_sfx and not (_v_root.endswith(_nom_sfx) or (_nom_sfx2 and _v_root.endswith(_nom_sfx2))):
-                _nominalized = _v_root + _nom_sfx
-            else:
-                _nominalized = _v_root
+            _nominalized = nominalize_verb(_v_root, root_tok.get('action_noun', ''), G_kg)
             m['O'] = _nominalized
             # Replace root verb at head of V with 'kɛ', preserving any coordination tail
             _v_str = m.get('V', '')
@@ -575,13 +621,9 @@ def run(T, tree, m, processed_indices, G_kg, NX_G, root_tok,
         elif (_it2 in ('ACTION', 'nominalized', 'support')
               and _sc2 not in INTRANS_SC
               and _sc2 not in ('having', 'technique', 'consumption_liquid')):
-            # Transitive sans COD → Vli/Vni kɛ (ex: manger→dúnli kɛ, acheter→sanni kɛ)
-            _nom_sfx2     = G_kg.get('nominalization_verb_suffix', '')
-            _nom_sfx2_alt = G_kg.get('nominalization_verb_suffix_alt', '')
-            if _nom_sfx2 and not _v_cur.endswith((_nom_sfx2, _nom_sfx2_alt or _nom_sfx2)):
-                m['O'] = _v_cur + _nom_sfx2
-            else:
-                m['O'] = _v_cur
+            # Transitive sans COD → action_noun kɛ (manger→dumuni kɛ) ou Vli/Vni kɛ
+            # (acheter→sanni kɛ) si pas de nom d'action irrégulier dans le KG.
+            m['O'] = nominalize_verb(_v_cur, root_tok.get('action_noun', ''), G_kg)
             m['V'] = _as
         tree['is_transitive'] = True
 
@@ -631,5 +673,20 @@ def run(T, tree, m, processed_indices, G_kg, NX_G, root_tok,
     tree['final_string']      = j(*[m['SLOTS'][k] for k in ordered_keys])
     tree['local_clause_type'] = tree['clause_type']
     tree['_tokens']  = T
+
+    # Conjonction contrastive résiduelle ("Mais tu viens quand ?") : les autres
+    # steps ne consomment 'cc' que pour la coordination interne à la clause
+    # (V1 et V2, etc.) — une conjonction de discours en tête de clause reste
+    # non-traitée et disparaissait silencieusement de la sortie faute de
+    # consommateur. Filet de sécurité en fin de pipeline.
+    if not m.get('CONTRAST'):
+        _contrast_tok = next((t for t in T
+                              if t.get('dep') == 'cc'
+                              and t.get('role') == 'contrast'
+                              and t.get('bm')
+                              and t['orig_index'] not in processed_indices), None)
+        if _contrast_tok:
+            m['CONTRAST'] = _contrast_tok['bm']
+            processed_indices.add(_contrast_tok['orig_index'])
 
     return tree

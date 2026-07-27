@@ -12,7 +12,7 @@ Usage:
 import sys
 import numpy as np
 from kg.neo4j_client import Neo4jClient
-from embeddings.word2vec_encoder import encode_batch, DIM
+from embeddings.labse_encoder import encode_batch, DIM
 
 BATCH = 256   # Sense nodes per Neo4j write batch
 

@@ -3,6 +3,14 @@ Extraction structurelle uniquement : copule → slots S / O / V / QUAL / OBL_ALL
 Aucune décision de clause_type ou TAM — délégué à kg_gateway après step7.
 """
 from rules.core import j, apply_affixes, _is_copula
+from rules.kg_rule_engine import apply_morpho_suffix
+
+# Classes sémantiques dont le participe passé prédicatif ("c'est cuit") se
+# rend en V+ra/la/na résultatif (le verbe porte lui-même l'aspect accompli)
+# plutôt qu'en V+len dòn statif générique (réservé aux états qualitatifs/
+# émotionnels comme 'cassé', 'fatigué'). Ex: 'cuire' → "a mɔ̀na", pas
+# "a mɔ̀len dòn".
+_RESULTATIVE_PARTICIPLE_SC = {'preparation', 'technique'}
 
 
 def _extract_cop_tense(tok):
@@ -78,10 +86,39 @@ def run(T, tree, m, processed_indices, G_kg, root_tok,
     if copula_tok:
         tree['cop_tense'] = _extract_cop_tense(copula_tok)
         tree['_has_cop']  = True
+        # Propager vers tree['tense'] (lu par le renderer pour le TAM). Ce
+        # champ est initialisé à 'pres' par défaut dans build_tree.py et n'est
+        # ensuite écrit que par step3_verbe.py, lequel ne s'exécute utilement
+        # que pour une racine VERB — un prédicat ADJ pur ("le weekend sera
+        # fructueux", root=ADJ) n'a AUCUNE autre étape qui lit le temps de la
+        # copule, donc son futur était extrait dans cop_tense puis jamais
+        # relayé, et le TAM retombait sur le défaut 'pres' → 'ka' au lieu
+        # d'un marqueur futur (bug trouvé 2026-07-19). On ne relaie que si la
+        # racine n'est pas un verbe, pour ne jamais écraser un temps déjà
+        # résolu correctement par step3_verbe.py sur une vraie clause verbale.
+        if root_tok and root_tok.get('pos') != 'VERB' and tree['cop_tense']:
+            tree['tense'] = tree['cop_tense']
         if copula_tok != root_tok:
             processed_indices.add(copula_tok['orig_index'])
     if _aux_pass:
         processed_indices.add(_aux_pass['orig_index'])
+
+    # ── 3b. Participe passé résultatif (semantic_class preparation/technique) ──
+    # "c'est cuit" / "le riz est cuit" : le verbe source ('cuire') porte
+    # lui-même l'aspect résultatif via son suffixe -ra/-la/-na — pas de dòn
+    # statif générique, ni le passif d'action (section 4) : sans agent
+    # explicite ("par X"), "être + participe" de ces classes se lit comme un
+    # état résultant, pas une action en cours, même quand spaCy tague le
+    # participe Voice=Pass (ambiguïté structurelle du français, tranchée ici
+    # avant que la section 4 ne l'intercepte comme passif d'action).
+    if (root_tok and root_tok.get('is_participe_passe') and _root_pos == 'ADJ'
+            and root_tok.get('semantic_class') in _RESULTATIVE_PARTICIPLE_SC):
+        _morpho_res = G_kg.get('morpho_rules', {}).get('resultative', {})
+        m['V'] = apply_morpho_suffix(_root_bm, _morpho_res) if _morpho_res else _root_bm
+        tree['tam'] = ''
+        tree['_is_resultative_participle'] = True
+        processed_indices.add(_root_idx)
+        return
 
     # ── 4. Passif (être + participe passé) ────────────────────────────────
     # Slot : m['V'] = bm du verbe passif (kg_gateway ajoutera -len ou -ra)
@@ -162,6 +199,35 @@ def run(T, tree, m, processed_indices, G_kg, root_tok,
             processed_indices.add(_priv_case['orig_index'])
         return
 
+    # ── 5c. Comparatif d'inégalité (supériorité) ROOT : "plus rapide que l'âne" ──
+    # ROOT=ADJ ; advmod='plus' (souvent sans bm propre, purement grammatical) ;
+    # référent = enfant dep/obl/obj du ROOT (NOUN/PROPN/PRON) ; 'que' = mark
+    # SCONJ enfant du référent (pas du ROOT, cf. parsing UD : "que" rattaché
+    # à "âne", pas à "rapide"). Rendu : "{S} {ADJ} ka tɛmɛ {REF} kan".
+    _comp_ref = next((x for x in T
+                      if x.get('head_index') == _root_idx
+                      and x.get('dep') in ('dep', 'obl', 'obj')
+                      and x.get('pos') in ('NOUN', 'PROPN', 'PRON')
+                      and x.get('bm')), None)
+    _comp_que = next((x for x in T
+                      if _comp_ref and x.get('dep') == 'mark'
+                      and x.get('pos') == 'SCONJ'
+                      and x.get('head_index') == _comp_ref['orig_index']
+                      and str(x.get('surface', '')).lower().rstrip("'") == 'que'), None)
+    _comp_plus = next((x for x in T
+                       if x.get('dep') == 'advmod'
+                       and x.get('head_index') == _root_idx
+                       and str(x.get('surface', '')).lower().rstrip("'") == 'plus'), None)
+    if root_tok and _root_pos == 'ADJ' and _comp_ref and _comp_que and _comp_plus:
+        _comp_particle = G_kg.get('comparative_particle', '') or 'ka tɛmɛ'
+        _comp_ref_mk   = G_kg.get('comparative_ref_marker', '') or 'kan'
+        m['O'] = j(_root_bm, _comp_particle, _comp_ref.get('bm', ''), _comp_ref_mk)
+        processed_indices.add(_root_idx)
+        processed_indices.add(_comp_ref['orig_index'])
+        processed_indices.add(_comp_que['orig_index'])
+        processed_indices.add(_comp_plus['orig_index'])
+        return
+
     # ── 6. Prédicat nominal / adjectival ──────────────────────────────────
     if root_tok and _root_pos in ('NOUN', 'ADJ', 'PROPN'):
         # Advmods du prédicat ADJ → qualitative (ka bòn, trop grand…)
@@ -195,7 +261,7 @@ def run(T, tree, m, processed_indices, G_kg, root_tok,
             _plur_s6 = G_kg.get('plural_noun_suffix', '') or 'w'
             if (root_tok and root_tok.get('is_plural')
                     and _obj_bm and not _obj_bm.endswith(_plur_s6)
-                    and root_tok.get('pos') not in ('PRON', 'PROPN')):
+                    and root_tok.get('pos') not in ('PRON', 'PROPN', 'ADJ')):
                 _obj_bm += _plur_s6
             m['O'] = _obj_bm
 
@@ -203,7 +269,7 @@ def run(T, tree, m, processed_indices, G_kg, root_tok,
         if m.get('O') and root_tok and root_tok.get('is_plural'):
             _plur_s6b = G_kg.get('plural_noun_suffix', '') or 'w'
             if (not m['O'].endswith(_plur_s6b)
-                    and root_tok.get('pos') not in ('PRON', 'PROPN')):
+                    and root_tok.get('pos') not in ('PRON', 'PROPN', 'ADJ')):
                 m['O'] = m['O'] + _plur_s6b
 
         # Coordonnés du ROOT NOUN (et sœurs, et amis, …) : exécuté que m['O']
@@ -281,8 +347,9 @@ def run(T, tree, m, processed_indices, G_kg, root_tok,
                 processed_indices.add(_poss['orig_index'])
             # Pluriel
             if (_attr.get('is_plural') or str(_attr.get('surface', '')).endswith('s')):
-                if not _attr_bm.endswith('w'):
-                    _attr_bm += 'w'
+                _plur_attr = G_kg.get('plural_noun_suffix', '') or 'w'
+                if not _attr_bm.endswith(_plur_attr):
+                    _attr_bm += _plur_attr
             # Coordonnés de l'attribut
             for _rc in T:
                 if (_rc.get('dep') == 'conj'
@@ -303,10 +370,16 @@ def run(T, tree, m, processed_indices, G_kg, root_tok,
             processed_indices.add(_attr['orig_index'])
 
     # ── 7. Locatif (advmod/obl locatif non encore traité) ─────────────────
+    # dep='dep' inclus : spaCy attache parfois un adverbe locatif isolé
+    # (ex: "ici" dans "il est encore actuellement ici", où le ROOT réel est
+    # un autre adverbe comme "actuellement") avec dep générique 'dep' plutôt
+    # que advmod/obl — sans quoi le complément locatif était perdu, laissant
+    # un oblique temporel non lié ("encore"→'bìlen') seul dans OBL_ALL comme
+    # si c'était le contenu principal (bug trouvé 2026-07-21).
     _loc = next(
         (t for t in T
          if (t.get('role') == 'locative' or t.get('is_loc'))
-         and t.get('dep') in ('advmod', 'obl', 'obl:mod', 'obl:arg')
+         and t.get('dep') in ('advmod', 'obl', 'obl:mod', 'obl:arg', 'dep')
          and t['orig_index'] not in processed_indices),
         None)
     if _loc:

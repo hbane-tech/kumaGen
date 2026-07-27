@@ -124,6 +124,17 @@ class RuleEngine:
         g['agent_postposition'] = self._single_marker(
             "MATCH (p:Preposition) WHERE p.role = 'agent' "
             "RETURN p.bm_marker AS m LIMIT 1")
+        # Anciennement littéraux Python purs (jamais lus depuis le KG) —
+        # migrés en FunctionWord 2026-07-09 : comitative_end_marker n'avait
+        # AUCUNE ligne de chargement (toujours le défaut Python 'yé' dans
+        # step5_obliques/__init__.py) ; locative_default_marker était un
+        # littéral 'la' non conditionnel (step5_obliques/__init__.py:158).
+        g['comitative_end_marker'] = self._single_marker(
+            "MATCH (f:FunctionWord) WHERE f.role = 'comitative_end_marker' "
+            "RETURN f.bm AS m LIMIT 1") or 'yé'
+        g['locative_default_marker'] = self._single_marker(
+            "MATCH (f:FunctionWord) WHERE f.role = 'locative_default_marker' "
+            "RETURN f.bm AS m LIMIT 1") or 'la'
         g['dative_marker']     = self._single_marker(
             "MATCH (p:Preposition) WHERE p.role = 'dative' "
             "RETURN p.bm_marker AS m LIMIT 1") or 'ma'
@@ -168,6 +179,16 @@ class RuleEngine:
         g['reflexive_self_marker'] = self._single_marker(
             "MATCH (f:FunctionWord {lang:'bm'}) WHERE f.role = 'reflexive_self' "
             "RETURN f.bm AS m LIMIT 1")
+        g['reciprocal_marker'] = self._single_marker(
+            "MATCH (f:FunctionWord {lang:'bm'}) WHERE f.role = 'reciprocal_marker' "
+            "RETURN f.bm AS m LIMIT 1")
+        # Marqueur datif/oblique par classe sémantique (ex: saying→yé, communication→fɛ)
+        # — lu depuis SemanticClass.dative_marker, jamais un nom de classe en dur en Python.
+        g['dative_marker_by_sc'] = {
+            r['name']: r['dm'] for r in self._q(
+                "MATCH (s:SemanticClass) WHERE s.dative_marker IS NOT NULL "
+                "RETURN s.name AS name, s.dative_marker AS dm")
+        }
         g['reflexive_pron_default'] = self._single_marker(
             "MATCH (f:FunctionWord {lang:'bm'}) WHERE f.role = 'reflexive_pron_default' "
             "RETURN f.bm AS m LIMIT 1")
@@ -178,8 +199,10 @@ class RuleEngine:
             "MATCH (f:FunctionWord {lang:'bm'}) WHERE f.role = 'question_marker_yala' "
             "RETURN f.bm AS m LIMIT 1")
 
-        # Listes sémantiques pour la coordination
-        _coord_rule = self._q("MATCH (r:TransformRule {name:'coord_nominalize_intrans_types', lang:'bm'}) RETURN r LIMIT 1")
+        # Listes sémantiques pour la coordination (migré depuis ConfigRule,
+        # label retiré 2026-07-09 : ne portait plus que 2 entrées, chacune
+        # rattachée thématiquement à sa propre table — CoordRule ici)
+        _coord_rule = self._q("MATCH (r:CoordRule {name:'coord_nominalize_intrans_types', lang:'bm'}) RETURN r LIMIT 1")
         if _coord_rule:
             _cr = _coord_rule[0]['r']
             g['coord_intrans_types'] = set((_cr.get('intrans_types') or '').split('|'))
@@ -189,10 +212,20 @@ class RuleEngine:
         else:
             g['coord_intrans_types'] = set()
             g['coord_exclude_sc']    = set()
+            g['coord_intrans_sc']    = set()
+            g['coord_excl_verb_sfx'] = ()
 
         g['biological_sc_name'] = self._single_marker(
             "MATCH (fw:FunctionWord {lang:'bm'}) WHERE fw.role = 'semantic_class_name' AND fw.name = 'biological_sc_name' "
             "RETURN fw.bm AS m LIMIT 1") or 'biological'
+        # Classes sémantiques réflexives-absolues rendues au résultatif (V+ra,
+        # pas de pronom répété) au passé — ex: 'il s'est assis' → 'a sìgira'
+        # (pas 'a yé a sìgi'). KG-driven, extensible sans toucher le code.
+        _refl_res_rows = self._q(
+            "MATCH (fw:FunctionWord {lang:'bm'}) WHERE fw.role = 'semantic_class_name' "
+            "RETURN fw.bm AS m")
+        g['refl_resultative_sc_names'] = ({r['m'] for r in _refl_res_rows if r.get('m')}
+                                           or {'biological'})
         # Règles typographiques depuis KG FunctionWord
         _typo_from = self._q("MATCH (fw:FunctionWord {lang:'bm'}) WHERE fw.role = 'typo_fix_from' RETURN fw.bm AS bm, fw.name AS name")
         _typo_to   = self._q("MATCH (fw:FunctionWord {lang:'bm'}) WHERE fw.role = 'typo_fix_to'   RETURN fw.bm AS bm, fw.name AS name")
@@ -219,8 +252,16 @@ class RuleEngine:
         g['verbal_coordinator'] = self._single_marker(
             "MATCH (fw:FunctionWord {lang:'bm'}) WHERE fw.role = 'verbal_coordinator' "
             "RETURN fw.bm AS m LIMIT 1")
-        # Ensemble autonomous_sc depuis KG (advcl)
-        _auto_row = self._q("MATCH (r:TransformRule {name:'advcl_autonomous_sc', lang:'bm'}) RETURN r.autonomous_sc AS sc LIMIT 1")
+        # Ensemble autonomous_sc depuis KG (advcl). Bug trouvé 2026-07-09 : le
+        # label interrogé était TransformRule (qui ne contient PAS ce name) →
+        # _auto_row toujours vide, g['autonomous_sc'] toujours set() → aucune
+        # classe sémantique ne rendait jamais en verbe nu dans les clauses
+        # purposive/privative (cf. rules/steps/step5_obliques/advcl.py:43) —
+        # ex: "il travaille pour aller au marché" → "wáli kɛ" (nominalisé,
+        # faux) au lieu de "wáli" nu (aller = motion = classe autonome).
+        # Migré depuis ConfigRule (label retiré 2026-07-09) vers Advcl_Rule,
+        # qui porte déjà les autres règles de clause adverbiale.
+        _auto_row = self._q("MATCH (r:Advcl_Rule {name:'advcl_autonomous_sc', lang:'bm'}) RETURN r.autonomous_sc AS sc LIMIT 1")
         g['autonomous_sc'] = set((_auto_row[0]['sc'] or '').split('|')) if _auto_row and _auto_row[0].get('sc') else set()
 
         g['locative_suffix'] = self._single_marker(
@@ -233,8 +274,21 @@ class RuleEngine:
         _expl_rows = self._q("MATCH (fw:FunctionWord) WHERE fw.role = 'expletive_fr_surface' RETURN fw.bm AS bm")
         g['expletive_fr_surfaces'] = {r['bm'].lower() for r in _expl_rows if r.get('bm')}
         # Lemmes impersonnels depuis ImpersonalRule KG
-        _imp_rows = self._q("MATCH (r:ImpersonalRule {lang:'bm'}) RETURN r.trigger_lemma AS l")
-        g['impersonal_trigger_lemmas'] = {r['l'].lower() for r in _imp_rows if r.get('l')}
+        _imp_rows = self._q(
+            "MATCH (r:ImpersonalRule {lang:'bm'}) "
+            "RETURN r.trigger_lemma AS l, r.also_triggers AS alt, r.mark_pattern AS mp")
+        g['impersonal_trigger_lemmas'] = {r['l'].lower() for r in _imp_rows if r.get('l')} | \
+            {r['alt'].lower() for r in _imp_rows if r.get('alt')}
+        # Regroupement par mark_pattern (ex: 'expl:comp_se', 'ccomp', '') — l'exigence
+        # structurelle (il+réfléchi / il+ccomp-ou-sujet-réel / aucune) est déjà une
+        # propriété du nœud KG ; le dispatch Python se fait sur ce champ, pas sur le
+        # lemme littéral (décision 2026-07-12, audit hardcode-KG).
+        g['impersonal_lemmas_by_pattern'] = {}
+        for r in _imp_rows:
+            _mp = r.get('mp') or ''
+            for _l in (r.get('l'), r.get('alt')):
+                if _l:
+                    g['impersonal_lemmas_by_pattern'].setdefault(_mp, set()).add(_l.lower())
 
         g['plural_noun_suffix']    = self._single_marker(
             "MATCH (fw:FunctionWord {lang:'bm'}) WHERE fw.role = 'plural_noun_suffix' "
@@ -265,6 +319,9 @@ class RuleEngine:
             "RETURN fw.bm AS m LIMIT 1")
         g['comparative_particle'] = self._single_marker(
             "MATCH (f:FunctionWord {lang:'bm'}) WHERE f.role = 'comparative_particle' "
+            "RETURN f.bm AS m LIMIT 1")
+        g['comparative_ref_marker'] = self._single_marker(
+            "MATCH (f:FunctionWord {lang:'bm'}) WHERE f.role = 'comparative_ref' "
             "RETURN f.bm AS m LIMIT 1")
         g['coord_verb_marker'] = self._single_marker(
             "MATCH (f:FunctionWord {lang:'bm'}) WHERE f.role = 'coord_verb' "
@@ -317,10 +374,11 @@ class RuleEngine:
                      if r.get('s') and r.get('sing')}
         fw_rows = self._q(
             "MATCH (f:FunctionWord) RETURN f.surface AS s, f.lang AS l, "
-            "f.bm AS bm, f.role AS r")
+            "f.bm AS bm, f.role AS r, f.requires_partner AS req")
         g['funcs'] = {(r['s'].lower(), r.get('l', 'fr')): {
                           'bm': r.get('bm', ''),
-                          'role': r.get('r', 'content')}
+                          'role': r.get('r', 'content'),
+                          'requires_partner': bool(r.get('req'))}
                       for r in fw_rows if r.get('s')}
         
         # ── Phase 2 : Règles morphologiques ─────────────────────────────────────
@@ -352,6 +410,12 @@ class RuleEngine:
         g['resultative_suffix_vowel']  = _res.get('suffix_after_vowel', '')
         g['resultative_suffix']        = _res.get('suffix_default', '')
         _stat = g['morpho_rules'].get('statif', {})
+        g['statif_pos_marker'] = self._single_marker(
+            "MATCH (fw:FunctionWord {lang:'bm'}) WHERE fw.role = 'statif_pos' "
+            "RETURN fw.bm AS m LIMIT 1")
+        g['statif_neg_marker'] = self._single_marker(
+            "MATCH (fw:FunctionWord {lang:'bm'}) WHERE fw.role = 'statif_neg' "
+            "RETURN fw.bm AS m LIMIT 1")
         g['statif_suffix']             = _stat.get('suffix', '')
         g['statif_pos_support']        = _stat.get('pos_support', '')
         g['statif_neg_support']        = _stat.get('neg_support', '')
@@ -398,6 +462,87 @@ class RuleEngine:
         g['possessive_pron_marker'] = self._single_marker(
             "MATCH (fw:FunctionWord {lang:'bm'}) WHERE fw.role = 'possessive_pron_marker' "
             "RETURN fw.bm AS m LIMIT 1")
+        g['avoir_acquisition_verb'] = self._single_marker(
+            "MATCH (fw:FunctionWord {lang:'bm'}) WHERE fw.role = 'avoir_acquisition_verb' "
+            "RETURN fw.bm AS m LIMIT 1")
+        g['obligation_pres_marker'] = self._single_marker(
+            "MATCH (fw:FunctionWord {lang:'bm'}) WHERE fw.role = 'obligation_pres_marker' "
+            "RETURN fw.bm AS m LIMIT 1")
+        g['obligation_neg_marker'] = self._single_marker(
+            "MATCH (fw:FunctionWord {lang:'bm'}) WHERE fw.role = 'obligation_neg_marker' "
+            "RETURN fw.bm AS m LIMIT 1")
+        g['imperative_neg_marker'] = self._single_marker(
+            "MATCH (fw:FunctionWord {lang:'bm'}) WHERE fw.role = 'imperative_neg_marker' "
+            "RETURN fw.bm AS m LIMIT 1")
+        g['eventuality_marker'] = self._single_marker(
+            "MATCH (fw:FunctionWord {lang:'bm'}) WHERE fw.role = 'eventuality_marker' "
+            "RETURN fw.bm AS m LIMIT 1")
+        g['passive_tam_marker'] = self._single_marker(
+            "MATCH (fw:FunctionWord {lang:'bm'}) WHERE fw.role = 'passive_tam_marker' "
+            "RETURN fw.bm AS m LIMIT 1")
+        g['refl_past_tam_marker'] = self._single_marker(
+            "MATCH (fw:FunctionWord {lang:'bm'}) WHERE fw.role = 'refl_past_tam_marker' "
+            "RETURN fw.bm AS m LIMIT 1")
+        g['relative_marker_plural'] = self._single_marker(
+            "MATCH (fw:FunctionWord {lang:'bm'}) WHERE fw.role = 'relative_marker_plural' "
+            "RETURN fw.bm AS m LIMIT 1")
+        g['demonstrative_subject_np_marker'] = self._single_marker(
+            "MATCH (fw:FunctionWord {lang:'bm'}) WHERE fw.role = 'demonstrative_subject_np_marker' "
+            "RETURN fw.bm AS m LIMIT 1")
+        g['venir_lemmas'] = {r['m'] for r in self._q(
+            "MATCH (fw:FunctionWord {lang:'fr'}) WHERE fw.role = 'venir_lemma' "
+            "RETURN fw.bm AS m") if r.get('m')}
+        g['aller_lemmas'] = {r['m'] for r in self._q(
+            "MATCH (fw:FunctionWord {lang:'fr'}) WHERE fw.role = 'aller_lemma' "
+            "RETURN fw.bm AS m") if r.get('m')}
+        g['progressive_periphrasis_lemmas'] = {r['m'] for r in self._q(
+            "MATCH (fw:FunctionWord {lang:'fr'}) WHERE fw.role = 'progressive_periphrasis_lemma' "
+            "RETURN fw.bm AS m") if r.get('m')}
+        g['expletive_demonstrative_pronoun'] = self._single_marker(
+            "MATCH (fw:FunctionWord {lang:'bm'}) WHERE fw.role = 'expletive_demonstrative_pronoun' "
+            "RETURN fw.bm AS m LIMIT 1")
+        g['eventuality_trigger_lemmas'] = {r['m'] for r in self._q(
+            "MATCH (fw:FunctionWord {lang:'fr'}) WHERE fw.role = 'eventuality_trigger_lemma' "
+            "RETURN fw.bm AS m") if r.get('m')}
+        g['expletive_demonstrative_surfaces'] = {r['m'] for r in self._q(
+            "MATCH (fw:FunctionWord {lang:'fr'}) WHERE fw.role = 'expletive_demonstrative_surface' "
+            "RETURN fw.bm AS m") if r.get('m')}
+        g['complementizer_que_surfaces'] = {r['m'] for r in self._q(
+            "MATCH (fw:FunctionWord {lang:'fr'}) WHERE fw.role = 'complementizer_que_surface' "
+            "RETURN fw.bm AS m") if r.get('m')}
+        g['reflexive_clitic_surfaces'] = {r['m'] for r in self._q(
+            "MATCH (fw:FunctionWord {lang:'fr'}) WHERE fw.role = 'reflexive_clitic_surface' "
+            "RETURN fw.bm AS m") if r.get('m')}
+        g['age_noun_lemmas'] = {r['m'] for r in self._q(
+            "MATCH (fw:FunctionWord {lang:'fr'}) WHERE fw.role = 'age_noun_lemma' "
+            "RETURN fw.bm AS m") if r.get('m')}
+        g['source_de_surfaces'] = {r['m'] for r in self._q(
+            "MATCH (fw:FunctionWord {lang:'fr'}) WHERE fw.role = 'source_de_surface' "
+            "RETURN fw.bm AS m") if r.get('m')}
+        g['imperative_1pl_fr_suffix'] = self._single_marker(
+            "MATCH (fw:FunctionWord {lang:'fr'}) WHERE fw.role = 'imperative_1pl_fr_suffix' "
+            "RETURN fw.bm AS m LIMIT 1")
+        g['imperative_2pl_fr_suffix'] = self._single_marker(
+            "MATCH (fw:FunctionWord {lang:'fr'}) WHERE fw.role = 'imperative_2pl_fr_suffix' "
+            "RETURN fw.bm AS m LIMIT 1")
+        g['copula_default_lemma'] = self._single_marker(
+            "MATCH (fw:FunctionWord {lang:'fr'}) WHERE fw.role = 'copula_default_lemma' "
+            "RETURN fw.bm AS m LIMIT 1")
+        g['saying_default_lemma'] = self._single_marker(
+            "MATCH (fw:FunctionWord {lang:'fr'}) WHERE fw.role = 'saying_default_lemma' "
+            "RETURN fw.bm AS m LIMIT 1")
+        g['intensifier_bm_markers'] = {
+            r['m'] for r in self._q(
+                "MATCH (fw:FunctionWord {lang:'bm'}) WHERE fw.role = 'intensifier_bm_marker' "
+                "RETURN fw.bm AS m") if r.get('m')}
+        g['intensifier_trigger_lemmas'] = {
+            r['s'].lower(): r['m'] for r in self._q(
+                "MATCH (fw:FunctionWord {lang:'fr'}) WHERE fw.role = 'intensifier_trigger_lemma' "
+                "RETURN fw.surface AS s, fw.bm AS m") if r.get('s') and r.get('m')}
+        g['support_verb_adj_lemmas'] = {
+            r['m'] for r in self._q(
+                "MATCH (fw:FunctionWord {lang:'fr'}) WHERE fw.role = 'support_verb_adj_lemma' "
+                "RETURN fw.bm AS m") if r.get('m')}
         # _AVOIR_LEMMAS depuis KG
         _avoir_rows = self._q("MATCH (fw:FunctionWord) WHERE fw.role = 'avoir_lemma' RETURN fw.bm AS bm")
         if _avoir_rows:
@@ -447,15 +592,8 @@ class RuleEngine:
         g['kg_pattern_rules']    = _load_rule_nodes('PatternRule')
         g['kg_slot_fill_rules']  = _load_rule_nodes('SlotFillRule')
         g['kg_transform_rules']  = _load_rule_nodes('TransformRule')
-        g['kg_coord_rules']      = _load_rule_nodes('CoordRule')
-        g['kg_modal_rules']      = _load_rule_nodes('ModalRule')
-        g['kg_oblique_rules']    = _load_rule_nodes('ObliqueFillRule')
         g['kg_nominal_rules']    = _load_rule_nodes('NominalChainRule')
-        g['kg_possession_rules'] = _load_rule_nodes('PossessionRule')
-        g['kg_aux_rules']        = _load_rule_nodes('AuxTemporalRule')
-        g['kg_advcl_rules']      = _load_rule_nodes('Advcl_Rule')
         g['kg_graph_walk_rules'] = _load_rule_nodes('GraphWalkRule')
-        g['kg_privative_rules']  = _load_rule_nodes('PrivativeRule')
         g['kg_impersonal_rules'] = _load_rule_nodes('ImpersonalRule')
 
         # ── Graphe de règles complet : FeaturePattern→ConstructionRule→ClauseTemplate
@@ -500,7 +638,7 @@ class RuleEngine:
             if r.get('feature') == 'clause_type' and r.get('template')
         }
 
-        print(f"  ✅ Grammar loaded from KG — "
+        print(f"   Grammar loaded from KG — "
               f"loc={len(g['locative_markers'])} "
               f"tmp={len(g['temporal_markers'])} "
               f"gen='{g['genitive_marker']}' "
@@ -511,7 +649,7 @@ class RuleEngine:
               f"behaviors={len(g['semantic_behaviors'])} "
               f"rules={len(g['kg_rules'])}")
 
-    def apply(self, tokens_or_tree, frame):
+    def apply(self, tokens_or_tree):
         if not tokens_or_tree:
             self._last_tree = {}
             return ''

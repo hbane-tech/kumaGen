@@ -31,7 +31,6 @@ def main():
 
         result = engine.translate(text)
         print(f"\n Result : {result['bambara']}")
-        # print(f"   Frame  : {result['frame']}")
         print("-" * 65 + "\n")
 
 

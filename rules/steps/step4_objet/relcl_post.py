@@ -88,6 +88,14 @@ def run(T, tree, m, processed_indices, G_kg, NX_G):
             'COMPOUND': '', 'MOD': '', 'DEM_PREF': '', 'DEM_SUFF': '',
             'DEP_TYPE': 'acl:relcl', 'COMPOUND_IS_QUANTIFIER': False,
             'MARKER_IS_PREFIX': False,
+            # Position de l'antécédent (tête de la relative) dans la phrase :
+            # permet au renderer de replacer cette relative juste après le
+            # wagon qui contient réellement son antécédent, au lieu de
+            # toujours la rendre avant (step4 s'exécute avant step5, ordre
+            # d'ajout ≠ ordre syntaxique — bug trouvé 2026-07-18, ex: "frein
+            # lié aux logiques de pouvoir des élites QUI VEULENT..." rendait
+            # la relative avant le complément "lié à...").
+            '_HEAD_IDX': _rt.get('head_index'),
         })
         processed_indices.update(nx.descendants(NX_G, _rt['orig_index']) | {_rt['orig_index']})
 

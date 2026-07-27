@@ -1,5 +1,5 @@
 import requests
-from bs4 import BeautifulSoup
+from bs4 import BeautifulSoup, Tag
 import unicodedata
 
 BASE_URL = "http://cormand.huma-num.fr/Bamadaba/lexicon/{}.htm"
@@ -86,59 +86,130 @@ def is_valid_lemma(lemma):
 
 
 # ---------------------------------------------------------------------------
-# Extract ONE entry from a <p class="lxP"> tag
+# Extract ALL senses from a <p class="lxP"> tag
+#
+# Un mot polysémique (ex: "kálo") porte PLUSIEURS <p class="lxP2"> frères
+# consécutifs, un par sens numéroté (1 • lune. / 2 • mois. / 3 • règles.).
+# Seul le PREMIER porte le tag <span class="PS"> (POS partagé par tous les
+# sens) — les suivants n'ont qu'un <span class="SnsN"> + <span class="GlFr">.
+# Bug trouvé 2026-07-17 : find_next_sibling() ne retournait QUE ce premier
+# bloc, perdant silencieusement tout sens 2+ de chaque entrée polysémique
+# du dictionnaire entier (ex: "mois"/"règles" absents pour "kálo").
 # ---------------------------------------------------------------------------
 
-def extract_entry(p_lemma):
+def extract_entries(p_lemma):
     # 1. LEMMA
     lxe = p_lemma.find("span", class_="Lxe")
     if not lxe:
-        return None
+        return []
 
     lemma = normalize_text(lxe.get_text()).rstrip(".")
     if not is_valid_lemma(lemma):
-        return None
+        return []
 
     # lemma_plain: tone-stripped, used for accent-insensitive exact matching
     # so that querying "n" finds "ń", "i" finds "í", etc.
     lemma_plain = strip_diacritics(lemma)
 
-    # 2. INFO BLOCK
-    p_info = p_lemma.find_next_sibling("p", class_="lxP2")
-    if not p_info:
-        return None
+    # corpus_freq : nombre d'attestations dans le corpus de référence (bouton
+    # "→ N" class="clnknt"), signal RÉEL de fréquence d'usage — pas une
+    # heuristique. Partagé par tous les sens de cette entrée (un seul bouton
+    # par headword). Découvert 2026-07-17 : deux homographes distincts
+    # peuvent chacun avoir "jour" comme SENS N°1 de leur propre entrée
+    # ('dá'="jour." et 'dón'="jour, date.", tous deux sense_index=1) —
+    # sense_index seul ne peut pas les départager, mais leurs fréquences
+    # corpus (dá=27 vs dón=3110) tranchent sans ambiguïté.
+    corpus_freq = 0
+    freq_tag = p_lemma.find("a", class_="clnknt") or p_lemma.find(
+        lambda t: t.name == "a" and "clnknt" in (t.get("class") or []))
+    if not freq_tag:
+        _b = p_lemma.find("b", class_="clnknt")
+        freq_tag = _b.find("a") if _b else None
+    if freq_tag:
+        _digits = "".join(c for c in freq_tag.get_text() if c.isdigit())
+        if _digits:
+            corpus_freq = int(_digits)
 
-    # 3. POS
-    pos_tag     = p_info.find("span", class_="PS")
-    pos_raw     = pos_tag.get_text(strip=True) if pos_tag else None
-    parsed      = parse_pos(pos_raw)
+    # 2. Tous les blocs lxP2 frères consécutifs (jusqu'au prochain lxP)
+    info_blocks = []
+    sib = p_lemma.next_sibling
+    while sib is not None:
+        if isinstance(sib, Tag):
+            classes = sib.get("class") or []
+            if sib.name == "p" and "lxP2" in classes:
+                info_blocks.append(sib)
+            elif sib.name == "p" and "lxP" in classes:
+                break
+        sib = sib.next_sibling
+    if not info_blocks:
+        return []
 
-    # 4. French fields
-    def get_text(cls):
-        tag = p_info.find("span", class_=cls)
-        return normalize_text(tag.get_text()) if tag else None
+    # 3. POS : seul le premier bloc le porte, partagé par tous les sens
+    pos_tag = info_blocks[0].find("span", class_="PS")
+    pos_raw = pos_tag.get_text(strip=True) if pos_tag else None
+    parsed  = parse_pos(pos_raw)
 
-    fr_short = get_text("GlFr1") or get_text("GlFr")
-    fr_long  = get_text("EncFr")
+    entries = []
+    for block in info_blocks:
+        # Un GlFr/GlFr1 n'est une VRAIE définition que s'il précède le premier
+        # <Exe> du bloc — un GlFr qui ne vient qu'APRÈS un Exe est la
+        # traduction de l'exemple, pas une définition indépendante (ex: sens
+        # numéroté qui n'illustre que le sens parent par un exemple, sans
+        # apporter de glose propre). Bug trouvé 2026-07-17 : le premier GlFr
+        # trouvé dans le DOM était pris aveuglément, confondant traduction
+        # d'exemple et définition pour ces sous-sens ("tìn" sens 'compassion'
+        # récupérait la traduction de l'exemple comme si c'était son sens).
+        _children = block.find_all("span", recursive=False)
+        _first_exe_pos = next(
+            (i for i, c in enumerate(_children) if "Exe" in (c.get("class") or [])),
+            len(_children))
 
-    # fr     : short display gloss stored on the Word node
-    # fr_emb : richest French text for LaBSE encoding.
-    #          For pronouns (GlFr1 = "1SG, me, ma") the long encyclopedic
-    #          gloss ("pronom de la première personne du singulier") aligns
-    #          far better with queries like "I" / "je" / "moi".
-    fr     = fr_short or fr_long
-    fr_emb = fr_long  or fr_short
+        def get_def_text(cls, _block=block, _limit=_first_exe_pos, _kids=_children):
+            for i, tag in enumerate(_kids):
+                if i >= _limit:
+                    break
+                if cls in (tag.get("class") or []):
+                    return normalize_text(tag.get_text())
+            return None
 
-    return {
-        "lemma":        lemma,
-        "lemma_plain":  lemma_plain,
-        "type":         parsed["pos"],
-        "ps_raw":       pos_raw,
-        "fr":           fr,
-        "fr_emb":       fr_emb,
-        "transitivity": parsed["transitivity"],
-        "subtype":      parsed["subtype"],
-    }
+        fr_short = get_def_text("GlFr1") or get_def_text("GlFr")
+        fr_long  = get_def_text("EncFr")
+
+        # sense_index : numéro du sens DANS SA PROPRE entrée du dictionnaire
+        # source ("1 •", "2 •"...) — départage entre sens d'UN MÊME headword.
+        # Absent (mono-sens) → 1. Ne départage PAS deux headwords différents
+        # (voir corpus_freq ci-dessus pour ce cas, ex: 'dá'/'dón' tous deux
+        # sens n°1 de leur propre entrée mais fréquences très différentes).
+        sns_tag = block.find("span", class_="SnsN")
+        sense_index = 1
+        if sns_tag:
+            _digits = "".join(c for c in sns_tag.get_text() if c.isdigit())
+            if _digits:
+                sense_index = int(_digits)
+
+        # fr     : short display gloss stored on the Word node
+        # fr_emb : richest French text for LaBSE encoding.
+        #          For pronouns (GlFr1 = "1SG, me, ma") the long encyclopedic
+        #          gloss ("pronom de la première personne du singulier") aligns
+        #          far better with queries like "I" / "je" / "moi".
+        fr     = fr_short or fr_long
+        fr_emb = fr_long  or fr_short
+        if not fr:
+            continue
+
+        entries.append({
+            "lemma":        lemma,
+            "lemma_plain":  lemma_plain,
+            "type":         parsed["pos"],
+            "ps_raw":       pos_raw,
+            "sense_index":  sense_index,
+            "corpus_freq":  corpus_freq,
+            "fr":           fr,
+            "fr_emb":       fr_emb,
+            "transitivity": parsed["transitivity"],
+            "subtype":      parsed["subtype"],
+        })
+    return entries
 
 
 # ---------------------------------------------------------------------------
@@ -160,9 +231,7 @@ def scrape_all():
         # soup = BeautifulSoup(res.text, "html.parser")
 
         for p in soup.find_all("p", class_="lxP"):
-            entry = extract_entry(p)
-            if entry:
-                all_entries.append(entry)
+            all_entries.extend(extract_entries(p))
 
         print(f"  collected so far: {len(all_entries)}")
 

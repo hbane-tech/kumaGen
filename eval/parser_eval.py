@@ -126,6 +126,17 @@ def align(sys_tokens, units):
 # ─────────────────────────────────────────────────────────────────────────────
 # Normalisation deprel (spaCy → UD)
 # ─────────────────────────────────────────────────────────────────────────────
+def conll17_f1(correct, n_gold, n_sys):
+    """F1 officiel CoNLL 2017 (universaldependencies.org/conll17/evaluation.html,
+    réimplémenté dans udapi/block/eval/conll17.py) : 2*correct/(gold+pred),
+    PAS correct/aligned (= 'AlignedAcc' dans le tableau officiel, gardée à
+    part). La F1 pénalise les divergences de tokenisation — un token non
+    aligné (segmentation différente du gold) compte comme une erreur des
+    deux côtés, contrairement à AlignedAcc qui l'ignore silencieusement."""
+    denom = n_gold + n_sys
+    return round(2 * correct / denom * 100, 2) if denom else 0.0
+
+
 def norm_deprel(dep):
     d = (dep or '').lower()
     if d == 'root':
@@ -192,7 +203,7 @@ def evaluate(limit=None, verbose=False, export=True):
     import warnings; warnings.filterwarnings('ignore')
 
     if not os.path.exists(UD_TEST):
-        print(f"❌ Treebank introuvable : {UD_TEST}")
+        print(f" Treebank introuvable : {UD_TEST}")
         print("   Télécharge : curl -sL -o eval/ud/fr_gsd-ud-test.conllu \\")
         print("     https://raw.githubusercontent.com/UniversalDependencies/"
               "UD_French-GSD/master/fr_gsd-ud-test.conllu")
@@ -318,6 +329,15 @@ def evaluate(limit=None, verbose=False, export=True):
             'n_gold_tokens': n_gold_tokens,
             'n_scored': n_aligned,
             'scored_rate': round(n_aligned / n_gold_tokens * 100, 2) if n_gold_tokens else 0,
+            # F1 officiel CoNLL 2017 (métrique de classement du shared task) —
+            # cf. conll17_f1() : pénalise les divergences de tokenisation.
+            'UPOS_F1': conll17_f1(n_upos_ok, n_gold_tokens, n_sys_tokens),
+            'UAS_F1':  conll17_f1(n_uas_ok,  n_gold_tokens, n_sys_tokens),
+            'LAS_F1':  conll17_f1(n_las_ok,  n_gold_tokens, n_sys_tokens),
+            'LAS_main_F1': conll17_f1(n_lasc_ok, n_gold_tokens, n_sys_tokens),
+            # AlignedAcc (4e colonne du tableau officiel) : correct/aligned
+            # uniquement — ignore les tokens non-alignés, utile pour isoler
+            # la qualité pure du tagging/attachement des soucis de tokenisation.
             'UPOS': round(n_upos_ok / n_aligned * 100, 2) if n_aligned else 0,
             'UAS':  round(n_uas_ok  / n_aligned * 100, 2) if n_aligned else 0,
             'LAS':  round(n_las_ok  / n_aligned * 100, 2) if n_aligned else 0,
@@ -355,7 +375,12 @@ def _report(upos, uas, las, lasc, n, n_gold, n_sys,
     print(f"  Tokens gold        : {n_gold}")
     print(f"  Tokens système     : {n_sys}")
     print(f"  Tokens alignés     : {n} ({align_rate:.1f}% du gold)")
-    print(f"\n  ── Métriques standard ──")
+    print(f"\n  ── F1 officiel CoNLL 2017 (métrique de classement du shared task) ──")
+    print(f"  UPOS  F1 : {conll17_f1(upos, n_gold, n_sys):6.2f}%")
+    print(f"  UAS   F1 : {conll17_f1(uas,  n_gold, n_sys):6.2f}%")
+    print(f"  LAS   F1 : {conll17_f1(las,  n_gold, n_sys):6.2f}%")
+    print(f"  LAS-c F1 : {conll17_f1(lasc, n_gold, n_sys):6.2f}%")
+    print(f"\n  ── AlignedAcc (correct/aligné seulement — ignore la tokenisation) ──")
     print(f"  UPOS  POS Accuracy            : {upos/n*100:6.2f}%")
     print(f"  UAS   Unlabeled Attach. Score : {uas/n*100:6.2f}%")
     print(f"  LAS   Labeled Attach. Score   : {las/n*100:6.2f}%")
@@ -382,7 +407,7 @@ def _report(upos, uas, las, lasc, n, n_gold, n_sys,
               f"({dep_imp_pct:.0f}%)")
         _tot_err = pos_err + dep_err
         _tot_imp = eff['pos_impact'] + eff['dep_impact']
-        print(f"\n  ➜ {_tot_imp}/{_tot_err} erreurs de parsing affectent réellement "
+        print(f"\n   {_tot_imp}/{_tot_err} erreurs de parsing affectent réellement "
               f"la sortie ({_tot_imp/_tot_err*100:.0f}%)" if _tot_err else "")
 
     if conf_pos:

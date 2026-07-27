@@ -4,7 +4,7 @@ rules/steps/step2_sujet.py
 verrou interrogatif, attribut négatif, expletif pronominal.
 """
 import networkx as nx
-from rules.core import j, apply_affixes, _is_avoir, _is_copula, _resolve_tam, get_bounded_chunk_tokens, adj_man, INTRANS_SC
+from rules.core import j, apply_affixes, _is_avoir, _is_avoir_lexeme, _is_copula, _resolve_tam, get_bounded_chunk_tokens, adj_man, INTRANS_SC, _is_misparsed_relative_qui
 from rules.steps.step5_obliques.advcl import _purp_verb_bm
 from rules.kg_rule_engine import apply_morpho_suffix
 
@@ -51,13 +51,38 @@ def _build_subj_chain(tok, all_toks, G_kg=None):
             elif _parent_lemma and _nmod_sensfr and _parent_lemma in _nmod_sensfr:
                 tok_bm = nmod_bm  # nmod subsume le parent → utiliser nmod_bm seul
             else:
-                _tok_is_rel = tok.get('is_relational', False) or tok_bm in _relational
-                _gen = '' if _tok_is_rel else (G_kg.get('genitive_marker', '') or '')
-                tok_bm = j(nmod_bm, _gen, tok_bm)
+                # Ordre POSSESSEUR-POSSÉDÉ (nmod_bm + ka + tok_bm) seulement pour
+                # un vrai génitif : "de"/"d'" (KG role='gerund') OU "du"/"des"
+                # (KG role='genitive' — formes contractées de+le/de+les, même
+                # famille grammaticale que "de" mais étiquetées différemment
+                # dans le KG). Ex: "maison de Musa" → "Musa ka so", "champ DU
+                # vieux" → "màakɔrɔlama ka fòro". Un nmod casé par une AUTRE
+                # préposition (ex: "en" role='locative' dans "travail EN
+                # COMMUN") fonctionne comme un qualificatif adjectival, pas un
+                # possesseur : Bambara postpose le qualificatif (NOM
+                # QUALIFICATIF, cf. "bel homme" → "homme bel"), donc tok_bm +
+                # nmod_bm sans marqueur génitif. Décision 2026-07-13, corrigée
+                # 2026-07-16 (bug : "le champ DU vieux" perdait 'ka', role
+                # 'genitive' non reconnu comme génitif).
+                _nmod_case = next((x for x in all_toks
+                                   if x.get('dep') == 'case'
+                                   and x.get('head_index') == nmod['orig_index']), None)
+                _nmod_case_role = _nmod_case.get('role', '') if _nmod_case else ''
+                _genitive_roles = {'gerund', 'genitive'}
+                if _nmod_case_role and _nmod_case_role not in _genitive_roles:
+                    tok_bm = j(tok_bm, nmod_bm)
+                else:
+                    _tok_is_rel = tok.get('is_relational', False) or tok_bm in _relational
+                    _gen = '' if _tok_is_rel else (G_kg.get('genitive_marker', '') or '')
+                    tok_bm = j(nmod_bm, _gen, tok_bm)
     if poss_det:
         poss_bm = poss_det.get('bm', '')
-        _gen_mk = G_kg.get('genitive_marker', '') or ''
-        tok_bm = j(G_kg.get('pron_1sg', 'n'), tok_bm) if poss_bm == G_kg.get('pron_1sg', 'n') else j(poss_bm, _gen_mk, tok_bm)
+        _tok_is_rel = tok.get('is_relational', False) or tok_bm in _relational
+        if _tok_is_rel:
+            tok_bm = j(poss_bm, tok_bm)
+        else:
+            _gen_mk = G_kg.get('genitive_marker', '') or ''
+            tok_bm = j(poss_bm, _gen_mk, tok_bm)
     return tok_bm
 
 
@@ -327,7 +352,15 @@ def run(T, tree, m, processed_indices, G_kg, NX_G, root_tok,
             _rel_tense  = _relcl_tok.get('tense', 'pres')
             _rel_intrans = (_relcl_tok.get('intransitive_type') == 'ABSOLU'
                             or _relcl_tok.get('semantic_class') in INTRANS_SC)
-            if _rel_tense == 'past' and _rel_intrans and not _rel_o_bm:
+            # _rel_o_bm est délibérément vidé quand l'objet EST le pronom
+            # relatif lui-même (role='relative'/'interrogative', cf. ligne
+            # 323-325 : évite un doublon "mìn ... mìn"), mais ça ne veut PAS
+            # dire qu'il n'y a pas d'objet — "le livre que j'ai acheté" a bien
+            # 'livre' comme objet (relativisé), donc le verbe reste transitif :
+            # ni suffixe résultatif (-na/-ra/-la), ni nominalisation+kɛ.
+            # _rel_obj (le token, pas sa chaîne d'affichage) donne la vraie
+            # transitivité, indépendamment du (peu fiable) semantic_class.
+            if _rel_tense == 'past' and _rel_intrans and not _rel_obj:
                 _morpho_res = G_kg.get('morpho_rules', {}).get('resultative', {})
                 _rel_v_display = apply_morpho_suffix(_rel_v_bm, _morpho_res) if _rel_v_bm else _rel_v_bm
                 _rel_tam = ''
@@ -336,7 +369,7 @@ def run(T, tree, m, processed_indices, G_kg, NX_G, root_tok,
                 # Nominalization pour les verbes transitifs sans objet dans la relative :
                 # "la femme qui mange" → dúnli kɛ (manger ACTION, pas d'objet)
                 # Même logique que _purp_verb_bm pour les clauses purposives.
-                _rel_v_display = _purp_verb_bm(_relcl_tok, T, processed_indices, G_kg) if not _rel_o_bm else _rel_v_bm
+                _rel_v_display = _purp_verb_bm(_relcl_tok, T, processed_indices, G_kg) if not _rel_obj else _rel_v_bm
             _rel_s_is_relative = _rel_subj and _rel_subj.get('role') == 'relative'
             _rel_s_display = '' if _rel_s_is_relative else _rel_s_bm
             # Obliques temporels du verbe relatif (ex: depuis plusieurs jours)
@@ -390,7 +423,7 @@ def run(T, tree, m, processed_indices, G_kg, NX_G, root_tok,
                 _equ       = G_kg.get('equative_marker', 'yé') or 'yé'
                 _cop_str   = j('o', _equ, _pred_full, _equ)
                 _rel_str   = j(_rel_str, ',', _cop_str)
-            print(f"  ✂️  Clause 1 -> '{_rel_str}'")
+            print(f"    Clause 1 -> '{_rel_str}'")
             # Signaler retour anticipé via sentinel
             return subj_tok, root_noun, has_acl, _has_relcl, _rel_str
 
@@ -403,7 +436,18 @@ def run(T, tree, m, processed_indices, G_kg, NX_G, root_tok,
 
     if subj_tok and not _is_pure_noun_phrase and not m.get('S'):
         if subj_tok.get('pos') == 'PRON':
-            m['S'] = subj_tok.get('bm') or f"[{subj_tok.get('lemma')}]"
+            # 'qui' sujet du ROOT sans antécédent relatif est forcément
+            # l'interrogatif "qui" ("qui fait la bagarre ?"), mais le KG ne
+            # porte qu'un seul sens Pronoun{surface:'qui', role:'relative'}
+            # (bm='mìn') — _is_misparsed_relative_qui identifie déjà ce cas
+            # pour le clause_type, sans jamais corriger le bm du token lui-
+            # même, qui restait 'mìn' au lieu du 'jɔn' interrogatif attendu
+            # (bug trouvé 2026-07-20 : "qui fait la bagarre ?" → "mìn bɛ
+            # bàlawu kɛ ?" au lieu de "jɔn bɛ bàlawu kɛ ?").
+            if _is_misparsed_relative_qui(subj_tok, T):
+                m['S'] = G_kg.get('interrogative_who', '') or subj_tok.get('bm') or f"[{subj_tok.get('lemma')}]"
+            else:
+                m['S'] = subj_tok.get('bm') or f"[{subj_tok.get('lemma')}]"
             processed_indices.add(subj_tok['orig_index'])
         else:
             s_chunk = get_bounded_chunk_tokens(subj_tok['orig_index'],
@@ -486,7 +530,13 @@ def run(T, tree, m, processed_indices, G_kg, NX_G, root_tok,
                                     and x.get('bm')), None)
                 if _poss_det_s:
                     _poss_bm = _poss_det_s.get('bm', '')
-                    subj_bm = j(_poss_bm, subj_bm)
+                    _relational_s = (G_kg or {}).get('relational_bms', set())
+                    _subj_is_rel = subj_tok.get('is_relational', False) or subj_bm in _relational_s
+                    if _subj_is_rel:
+                        subj_bm = j(_poss_bm, subj_bm)
+                    else:
+                        _gen_mk_s = G_kg.get('genitive_marker', '') or ''
+                        subj_bm = j(_poss_bm, _gen_mk_s, subj_bm)
                     processed_indices.add(_poss_det_s['orig_index'])
                 _s_morph = str(subj_tok.get('morph', ''))
                 _s_is_plur = subj_tok.get('is_plural') or 'Number=Plur' in _s_morph
@@ -568,8 +618,19 @@ def run(T, tree, m, processed_indices, G_kg, NX_G, root_tok,
             if (subj_tok and subj_tok is not _vrai_pron_sujet
                     and subj_tok.get('role') in ('relative', 'interrogative')
                     and not m.get('O')):
-                _who_bm = (subj_tok.get('bm')
-                           or G_kg.get('interrogative_who', ''))
+                # KG n'a qu'un seul sens Pronoun{surface:'qui'} (role='relative'),
+                # dont le bm est le marqueur relatif générique (G_kg['relative_marker'],
+                # 'mìn'). Ici le pronom est structurellement l'objet réel d'une
+                # question ("qui aiment-ils ?" — subj_tok distinct du vrai sujet
+                # inversé), donc jamais un vrai relatif : si son bm est ce
+                # marqueur relatif générique, préférer l'interrogatif KG à sa
+                # place (bug trouvé 2026-07-20 : "qui aiment-ils ?" → "u bɛ mìn
+                # kɛ ?" au lieu de "u bɛ jɔn kɛ ?").
+                _subj_bm = subj_tok.get('bm', '')
+                if subj_tok.get('role') == 'relative' and _subj_bm == G_kg.get('relative_marker', ''):
+                    _who_bm = (G_kg.get('interrogative_who', '') or _subj_bm)
+                else:
+                    _who_bm = (_subj_bm or G_kg.get('interrogative_who', ''))
                 if _who_bm:
                     m['O'] = _who_bm
                     processed_indices.add(subj_tok['orig_index'])
@@ -632,20 +693,31 @@ def run(T, tree, m, processed_indices, G_kg, NX_G, root_tok,
                                   and x.get('pos') in ('NOUN', 'PROPN')
                                   and x.get('head_index') == _relcl_on_subj['orig_index']
                                   for x in T)
-        _rel_v_bm   = ('sɔrɔ'
-                       if (_relcl_on_subj.get('lemma', '').lower() == 'avoir'
+        _rel_v_bm   = (G_kg.get('avoir_acquisition_verb', 'sɔrɔ')
+                       if (_is_avoir_lexeme(_relcl_on_subj)
                            and _relcl_has_noun_obj)
                        else _relcl_on_subj.get('bm', ''))
         _rel_adv_bm = _rel_adv.get('bm', '') if _rel_adv else ''
         _rel_marker = G_kg.get('relative_marker', '') or ''
-        _rel_intrans = (_relcl_on_subj.get('intransitive_type') == 'ABSOLU'
+        # Objet relativisé quelconque (le pronom relatif 'que' occupe lui-même
+        # le slot objet, dep='obj' pos=PRON — pas seulement un NOUN/PROPN comme
+        # _relcl_has_noun_obj le vérifie pour le cas 'avoir' spécifique).
+        # Présence d'un objet réel = transitif, quel que soit le semantic_class
+        # (fiabilité douteuse : misfire LLM déjà observé classant 'acheter'
+        # dans 'having', qui est structurellement intransitif → suffixe
+        # résultatif -na appliqué à tort sur "le livre que j'ai acheté").
+        _relcl_has_any_obj = any(x.get('dep') == 'obj'
+                                 and x.get('head_index') == _relcl_on_subj['orig_index']
+                                 for x in T)
+        _rel_intrans = ((_relcl_on_subj.get('intransitive_type') == 'ABSOLU'
                         or _relcl_on_subj.get('semantic_class') in INTRANS_SC)
+                        and not _relcl_has_any_obj)
         _rel_tense   = _relcl_on_subj.get('tense', 'pres')
         if _rel_tense == 'past' and _rel_intrans:
             _rel_tam = ''
         else:
             _rel_tam = _resolve_tam(_rel_tense, False, G_kg) or G_kg.get('equative_marker', '')
-        _avoir_relcl_override = (_relcl_on_subj.get('lemma', '').lower() == 'avoir'
+        _avoir_relcl_override = (_is_avoir_lexeme(_relcl_on_subj)
                                  and _relcl_has_noun_obj)
         # avoir + NOUN obj en passé → passé composé transitif : mìn yé dén sɔrɔ
         # (pas de suffixe -la : sɔrɔ est transitif, le TAM yé prime sur _rel_intrans)

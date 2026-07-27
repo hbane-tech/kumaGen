@@ -157,7 +157,7 @@ def run():
 
     res = db.query("MATCH (n:SemanticClass) RETURN count(n) AS c")
     total = res[0]['c'] if res else 0
-    print(f"✅ {count} classes ingérées → {total} nœuds SemanticClass dans le KG")
+    print(f" {count} classes ingérées → {total} nœuds SemanticClass dans le KG")
     print()
 
     res2 = db.query(

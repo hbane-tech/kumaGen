@@ -9,7 +9,7 @@ Toutes les valeurs bambara viennent du KG :
   - MorphoRule      → suffixes morphologiques
   - G_kg            → marqueurs dynamiques (genitive_marker, equative_marker…)
 """
-from rules.core import j, _GENITIVE_FALLBACK, _resolve_tam
+from rules.core import j, _GENITIVE_FALLBACK, _resolve_tam, nominalize_verb, render_obl_entry
 from rules.kg_rule_engine import (lookup_clause_template,
                                    fill_template, apply_morpho_suffix)
 
@@ -29,8 +29,10 @@ def tree_to_bambara(tree, G=None, grammar=None):
     S   = m.get('S', '') or ''
     O   = m.get('O', '') or ''
     V   = m.get('V', '') or ''
-    # Privative ROOT : tree['final_string'] est la bonne traduction (construite en step7)
-    if tree.get('_is_privative'):
+    # Privative ROOT / relative libre / relative coordonnée sur amod :
+    # tree['final_string'] est la bonne traduction (construite en step7)
+    if (tree.get('_is_privative') or tree.get('_is_free_relative')
+            or tree.get('_is_coord_relative_on_amod')):
         return tree.get('final_string', '')
 
     V_ACT = m.get('V_ACTION', '') or ''
@@ -43,7 +45,14 @@ def tree_to_bambara(tree, G=None, grammar=None):
     tam_val = tree.get('tam', '')
     if (not tam_val or tam_val.strip() == '') and not tree.get('_obligation'):
         # Impératif/prohibitif : TAM vide est intentionnel (verbe nu) — ne pas refill
-        if ct not in ('imperative', 'prohibitive'):
+        # Participe passé résultatif : le suffixe -ra/-la/-na porte déjà l'aspect
+        # accompli (ex: "a mɔ̀ra"), pas de marqueur présent 'bɛ' à réinjecter.
+        # _tam_embedded_in_o : le TAM a déjà été inséré dans O au bon endroit
+        # (step4_objet/noun_phrase.py, existential_nominal avec complément
+        # replié) — un refill ici le dupliquerait en fin de phrase.
+        if (ct not in ('imperative', 'prohibitive')
+                and not tree.get('_is_resultative_participle')
+                and not tree.get('_tam_embedded_in_o')):
             tam_val = _resolve_tam(tn, neg, G) or G.get('tam_default', '')
     TAM = tam_val
 
@@ -51,7 +60,13 @@ def tree_to_bambara(tree, G=None, grammar=None):
     _ccomp_data = m.get('CCOMP')
     _ccomp_str  = ''
     if isinstance(_ccomp_data, dict):
-        _ko  = G.get('reported_intro', '')
+        # NOTE (bug 2026-07-07) : les 4 templates ccomp_* (KG) contiennent
+        # DÉJÀ 'ko' en dur au début de leur chaîne. Un ancien `_ko =
+        # G.get('reported_intro', '')` était aussi préfixé ici en plus —
+        # resté invisible tant que 'reported_intro' était vide par erreur
+        # (bm posé sur le mauvais champ KG, voir fix reported_intro). Une
+        # fois corrigé, ce doublon produisait "ko ko {S}...". Ne plus
+        # préfixer ici : les templates portent déjà leur propre 'ko'.
         _typ = _ccomp_data.get('type', '')
         _ccomp_slots = {
             'S':   _ccomp_data.get('S', ''),
@@ -66,56 +81,34 @@ def tree_to_bambara(tree, G=None, grammar=None):
         if _typ == 'comparative':
             _tpl_key = 'ccomp_comparative_neg' if _ccomp_data.get('neg') else 'ccomp_comparative_pos'
             _tpl = lookup_clause_template(_tpl_key, G) or ''
-            _ccomp_str = j(_ko, fill_template(_tpl, _ccomp_slots)) if _tpl else ''
+            _ccomp_str = fill_template(_tpl, _ccomp_slots) if _tpl else ''
         elif _typ == 'verbal':
             _tpl = lookup_clause_template('ccomp_verbal', G) or ''
-            _ccomp_str = j(_ko, fill_template(_tpl, _ccomp_slots)) if _tpl else ''
+            _ccomp_str = fill_template(_tpl, _ccomp_slots) if _tpl else ''
         elif _typ == 'qualite':
             _tpl = lookup_clause_template('ccomp_qualite', G) or ''
-            _ccomp_str = j(_ko, fill_template(_tpl, _ccomp_slots)) if _tpl else ''
+            _ccomp_str = fill_template(_tpl, _ccomp_slots) if _tpl else ''
         elif _ccomp_data.get('O'):
             _eq_mk = G.get('equative_marker') or _fw(G, 'f3_equative', '')
             _ccomp_slots['TAM'] = _eq_mk
             _tpl = lookup_clause_template('ccomp_equative', G) or ''
-            _ccomp_str = j(_ko, fill_template(_tpl, _ccomp_slots)) if _tpl else ''
+            _ccomp_str = fill_template(_tpl, _ccomp_slots) if _tpl else ''
 
     # ── Wagons obliques : lecture depuis OBL_ALL, marqueurs depuis KG ────────
-    obl_strings = []
-    for c in (m.get('OBL_ALL') or []):
-        comp   = c.get('COMPOUND', '')
-        head   = c.get('HEAD', '')
-        mod    = c.get('MOD', '')
-        pref   = c.get('DEM_PREF', '')
-        suff   = c.get('DEM_SUFF', '')
-        marker = c.get('MARKER', '')
-        lct    = c.get('local_clause_type', 'simple')
-        gen_marker = G.get('genitive_marker', '') or _GENITIVE_FALLBACK
-        if comp:
-            if c.get('COMPOUND_IS_QUANTIFIER'):
-                noun_base = j(head, comp)
-            elif lct in ('locative', 'temporal'):
-                if pref or suff:
-                    noun_base = j(pref, comp, head, suff)
-                    pref = suff = ''
-                else:
-                    noun_base = j(comp, head)
-            else:
-                noun_base = j(comp, gen_marker, head)
-        else:
-            noun_base = head
-        if mod:
-            noun_base = j(noun_base, mod)
-        full_chunk = j(pref, noun_base, suff) if (pref or suff) else noun_base
-        if marker:
-            if c.get('MARKER_IS_PREFIX'):
-                # Marqueur préfixe (kabini, k'an bɔ…) : lu depuis OBL_ALL
-                full_chunk = j(marker, full_chunk)
-            elif lct == 'privative':
-                # Privatif : suffixe collé sans espace (tanli kɛ → tan)
-                full_chunk = full_chunk + marker
-            else:
-                full_chunk = j(full_chunk, marker)
-        obl_strings.append(full_chunk)
+    # Tri stable par position syntaxique (_HEAD_IDX, quand fourni) : les
+    # entrées OBL_ALL sont normalement dans l'ordre où les steps les ont
+    # ajoutées (step4 avant step5), pas dans leur ordre réel dans la phrase —
+    # ex: une relative (step4) attachée à un nom niché dans un complément
+    # (step5, "lié aux logiques... DES ÉLITES qui veulent...") se retrouvait
+    # toujours rendue AVANT ce complément, quel que soit l'ordre français
+    # (bug trouvé 2026-07-18). Seules les entrées taguées _HEAD_IDX (wagon,
+    # relative post-objet) sont repositionnées ; les entrées non taguées
+    # gardent leur place au tri stable (sentinelle -1, comportement
+    # inchangé pour tous les autres types de wagons).
+    _obl_all_sorted = sorted(
+        (m.get('OBL_ALL') or []),
+        key=lambda c: c.get('_HEAD_IDX') if c.get('_HEAD_IDX') is not None else -1)
+    obl_strings = [render_obl_entry(c, G) for c in _obl_all_sorted]
 
     # ── F6 : passé intransitif → résultatif ──────────────────────────────────
     _o_is_xcomp = m.get('O_IS_XCOMP', False)
@@ -124,7 +117,7 @@ def tree_to_bambara(tree, G=None, grammar=None):
         ct = 'passive_statif'
         tree['clause_type'] = 'passive_statif'
 
-    if (tn == 'past'
+    if (tn in ('past', 'plup')
             and (not tree.get('is_transitive', True) or tree.get('_refl_pronominal_bypass'))
             and not _o_is_xcomp
             and ct not in ('reciprocal', 'refl_absolute', 'passive_statif', 'passive_statif_question')):
@@ -139,11 +132,16 @@ def tree_to_bambara(tree, G=None, grammar=None):
                 if _morpho_res:
                     _root_v = apply_morpho_suffix(_root_v, _morpho_res)
                 V = j(_root_v, *_rest_v)
-            # Subordonnée temporelle ("quand X ...") : le résultatif prend le
-            # préfixe d'antériorité 'tùn' (l'événement précède la référence
-            # temporelle implicite), contrairement au résultatif d'une
-            # principale simple qui reste sans TAM.
-            TAM = (G.get('statif_hab_prefix', '') or 'tùn') if ct == 'temporal' else ''
+            # Subordonnée temporelle ("quand X ...") OU plus-que-parfait
+            # ("il avait grossi") : le résultatif prend le préfixe
+            # d'antériorité 'tùn' (l'événement précède la référence
+            # temporelle — implicite pour une subordonnée, portée par le
+            # plus-que-parfait lui-même), contrairement au résultatif d'une
+            # principale au passé simple qui reste sans TAM (bug trouvé
+            # 2026-07-19 : tn=='plup' n'était même pas reconnu par ce garde,
+            # laissant "il avait grossi" retomber sur le TAM périphrastique
+            # générique 'tùn ye' + verbe nu au lieu du résultatif 'bònyara').
+            TAM = (G.get('statif_hab_prefix', '') or 'tùn') if ct == 'temporal' or tn == 'plup' else ''
     else:
         TAM = tam_val
 
@@ -163,9 +161,13 @@ def tree_to_bambara(tree, G=None, grammar=None):
                      'OBL': obl_strings[0] if obl_strings else '', 'ADV': ADV}
         if obl_strings or ' ' in S:
             _tpl_f3 = lookup_clause_template('f3_resultative_obl', G)
+            if _tpl_f3:
+                tree['_applied_template'] = _tpl_f3
             result  = fill_template(_tpl_f3, _f3_slots) if _tpl_f3 else j(S, *obl_strings) + _f3_sep + j(_f3_vres, O, _eq_mk)
         else:
             _tpl_f3 = lookup_clause_template('f3_resultative', G)
+            if _tpl_f3:
+                tree['_applied_template'] = _tpl_f3
             result  = fill_template(_tpl_f3, _f3_slots) if _tpl_f3 else j(S, _f3_vres, O, _eq_mk)
 
     # ── Slots pour fill_template ──────────────────────────────────────────────
@@ -220,6 +222,7 @@ def tree_to_bambara(tree, G=None, grammar=None):
     if not result and ct == 'relative_topic' and V_ACT:
         _tpl_vact = lookup_clause_template('relative_topic_vact', G) or ''
         if _tpl_vact and '{' in _tpl_vact:
+            tree['_applied_template'] = _tpl_vact
             result = fill_template(_tpl_vact, _all_slots)
 
     # ── Relative topic : verbe principal intransitif passé → relative_topic_intrans ──
@@ -230,13 +233,19 @@ def tree_to_bambara(tree, G=None, grammar=None):
             _all_slots['V_RES'] = _v_res
             _tpl_rel = lookup_clause_template('relative_topic_intrans', G) or ''
             if _tpl_rel and '{' in _tpl_rel:
+                tree['_applied_template'] = _tpl_rel
                 result = fill_template(_tpl_rel, _all_slots)
 
     if not result and ct not in _COMPLEX_CT:
         _polarity = '_neg' if neg else '_pos'
         # Essayer d'abord une variante tense-spécifique : equative_past_pos, qualitative_hab_neg…
         _tpl_key = ct + '_' + tn + _polarity
-        _tpl = (lookup_clause_template(_tpl_key, G)
+        # xcomp adjectival (O_IS_XCOMP) : {O} est un complément prédicatif de V
+        # ("rester incertain", "sembler triste"), pas un objet SOV — variante KG
+        # dédiée où V précède son complément (cf. simple_xcomp).
+        _tpl = (lookup_clause_template(ct + '_xcomp', G) if _o_is_xcomp else '')
+        _tpl = (_tpl
+                or lookup_clause_template(_tpl_key, G)
                 or lookup_clause_template(ct + _polarity, G)
                 or lookup_clause_template(ct, G)
                 # quest_ce_que_modal : template pres comme base universelle (TAM slot rempli)
@@ -246,6 +255,7 @@ def tree_to_bambara(tree, G=None, grammar=None):
         _tpl_placeholder = G.get('template_placeholder_prefix', '')
         _tpl_slot_open   = G.get('template_slot_open', '')
         if _tpl and (not _tpl_placeholder or not _tpl.startswith(_tpl_placeholder)) and (_tpl_slot_open in _tpl if _tpl_slot_open else '{' in _tpl):
+            tree['_applied_template'] = _tpl
             result = fill_template(_tpl, _all_slots)
             # Éviter duplication : obl_strings déjà présents dans le résultat via {ADV}/{OBL}
             _extra_obls = (obl_strings[1:]) if '{OBL}' in _tpl else obl_strings
@@ -292,12 +302,13 @@ def tree_to_bambara(tree, G=None, grammar=None):
             _refl_pron_default = G.get('reflexive_pron_default', '')
             _refl_self_marker  = G.get('reflexive_self_marker', '')
             _morpho_res = G.get('morpho_rules', {}).get('resultative', {})
-            _refl_pron  = '' if tree.get('refl_semantic_class') == G.get('biological_sc_name', 'biological') else tree.get('refl_pron', _refl_pron_default)
+            _refl_res_sc = G.get('refl_resultative_sc_names', {'biological'})
+            _refl_pron  = '' if tree.get('refl_semantic_class') in _refl_res_sc else tree.get('refl_pron', _refl_pron_default)
             _refl_v     = tree.get('refl_verb') or V
             _refl_tam   = TAM
             _refl_self  = _refl_self_marker if tree.get('refl_yere') else ''
             _serial_pp  = tree.get('refl_serial_postpos', '')
-            _is_bio_past = (tree.get('refl_semantic_class') == G.get('biological_sc_name', 'biological')
+            _is_bio_past = (tree.get('refl_semantic_class') in _refl_res_sc
                             and _refl_tam == _resolve_tam('past', False, G))
             _all_slots.update({'REFL_PRON': _refl_pron, 'REFL_SELF': _refl_self,
                                'SERIAL_PP': _serial_pp,
@@ -305,13 +316,26 @@ def tree_to_bambara(tree, G=None, grammar=None):
                                'V': _refl_v})
             if _is_bio_past:
                 _tpl = lookup_clause_template('refl_absolute_bio_past', G)
+                if _tpl:
+                    tree['_applied_template'] = _tpl
                 result = fill_template(_tpl, _all_slots) if _tpl else j(S, _all_slots['V_RES'], *obl_strings, ADV)
             elif V_ACT:
                 _tpl = lookup_clause_template('refl_absolute_vact', G)
+                if _tpl:
+                    tree['_applied_template'] = _tpl
                 result = fill_template(_tpl, _all_slots) if _tpl else j(S, _refl_tam, _refl_pron, _refl_self, _refl_v, V_ACT, _serial_pp, *obl_strings, ADV)
             else:
                 _tpl = lookup_clause_template('refl_absolute_default', G)
+                if _tpl:
+                    tree['_applied_template'] = _tpl
                 result = fill_template(_tpl, _all_slots) if _tpl else j(S, _refl_tam, _refl_pron, _refl_self, _refl_v, *obl_strings, ADV)
+
+            # Aucun template refl_absolute_* ne porte de slot {OBL} — les
+            # obliques (temporel/locatif : "toujours plus dans le chaos")
+            # étaient donc silencieusement perdues après fill_template.
+            # Même logique d'ajout que le dispatch générique (_extra_obls).
+            if result and obl_strings:
+                result = j(result, *[o for o in obl_strings if o and o not in result])
 
         elif ct in ('relative_nominal', 'impersonal'):
             result = tree.get('final_string', '')
@@ -325,15 +349,19 @@ def tree_to_bambara(tree, G=None, grammar=None):
     if tree.get('conj_clauses') and result:
         for _cc in tree['conj_clauses']:
             if _cc.get('cc_role') == 'alternative':
-                # Disjonctive "ou/ou bien" → wàlima S TAM O V, en préservant wà ? final
+                # Disjonctive "ou/ou bien" → wàlima S TAM O V ?
+                # Une question alternative ("X wàlima Y ?") ne prend pas la
+                # particule polaire 'wà' (réservée aux questions oui/non) ;
+                # on termine par '?' nu (question_suffix_bare).
                 _alt_marker = _cc.get('cc_bm') or 'wàlima'
                 _cc_tam_alt = _cc.get('tam', TAM)
                 _alt_str = j(S, _cc_tam_alt, _cc.get('O', ''), _cc.get('V', ''))
                 if _alt_str:
                     _q_sfx_alt = G.get('question_suffix', '')
+                    _q_sfx_bare = G.get('question_suffix_bare', '?')
                     if _q_sfx_alt and result.endswith(_q_sfx_alt.rstrip()):
                         _body_alt = result[:-(len(_q_sfx_alt.rstrip()))].rstrip()
-                        result = j(_body_alt, _alt_marker, _alt_str, _q_sfx_alt)
+                        result = j(_body_alt, _alt_marker, _alt_str, _q_sfx_bare)
                     else:
                         result = j(result, _alt_marker, _alt_str)
                 continue
@@ -350,8 +378,8 @@ def tree_to_bambara(tree, G=None, grammar=None):
                     and _cc_sc not in G.get('coord_intrans_sc', set())
                     and not (_cc_sc in _coord_excl_sc and _cc_liq)
                     and not _cc_v.endswith(tuple(G.get('coord_excl_verb_sfx', ())) + (_action_sfx,) if _action_sfx else tuple(G.get('coord_excl_verb_sfx', ())))):
-                _nom_sfx = G.get('nominalization_verb_suffix', '')
-                _cc_str = j(S, _cc_tam, _cc_v + _nom_sfx, _action_sfx)
+                _cc_nominalized = nominalize_verb(_cc_v, _cc.get('action_noun', ''), G)
+                _cc_str = j(S, _cc_tam, _cc_nominalized, _action_sfx)
             else:
                 _cc_str = j(S, _cc_tam, _cc_o, _cc_v)
             if _cc_str:
@@ -368,6 +396,11 @@ def tree_to_bambara(tree, G=None, grammar=None):
     # ── Marqueur temporel ─────────────────────────────────────────────────────
     if tree.get('temporal_marker') and result:
         result = j(tree['temporal_marker'], result)
+
+    # ── Conjonction contrastive ("mais tu viens quand ?" → "nka i bɛ nà...") ──
+    _contrast = m.get('CONTRAST')
+    if _contrast and result and not result.startswith(_contrast):
+        result = j(_contrast, result)
 
     # ── Négateur porteur de contenu ───────────────────────────────────────────
     _cont = tree.get('neg_continuative_bm')

@@ -14,7 +14,6 @@ def _get_marker(tok_item, T, G_kg):
     - sans + PROPN → kɔ
     - sans + PRON → kɔ
     """
-    priv_rules = G_kg.get('kg_privative_rules', [])
     pos = tok_item.get('pos', '')
     has_poss = any(
         x.get('dep') == 'det' and x.get('role') in ('pronoun', 'possessive')

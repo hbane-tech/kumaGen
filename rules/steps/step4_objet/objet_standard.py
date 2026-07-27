@@ -21,7 +21,15 @@ def _build_genitive_chain(tok, all_toks, G_kg=None):
                   and t.get('bm')), None)
     tok_bm = tok.get('bm') or tok.get('surface') or f"[{tok.get('lemma')}]"
     if poss:
-        tok_bm = j(poss.get('bm'), tok_bm)
+        poss_bm = poss.get('bm', '')
+        _relational = (G_kg or {}).get('relational_bms', set())
+        _tok_is_rel = tok.get('is_relational', False) or tok_bm in _relational
+        _pron_1sg = (G_kg or {}).get('pron_1sg', 'n')
+        if poss_bm == _pron_1sg:
+            tok_bm = j(_pron_1sg, tok_bm)
+        else:
+            _gen_mk = '' if _tok_is_rel else ((G_kg or {}).get('genitive_marker', '') or '')
+            tok_bm = j(poss_bm, _gen_mk, tok_bm)
     _classifiants = [a for a in amods if a['orig_index'] > tok['orig_index']]
     _qualifiants  = [a for a in amods if a['orig_index'] < tok['orig_index']]
     if nmod:
@@ -36,6 +44,37 @@ def _build_genitive_chain(tok, all_toks, G_kg=None):
     return j(tok_bm,
              *[a.get('bm','') for a in _classifiants],
              *[a.get('bm','') for a in _qualifiants])
+
+
+def _collect_genitive_tokens(tok, all_toks):
+    """Collect orig_indices of all tokens consumed by _build_genitive_chain
+    (nmod chain + poss + amod à CHAQUE NIVEAU + case). _build_genitive_chain
+    intègre récursivement les amod dans la chaîne construite ; sans cette
+    fonction pour les marquer processed_indices en aval, un step ultérieur
+    les retrouve "libres" et les rattache une seconde fois ailleurs (bug
+    trouvé 2026-07-20 : "programme d'apprentissage coopératif japonais" →
+    'japonais'/zapɔnɛ dupliqué, une fois à la bonne place dans la chaîne,
+    une fois en fin de chaîne car jamais marqué processed)."""
+    result = set()
+    nmod = next((t for t in all_toks if t.get('dep') == 'nmod'
+                 and t.get('head_index') == tok['orig_index']), None)
+    poss = next((t for t in all_toks if t.get('dep') == 'det'
+                 and t.get('role') in ('pronoun', 'possessive')
+                 and t.get('head_index') == tok['orig_index']
+                 and t.get('bm')), None)
+    amods = [t for t in all_toks if t.get('dep') == 'amod'
+             and t.get('head_index') == tok['orig_index'] and t.get('bm')]
+    for case_t in all_toks:
+        if case_t.get('dep') == 'case' and case_t.get('head_index') == tok['orig_index']:
+            result.add(case_t['orig_index'])
+    if poss:
+        result.add(poss['orig_index'])
+    for a in amods:
+        result.add(a['orig_index'])
+    if nmod:
+        result.add(nmod['orig_index'])
+        result |= _collect_genitive_tokens(nmod, all_toks)
+    return result
 
 
 def run(T, tree, m, processed_indices, G_kg, NX_G,
@@ -249,8 +288,34 @@ def run(T, tree, m, processed_indices, G_kg, NX_G,
     _postpos_amods  = []
     _distrib_det    = None
 
-    if _has_nmod_chain and tete_tok:
+    # nmod comitatif ("du riz AVEC du sel") : _build_genitive_chain suppose
+    # TOUJOURS une relation possessive/génitive (case 'de') pour tout nmod,
+    # quel que soit son marqueur réel — sans ce garde, un nmod introduit par
+    # 'avec' (case role='comitative') se faisait traiter comme un possesseur
+    # ("[sel] [riz]", ordre inversé, marqueur 'ni' perdu) au lieu d'un
+    # compagnon coordonné ("[riz] ni [sel]") (bug trouvé 2026-07-20 : "du riz
+    # avec du sel" → "kɔ̀gɔ màlo" au lieu de "màlo ni kɔ̀gɔ").
+    _tete_comitative_nmod = next(
+        (x for x in o_chunk if x.get('dep') == 'nmod'
+         and x.get('head_index') == tete_tok['orig_index']
+         and any(c.get('dep') == 'case' and c.get('role') == 'comitative'
+                 and c.get('head_index') == x['orig_index'] for c in T)),
+        None) if tete_tok else None
+
+    if _tete_comitative_nmod:
+        _com_mk = G_kg.get('comitative_marker', '') or 'ni'
+        _tete_bm = tete_tok.get('bm') or f"[{tete_tok.get('lemma')}]"
+        _com_bm = _tete_comitative_nmod.get('bm') or f"[{_tete_comitative_nmod.get('lemma')}]"
+        objet_elements = [j(_tete_bm, _com_mk, _com_bm)]
+        processed_indices.add(_tete_comitative_nmod['orig_index'])
+        _com_case_tok = next((c for c in T if c.get('dep') == 'case'
+                              and c.get('role') == 'comitative'
+                              and c.get('head_index') == _tete_comitative_nmod['orig_index']), None)
+        if _com_case_tok:
+            processed_indices.add(_com_case_tok['orig_index'])
+    elif _has_nmod_chain and tete_tok:
         _resolved = _build_genitive_chain(tete_tok, T, G_kg)
+        processed_indices.update(_collect_genitive_tokens(tete_tok, T))
         _top_conjs = [x for x in o_chunk if x.get('dep') == 'conj'
                       and x.get('head_index') == tete_tok['orig_index']]
         for _tc in _top_conjs:

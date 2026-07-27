@@ -31,7 +31,7 @@ def run():
         MERGE (p:Pronoun {surface: $surface, lang: $lang, role: $role})
         SET p.bm = $bm
         """, row)
-    print("  ✅ Done")
+    print("   Done")
 
     # Negation markers
     markers = _load_csv('negation_markers.csv')
@@ -40,7 +40,7 @@ def run():
         db.query("""
         MERGE (n:NegMarker {surface: $surface, lang: $lang})
         """, row)
-    print("  ✅ Done")
+    print("   Done")
 
     # Articles
     articles = _load_csv('articles.csv')
@@ -49,7 +49,7 @@ def run():
         db.query("""
         MERGE (a:Article {surface: $surface, lang: $lang})
         """, row)
-    print("  ✅ Done")
+    print("   Done")
 
     # Prepositions
     prepositions = _load_csv('prepositions.csv')
@@ -59,7 +59,7 @@ def run():
         MERGE (p:Preposition {surface: $surface, lang: $lang})
         SET p.bm_marker = $bm_marker, p.role = $role
         """, row)
-    print("  ✅ Done")
+    print("   Done")
 
     # Function words
     function_words = _load_csv('function_words.csv')
@@ -69,7 +69,7 @@ def run():
         MERGE (f:FunctionWord {surface: $surface, lang: $lang})
         SET f.bm = $bm, f.role = $role
         """, row)
-    print("  ✅ Done")
+    print("   Done")
 
     # Auxiliaries
     auxiliaries = _load_csv('auxiliaries.csv')
@@ -79,7 +79,7 @@ def run():
         MERGE (a:Auxiliary {surface: $surface, lang: $lang})
         SET a.tense = $tense
         """, row)
-    print("  ✅ Done")
+    print("   Done")
 
     # Language markers
     # lang_markers = _load_csv('language_markers.csv')
@@ -88,7 +88,7 @@ def run():
     #     db.query("""
     #     MERGE (m:LangMarker {surface: $surface, lang: $lang})
     #     """, row)
-    # print("  ✅ Done")
+    # print("   Done")
 
     # Indexes
     db.query("CREATE INDEX pronoun_surface IF NOT EXISTS FOR (p:Pronoun) ON (p.surface)")
@@ -97,8 +97,8 @@ def run():
     db.query("CREATE INDEX preposition_surface IF NOT EXISTS FOR (p:Preposition) ON (p.surface)")
     db.query("CREATE INDEX functionword_surface IF NOT EXISTS FOR (f:FunctionWord) ON (f.surface)")
     db.query("CREATE INDEX auxiliary_surface IF NOT EXISTS FOR (a:Auxiliary) ON (a.surface)")
-    print("  ✅ Indexes created")
-    print("\n✅ Grammar nodes ready.\n")
+    print("   Indexes created")
+    print("\n Grammar nodes ready.\n")
 
 
 if __name__ == "__main__":

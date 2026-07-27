@@ -49,7 +49,7 @@ def ingest_coord_rules(db, lang='bm'):
             params[f'c_{k}'] = v
             set_parts.append(f'r.cond_{k}=$c_{k}')
         db.query(f'MERGE (r:CoordRule {{name:$name,lang:$lang}}) SET '+', '.join(set_parts), params)
-    print(f'  ✅ {len(rules)} CoordRules')
+    print(f'   {len(rules)} CoordRules')
 
 
 def ingest_modal_rules(db, lang='bm'):
@@ -71,7 +71,7 @@ def ingest_modal_rules(db, lang='bm'):
             r.template=$tpl, r.priority=$prio, r.description=$desc
         ''', {'name':name,'lang':lang,'lemma':lemma,'vbm':v_bm,
               'marker':marker,'tpl':template,'prio':prio,'desc':desc})
-    print(f'  ✅ {len(rules)} ModalRules')
+    print(f'   {len(rules)} ModalRules')
 
 
 def ingest_oblique_fill_rules(db, lang='bm'):
@@ -100,7 +100,7 @@ def ingest_oblique_fill_rules(db, lang='bm'):
             r.frame=$frame, r.priority=$prio, r.description=$desc
         ''', {'name':name,'lang':lang,'dep':dep,'role':role,'mksrc':mksrc,
               'defmk':defmk,'frame':frame,'prio':prio,'desc':desc})
-    print(f'  ✅ {len(rules)} ObliqueFillRules')
+    print(f'   {len(rules)} ObliqueFillRules')
 
 
 def ingest_nominal_chain_rules(db, lang='bm'):
@@ -120,7 +120,7 @@ def ingest_nominal_chain_rules(db, lang='bm'):
             r.template=$tpl, r.priority=$prio, r.description=$desc
         ''', {'name':name,'lang':lang,'poss':poss_bm,'marker':marker,
               'tpl':template,'prio':prio,'desc':desc})
-    print(f'  ✅ {len(rules)} NominalChainRules')
+    print(f'   {len(rules)} NominalChainRules')
 
 
 def ingest_possession_rules(db, lang='bm'):
@@ -175,7 +175,7 @@ def ingest_possession_rules(db, lang='bm'):
             r.priority=$prio, r.description=$desc
         ''', {'name':name,'lang':lang,'ptype':ptype,'tpos':tpl_pos,'tneg':tpl_neg,
               'tamp':tam_pos,'tamn':tam_neg,'prio':prio,'desc':desc})
-    print(f'  ✅ {len(rules)} PossessionRules')
+    print(f'   {len(rules)} PossessionRules')
 
 
 def ingest_aux_temporal_rules(db, lang='bm'):
@@ -198,8 +198,8 @@ def ingest_aux_temporal_rules(db, lang='bm'):
 
         ('futur_proche',
          {'root_lemma':'aller','xcomp_pos':'VERB','root_tense':'pres'},
-         'bɛ na', '', 'S bɛ na O V2', 85,
-         'Futur proche → S bɛ na V2 (il va manger → a bɛ na dúnli kɛ)'),
+         'bɛ́nà', '', 'S bɛ́nà O V2', 85,
+         'Futur proche → S bɛ́nà V2 (il va manger → a bɛ́nà dúnli kɛ)'),
 
         ('venir_de_recent_past',
          {'root_lemma':'venir','mark_surface':'de','xcomp_pos':'VERB'},
@@ -225,7 +225,7 @@ def ingest_aux_temporal_rules(db, lang='bm'):
             params[f'c_{k}'] = v
             set_parts.append(f'r.cond_{k}=$c_{k}')
         db.query(f'MERGE (r:AuxTemporalRule {{name:$name,lang:$lang}}) SET '+', '.join(set_parts), params)
-    print(f'  ✅ {len(rules)} AuxTemporalRules')
+    print(f'   {len(rules)} AuxTemporalRules')
 
 
 def ingest_advcl_rules(db, lang='bm'):
@@ -244,7 +244,7 @@ def ingest_advcl_rules(db, lang='bm'):
             r.template=$tpl, r.priority=$prio, r.description=$desc
         ''', {'name':name,'lang':lang,'role':role,'marker':marker,
               'tpl':template,'prio':prio,'desc':desc})
-    print(f'  ✅ {len(rules)} AdvcaRules')
+    print(f'   {len(rules)} AdvcaRules')
 
 
 def load_into_grammar(db, lang='bm'):
@@ -277,7 +277,7 @@ def run():
 
     total = db.query("MATCH (n) WHERE n.lang='bm' RETURN count(n) AS c")
     print(f"\n  Total nœuds lang=bm: {total[0]['c']}")
-    print("\n✅ Migration complète terminée.")
+    print("\n Migration complète terminée.")
 
 
 if __name__ == '__main__':

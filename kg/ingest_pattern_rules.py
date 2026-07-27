@@ -148,7 +148,7 @@ def ingest_pattern_rules(db, lang='bm'):
 
         count += 1
 
-    print(f"  ✅ {count} PatternRules créées")
+    print(f"   {count} PatternRules créées")
 
 
 def ingest_slot_fill_rules(db, lang='bm'):
@@ -203,7 +203,7 @@ def ingest_slot_fill_rules(db, lang='bm'):
               'prio': prio, 'desc': desc})
         count += 1
 
-    print(f"  ✅ {count} SlotFillRules créées")
+    print(f"   {count} SlotFillRules créées")
 
 
 def ingest_transform_rules(db, lang='bm'):
@@ -279,7 +279,7 @@ def ingest_transform_rules(db, lang='bm'):
         """, params)
         count += 1
 
-    print(f"  ✅ {count} TransformRules créées")
+    print(f"   {count} TransformRules créées")
 
 
 def verify(db, lang='bm'):
@@ -297,4 +297,4 @@ if __name__ == '__main__':
     ingest_slot_fill_rules(db)
     ingest_transform_rules(db)
     verify(db)
-    print("\n✅ Règles KG complètes.")
+    print("\n Règles KG complètes.")

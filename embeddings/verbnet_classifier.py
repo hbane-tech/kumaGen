@@ -16,7 +16,7 @@ semantic_class.
 """
 from typing import Optional
 
-from embeddings.word2vec_encoder import encode
+from embeddings.labse_encoder import encode
 from kg.retriever import cosine
 
 _BUCKET_DESCRIPTIONS = {

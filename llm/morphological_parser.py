@@ -228,7 +228,7 @@ def _call_ollama(sentence: str, model: str = 'qwen2.5:3b') -> dict:
             requests.exceptions.ConnectTimeout,
             requests.exceptions.ConnectionError):
         _parser_circuit_open_until = _time.time() + _PARSER_RETRY_GAP
-        print(f"⚠️  Ollama morphologique indisponible (réessai dans {_PARSER_RETRY_GAP}s)")
+        print(f"  Ollama morphologique indisponible (réessai dans {_PARSER_RETRY_GAP}s)")
         return {}
 
 # ── Main parser class ─────────────────────────────────────────────
